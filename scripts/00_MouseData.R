@@ -71,21 +71,33 @@ seur.combined <- FindClusters(seur.combined, resolution = 0.8)
 
 # Cluster numbers are not in the same order as in the paper, so we'll just replace them
 DimPlot(seur.combined, group.by = c("seurat_clusters"), pt.size = 0.1, label = T)
-new.cluster.ids <- c("c8", #0
-                     "c4", #1
-                     "c6", #2
-                     "c1", #3
-                     "c10",#4
-                     "c9", #5
-                     "c0", #6
-                     "c7", #7
-                     "c3", #8
-                     "c5", #9
-                     "c2", #10
-                     "c11") # 11
+# new.cluster.ids <- c("c8", #0
+#                      "c4", #1
+#                      "c6", #2
+#                      "c1", #3
+#                      "c10",#4
+#                      "c9", #5
+#                      "c0", #6
+#                      "c7", #7
+#                      "c3", #8
+#                      "c5", #9
+#                      "c2", #10
+#                      "c11") # 11
+new.cluster.ids <- c("iNKT1", #0
+                     "iNKT2", #1
+                     "iNKT1", #2
+                     "iNKTp", #3
+                     "iNKT1",#4
+                     "iNKT1", #5
+                     "Stage0", #6
+                     "iNKT1", #7
+                     "iNKTp", #8
+                     "iNKT17", #9
+                     "iNKTp", #10
+                     "11") # 11
 names(new.cluster.ids) <- levels(seur.combined)
 seur.combined <- RenameIdents(seur.combined, new.cluster.ids)
-levels(seur.combined) <- paste0("c", 0:11)
+# levels(seur.combined) <- paste0("c", 0:11)
 
 
 
@@ -120,7 +132,7 @@ DotPlot(seur.combined, features = markers.to.plot, cols = "RdBu", dot.scale = 8,
 ggsave(file.path(path.plots, "ms_dotplot.jpeg"), width=8, height=6, bg="white")
 
 
-#Create a heatmap of differentially expressed genes by cluster
+# Create a heatmap of differentially expressed genes by cluster
 diff.markers <- FindAllMarkers(seur.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 # DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
@@ -132,3 +144,24 @@ top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 
 VlnPlot(seur.combined, features = c("percent.mt", "nFeature_RNA", "nCount_RNA"), pt.size = 0.5, ncol=1)
 ggsave(file.path(path.plots, "ms_c11_vlnplot.jpeg"), width=8, height=10, bg="white")
+
+
+
+
+#### DE Genes & Average Exp data for cross-species ####
+
+# Get differentially expressed genes by cluster
+diff.markers <- FindAllMarkers(seur.combined, assay="RNA", only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.25)
+dim(diff.markers) # 6213 genes
+# sanity check
+# top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+# DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
+saveRDS(diff.markers, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/ms_DEG.rds")
+
+
+# Get average expression data per cluster
+avgexp <- AverageExpression(seur.combined)
+avgexp <- as.data.frame(avgexp$RNA) # get it into a df
+head(avgexp, 10)
+dim(avgexp) # 6 clusters and 31,053 genes
+saveRDS(avgexp, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/ms_avgexp.rds")

@@ -1,0 +1,87 @@
+---
+title: "02_CorrelationComparison"
+output: html_notebook
+---
+
+
+# IMPORT
+
+```{r import-librairies}
+library(ggplot2)
+library(tidyverse)
+library(biomaRt)
+```
+
+
+```{r import-data}
+path <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion"
+# Mouse data
+DEgenes_ms <- readRDS(file.path(path, "ms_DEG.rds"))
+ExpressionTable_ms <- readRDS(file.path(path, "ms_avgexp.rds"))
+# Pig data
+DEgenes_pig <- readRDS(file.path(path, "pig_DEG.rds"))
+ExpressionTable_pig <- readRDS(file.path(path, "pig_avgexp.rds"))
+```
+
+
+
+
+
+# IDENTIFICATION OF ONE-TO-ONE ORTHOLOGS
+
+```{r get-ENSEMBL-ID}
+# It's better to input ENSEMBL ID in the biomart, so get a df of DEgenes with their ID & gene name
+
+# Get mouse DEgenes EMSEMBL ID
+ms_DEgenes <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data/B6_1/features.tsv.gz", col_names = FALSE) %>%
+  filter(X2 %in% DEgenes_ms$gene) %>%
+  arrange(match(X2, DEgenes_ms$gene))
+length(unique(DEgenes_ms$gene)) # 2819 unique genes
+dim(ms_DEgenes) # 2819 rows
+
+
+# Get pig DEgenes EMSEMBL ID
+pig_DEgenes <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/pig_data/GSE192520_RAW/iNKT/features.tsv.gz", col_names = FALSE) %>%
+  filter(X2 %in% DEgenes_pig$gene) %>%
+  arrange(match(X2, DEgenes_pig$gene))
+length(unique(DEgenes_pig$gene)) # 2085 unique genes
+dim(pig_DEgenes) # 2085 rows
+
+```
+
+
+```{r get-ensembl-orthologs}
+# Define marts to map mouse to human and ensembl to entrez IDs
+# ensembl <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
+#                    dataset="hsapiens_gene_ensembl")
+mm_ensembl<- useMart(biomart="ENSEMBL_MART_ENSEMBL",
+                       dataset="mmusculus_gene_ensembl")
+ss_ensembl<- useMart(biomart="ENSEMBL_MART_ENSEMBL",
+                       dataset="sscrofa_gene_ensembl")
+
+# Get pig orthologs of mouse DEgenes
+# listAttributes(mm_ensembl)[stringr::str_detect(listAttributes(mm_ensembl)$name, "sscrofa"),]
+ms_ortholgs <- getBM(attributes =c('ensembl_gene_id', 'external_gene_name',
+                                   'sscrofa_homolog_ensembl_gene', 'sscrofa_homolog_associated_gene_name',
+                                   'sscrofa_homolog_orthology_type', 'sscrofa_homolog_orthology_confidence'),
+                      filters = 'ensembl_gene_id',
+                      values = ms_DEgenes$X1,
+                      mart = mm_ensembl)
+ms_ortholgs <- ms_ortholgs %>% distinct() # remove duplicated rows
+dim(ms_ortholgs)
+length(unique(ms_ortholgs$external_gene_name)) # 2812 unique mouse genes (out of 2819)
+
+
+# Get mouse orthologs of pig DEgenes
+# listAttributes(ss_ensembl)[stringr::str_detect(listAttributes(ss_ensembl)$name, "mmusc"),]
+pig_orthologs <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name',
+                                      'mmusculus_homolog_ensembl_gene', 'mmusculus_homolog_associated_gene_name',
+                                      'mmusculus_homolog_orthology_type', 'mmusculus_homolog_orthology_confidence'),
+                         filters = 'ensembl_gene_id',
+                         values = pig_DEgenes$X1,
+                         mart = ss_ensembl)
+pig_orthologs <- pig_orthologs %>% distinct() # remove duplicated rows
+dim(pig_orthologs) # 2194 rows
+length(unique(pig_orthologs$external_gene_name)) # 1820 unique pig genes (out of 2085)
+```
+

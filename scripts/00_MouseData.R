@@ -41,6 +41,15 @@ seur.ms2 <- CreateSeuratObject(mouse2, project="B6_Thymus_NKT_2")
 # Combine into one seurat object
 seur.combined <- merge(seur.ms1, y = seur.ms2, add.cell.ids = c('B61', 'B62'), project = "NKT")
 
+# Keep only expressed genes and export them for the ortholog table
+# keep_feature <- rowSums(seur.combined[["RNA"]]@counts) > 0
+# keep_feature <- names(keep_feature[keep_feature==T]) # 16,966
+# df <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data/B6_1/features.tsv.gz", col_names = FALSE, show_col_types=F) %>%
+#   rename(ms_ensemblID=X1, ms_symbol_data=X2) %>%
+#   dplyr::select(-X3) %>%
+#   filter(ms_symbol_data %in% keep_feature)
+# write.csv(df, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/dataset_ms_genes.csv")
+
 
 # QC
 seur.combined[["percent.mt"]] <- PercentageFeatureSet(seur.combined, pattern = "^mt-")
@@ -65,7 +74,7 @@ LabelPoints(plot = VariableFeaturePlot(seur.combined),
 
 # Run integration & dimension reduction
 seur.combined <- RunFastMNN(object.list = SplitObject(seur.combined, split.by = "orig.ident"), k = 20)
-seur.combined <- RunUMAP(seur.combined, reduction = "mnn", dims = 1:30)
+seur.combined <- RunUMAP(seur.combined, reduction = "mnn", dims = 1:30, return.model=T)
 seur.combined <- FindNeighbors(seur.combined, reduction = "mnn", dims = 1:30, compute.SNN = TRUE)
 seur.combined <- FindClusters(seur.combined, resolution = 0.8)
 
@@ -97,8 +106,26 @@ new.cluster.ids <- c("iNKT1", #0
                      "11") # 11
 names(new.cluster.ids) <- levels(seur.combined)
 seur.combined <- RenameIdents(seur.combined, new.cluster.ids)
+# table(rownames(seur.combined@meta.data) == names(Idents(seur.combined))) # sanity check
+seur.combined$cell_type <- Idents(seur.combined)
 # levels(seur.combined) <- paste0("c", 0:11)
 
+
+
+
+#### WHAT IS CLUSTER 11? ####
+
+VlnPlot(seur.combined, features = c("percent.mt", "nFeature_RNA", "nCount_RNA"), pt.size = 0.5, ncol=1)
+# ggsave(file.path(path.plots, "ms_c11_vlnplot.jpeg"), width=8, height=10, bg="white")
+
+# Remove cluster 11 and save seurat object
+table(seur.combined@meta.data$cell_type) # there are 65 cells in the "11" cluster
+seur.combined <- subset(seur.combined, subset = cell_type != "11")
+# Sanity checks
+# table(seur.combined@meta.data$cell_type)
+# levels(seur.combined)
+# Save seurat object (ready-to-use)
+saveRDS(seur.combined, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_Reproduce_UMAPs/ms_seurobj.rds")
 
 
 
@@ -136,14 +163,6 @@ ggsave(file.path(path.plots, "ms_dotplot.jpeg"), width=8, height=6, bg="white")
 diff.markers <- FindAllMarkers(seur.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 # DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
-
-
-
-
-#### WHAT IS CLUSTER 11? ####
-
-VlnPlot(seur.combined, features = c("percent.mt", "nFeature_RNA", "nCount_RNA"), pt.size = 0.5, ncol=1)
-ggsave(file.path(path.plots, "ms_c11_vlnplot.jpeg"), width=8, height=10, bg="white")
 
 
 

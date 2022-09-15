@@ -32,6 +32,15 @@ seur.pig <- CreateSeuratObject(counts = pig, project = "pig_Thymus_NKT", min.cel
 seur.pig # 12,097 cells
 
 
+# # Keep only expressed genes and export them for the ortholog table
+# keep_feature <- rowSums(seur.pig[["RNA"]]@counts) > 0
+# keep_feature <- names(keep_feature[keep_feature==T]) # 16,966
+# df <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/pig_data/GSE192520_RAW/iNKT/features.tsv.gz", col_names = FALSE, show_col_types=F) %>%
+#   rename(pig_ensemblID=X1, pig_symbol_data=X2) %>%
+#   dplyr::select(-X3) %>%
+#   filter(pig_symbol_data %in% keep_feature)
+# write.csv(df, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/dataset_pig_genes.csv")
+
 # Identify mitochondrial genes
 # Use AnnotationHub to retrieve chromosomal locations given the Ensembl IDs (species: susscrofa)
 # library(AnnotationHub)
@@ -89,7 +98,8 @@ seur.pig <- FindClusters(seur.pig, resolution = 0.5) # random seed!!
 seur.pig <- RunUMAP(seur.pig, dims = 1:19)
 
 # Cluster numbers are not in the same order as in the paper, so we'll just replace them
-DimPlot(seur.pig, pt.size = 0.1, label = T)
+DimPlot(seur.pig, pt.size = 0.1, label = T, label.size = 5)+ ggtitle("Pig (11,125 cells)") + theme(legend.position="none")
+ggsave("~/Downloads/pig_umap.jpeg", width=5, height=5)
 # new.cluster.ids <- c("c6", #0
 #                      "c4", #1
 #                      "c3-5", #2

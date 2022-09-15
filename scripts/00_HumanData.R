@@ -58,6 +58,10 @@ seur.h12 <- CreateSeuratObject(mat.hu12, project="Hu_Thymus_NKT_12")
 # Combine into one seurat object
 seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('Hu5', 'Hu8', 'Hu12'), project="HuNKT") # 2661 cells
 
+# Keep only expressed genes and export them for the ortholog table
+# keep_feature <- rowSums(seur.combined[["RNA"]]@counts) > 0
+# keep_feature <- names(keep_feature[keep_feature==T]) # 19,106
+# write.csv(data.frame("hu_symbol_data" = keep_feature), "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/dataset_hu_genes.csv")
 
 # Identify mitochondrial genes
 # Use AnnotationHub to retrieve chromosomal locations given the Ensembl IDs (species: susscrofa)
@@ -112,6 +116,9 @@ seur.combined <- FindClusters(seur.combined, resolution = 0.8)
 #### FIGURES ####
 
 # Display UMAP
+DimPlot(seur.combined, pt.size = 0.1, label = T, label.size = 7) + ggtitle("Human (2,558 cells)") + theme(legend.position="none")
+ggsave("~/Downloads/hu_umap.jpeg", width=5, height=5)
+
 p1 <- DimPlot(seur.combined, group.by = c("orig.ident"), pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
 p2 <- DimPlot(seur.combined, pt.size = 0.1, label = TRUE) + labs(title="Integrated (2558 cells)") + theme(legend.position="none")
 p3 <- DimPlot(seur.combined, pt.size = 0.1, split.by = "orig.ident", ncol = 3)

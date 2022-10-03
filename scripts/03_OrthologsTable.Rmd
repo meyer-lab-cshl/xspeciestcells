@@ -23,7 +23,9 @@ mart.pig <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
                        dataset="sscrofa_gene_ensembl")
 ```
 
-```{r import-datasets-features, eval=FALSE, include=FALSE}
+If I want to import all features (expressed or not in the datasets).
+
+```{r import-datasets-features}
 # Get ALL the features df from each species
 
 # Mouse
@@ -44,7 +46,11 @@ human12 <- read.csv(file.path(path.data, "CUTHY12BDRscRNA_seq_211101_SampleTag12
 
 ref.hu <- union( union(colnames(human5)[-1],colnames(human8)[-1]), colnames(human12)[-1] )
 length(ref.hu) #28,479 human genes
+ref.hu <- data.frame("hu_symbol_data" = ref.hu)
 ```
+
+
+If I want to import only expressed features.
 
 ```{r import-datasets-expressed-features}
 # Get all the EXPRESSED features df from each species
@@ -136,9 +142,9 @@ colnames(biomart.ms) <- c("ms_ensemblID", "version_msgene", "ms_symbol", "hu_ens
                                 "pig_ensemblID", "pig_symbol", "pig_homology_type", "pig_orthology_confidence")
 
 # Check if all our pig/mouse/human genes are in this biomart table
-table(ref.ms$ms_ensemblID %in% biomart.ms$ms_ensemblID) # 213 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% biomart.ms$hu_symbol) # 5328 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% biomart.ms$pig_ensemblID) # 2128 pig genes not in the biomart (out of ~21,000)
+table(ref.ms$ms_ensemblID %in% biomart.ms$ms_ensemblID) # 213 ms expressed genes not in the biomart / 396
+table(ref.hu$hu_symbol_data %in% biomart.ms$hu_symbol) # 5328 hu expressed genes not in the biomart / 12019
+table(ref.pig$pig_ensemblID %in% biomart.ms$pig_ensemblID) # 2128 pig expressed genes not in the biomart / 4791
 
 # Check the orthology confidence
 table(biomart.ms$hu_orthology_confidence, useNA="ifany") # 19663 genes with 1
@@ -148,24 +154,29 @@ table(biomart.ms$pig_orthology_confidence, useNA="ifany") # 15602 with 1
 
 Clean up this ortholog table
 ```{r get-big-ass-ortholog-table}
-ortholog.table <- biomart.ms %>%
+ortholog.df <- biomart.ms %>%
   mutate_all(na_if,"") %>%
-  filter(hu_orthology_confidence==1) %>%
-  filter(pig_orthology_confidence==1) %>%
+  filter(hu_orthology_confidence==1 | pig_orthology_confidence==1) %>%
   left_join(ref.ms, by="ms_ensemblID") %>%
   relocate(ms_symbol_data, .after=ms_symbol) %>%
   left_join(ref.pig, by="pig_ensemblID") %>%
   relocate(pig_symbol_data, .after=pig_symbol) %>%
   rename(ms_symbol_bmt = ms_symbol,
-         pig_symbol_bmt = pig_symbol)
+         pig_symbol_bmt = pig_symbol) %>%
+  mutate(date=Sys.Date())
+
+# Check for Plzf, 
+ortholog.df %>%
+  filter(ms_symbol_data %in% c("Zbtb16", "Rorc", "Tbx21"))
+
 
 # Save
-write.csv(ortholog.table, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv", row.names = F)
+write.csv(ortholog.df, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv", row.names = F)
 
 # checkup
-table(ref.ms$ms_ensemblID %in% ortholog.table$ms_ensemblID) # 5743 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% ortholog.table$hu_symbol) # 7452 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% ortholog.table$pig_ensemblID) # 3809 pig genes not in the biomart (out of ~21,000)
+table(ref.ms$ms_ensemblID %in% ortholog.df$ms_ensemblID) # 5743 ms genes not in the biomart
+table(ref.hu$hu_symbol_data %in% ortholog.df$hu_symbol) # 7452 hu genes not in the biomart
+table(ref.pig$pig_ensemblID %in% ortholog.df$pig_ensemblID) # 3809 pig genes not in the biomart (out of ~21,000)
 ```
 
 

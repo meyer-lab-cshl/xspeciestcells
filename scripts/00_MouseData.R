@@ -171,7 +171,7 @@ top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 
 # Get differentially expressed genes by cluster
 diff.markers <- FindAllMarkers(seur.combined, assay="RNA", only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.25)
-dim(diff.markers) # 6213 genes
+dim(diff.markers) # 4984 genes
 # sanity check
 # top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 # DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
@@ -182,5 +182,5 @@ saveRDS(diff.markers, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_Corr
 avgexp <- AverageExpression(seur.combined)
 avgexp <- as.data.frame(avgexp$RNA) # get it into a df
 head(avgexp, 10)
-dim(avgexp) # 6 clusters and 31,053 genes
+dim(avgexp) # 5 clusters and 31,053 genes
 saveRDS(avgexp, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/ms_avgexp.rds")

@@ -117,29 +117,29 @@ seur.combined <- FindClusters(seur.combined, resolution = 0.8)
 
 # Display UMAP
 DimPlot(seur.combined, pt.size = 0.1, label = T, label.size = 7) + ggtitle("Human (2,558 cells)") + theme(legend.position="none")
-ggsave("~/Downloads/hu_umap.jpeg", width=5, height=5)
+# ggsave("~/Downloads/hu_umap.jpeg", width=5, height=5)
 
 p1 <- DimPlot(seur.combined, group.by = c("orig.ident"), pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
 p2 <- DimPlot(seur.combined, pt.size = 0.1, label = TRUE) + labs(title="Integrated (2558 cells)") + theme(legend.position="none")
 p3 <- DimPlot(seur.combined, pt.size = 0.1, split.by = "orig.ident", ncol = 3)
 
-jpeg(filename = file.path(path.plots, "hu_umap.jpeg"), width=5000, height=1500, res=300)
+# jpeg(filename = file.path(path.plots, "hu_umap.jpeg"), width=5000, height=1500, res=300)
 ggdraw()+
   draw_plot(p1, x=0, y=0, width=.25, height=1)+
   draw_plot(p2, x=.25, y=0, width=.25, height=1)+
   draw_plot(p3, x=.5, y=0, width=.5, height=1)
-dev.off()
+# dev.off()
 
 
 # Display differentially expressed genes on UMAP
 rownames(seur.combined)[stringr::str_detect(rownames(seur.combined),"CD4")]
 FeaturePlot(seur.combined, features = c('CD24', 'MKI67', 'ZBTB16', 'RORC', 'TBX21'),
             cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
-ggsave(file.path(path.plots, "hu_umap_deg.jpeg"), width=25, height=6)
+# ggsave(file.path(path.plots, "hu_umap_deg.jpeg"), width=25, height=6)
 
 
 # Create a dotplot of genes highly expressed in different iNKT subsets
-levels(seur.combined) <- c("0", "4", "1", "5", "6", "3", "2")
+levels(seur.combined) <- c("4", "0", "1", "5", "6", "2", "3")
 markers.to.plot <- c("CD24", "CD69", "EGR2", "IL2RB", "IFNG", "TBX21", "CCR6", "RORC", "IL17RB", 
                      "CCR7", "IL4", "GATA3", "ZBTB16", "CD4", "CD44")
 DotPlot(seur.combined, features = markers.to.plot, cols = "RdBu", dot.scale = 8, col.min=-1, col.max=1) +
@@ -152,3 +152,41 @@ diff.markers <- FindAllMarkers(seur.combined, only.pos = TRUE, min.pct = 0.25, l
 top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
 DoHeatmap(seur.combined, features = top5$gene, slot="data") + scale_fill_gradientn(colors = c("#f0f0f0", "#b2182b"))
 # ggsave(file.path(path.plots, "hu_heatmap.jpeg"), width=8, height=6, bg="white")
+
+
+
+
+#### DE Genes & Average Exp data for cross-species ####
+
+# Get differentially expressed genes by cluster
+diff.markers <- FindAllMarkers(seur.combined, assay="RNA", only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.25)
+dim(diff.markers) # 3594 genes
+# sanity check
+# top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+# DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
+saveRDS(diff.markers, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_DEG.rds")
+
+
+# Get average expression data per cluster
+avgexp <- AverageExpression(seur.combined)
+avgexp <- as.data.frame(avgexp$RNA) # get it into a df
+colnames(avgexp) <- paste0("hu_iNKT_", 0:6)
+head(avgexp, 10)
+dim(avgexp) # 7 clusters and 28479 genes
+saveRDS(avgexp, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_avgexp.rds")
+
+table(seur.combined@meta.data$seurat_clusters)
+
+
+
+
+# Look at genes of interest that differentiate cluster 3 and 6
+FeaturePlot(seur.combined, features = c("CCR9", 'CCR7', "ZBTB16", "EOMES", "GZMK", "GZMA", "KLRB1", "NKG7", "CXCR6", "PRF1","CD69", "LY6E", "IFIT3", "IFIT1", "ISG15", "RORC", "CCR6", "IL23R"),
+            cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_umap_features_clus3vs6.jpeg", width=25, height=18)
+FeaturePlot(seur.combined, features = c("CCND2", "KLF2", "IL6R", "PLAC8", "IL7R", "TRIB2", "LTB", "S100B", "CXCR6", "S1PR1"),
+            cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
+VlnPlot(seur.combined, features="JUNB")
+FeaturePlot(seur.combined, features = c("RORC", "CCR6", "IL23R"),
+            cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
+

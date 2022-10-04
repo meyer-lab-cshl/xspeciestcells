@@ -96,10 +96,13 @@ for(meta in names(cell_metadata)){
 
 filtered_seurat@meta.data
 
-filtered_seurat <- NormalizeData(filtered_seurat)
+
+# Normalize with SCTransform
+filtered_seurat <- NormalizeData(filtered_seurat) # why log-normalize before using SCT?...
 filtered_seurat <- SCTransform(filtered_seurat, vars.to.regress = c('percent.mt'), 
                                verbose=TRUE, method = "glmGamPoi")
 
+# Run dimension reduction (linear & non-linear)
 filtered_seurat <- RunPCA(filtered_seurat)
 
 ElbowPlot(filtered_seurat)
@@ -108,6 +111,8 @@ filtered_seurat <- RunUMAP(filtered_seurat, dims = 1:15, min.dist = 0.3, spread 
 filtered_seurat <- FindNeighbors(filtered_seurat, dims = 1:15)
 filtered_seurat <- FindClusters(filtered_seurat, resolution = 0.7)
 
+
+# Plot UMAP
 my_cols <- c(met.brewer("Austria", n = 7, type = "discrete"),
              met.brewer("Egypt", n = 4, type = "discrete"),
              met.brewer("Cross", n = 9, type = "discrete"),
@@ -122,6 +127,8 @@ DimPlot(filtered_seurat, group.by = c("orig.ident"),
         label = TRUE, label.size = 6, 
         cols = alpha(my_cols, 0.7)) + NoLegend()
 
+
+# Run normalization with fast MNN
 DefaultAssay(filtered_seurat) <- "RNA"
 filtered_seurat_MNN <- RunFastMNN(object.list = SplitObject(filtered_seurat, split.by = "orig.ident"), k = 20, 
                                   auto.merge = TRUE)
@@ -142,11 +149,14 @@ FeaturePlot(filtered_seurat_MNN, features = c("ZBTB16", "EOMES", "GZMK", "CCR7",
             ncol = 2, 
             label = FALSE, repel = FALSE, label.size = 6) + NoLegend()
 
+
+# Run integration with Harmony (from the SCTransform data)
 set.seed(0229)
 
 DefaultAssay(filtered_seurat) <- "SCT"
-filtered_seurat_Harmony <- RunHarmony(filtered_seurat, group.by.vars = c("Batch", "Method"), assay.use = "SCT",
-                                      max.iter.harmony = 20)
+# filtered_seurat_Harmony <- RunHarmony(filtered_seurat, group.by.vars = c("Batch", "Method"), assay.use = "SCT",
+filtered_seurat_Harmony <- RunHarmony(filtered_seurat, group.by.vars = c("orig.ident"), assay.use = "SCT",
+                                      max.iter.harmony = 20) # 11 iterations
 filtered_seurat_Harmony <- RunUMAP(filtered_seurat_Harmony, reduction = "harmony", 
                                    dims = 1:15)
 filtered_seurat_Harmony <- FindNeighbors(filtered_seurat_Harmony, 

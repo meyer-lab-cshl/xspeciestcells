@@ -1,12 +1,20 @@
 ---
 title: "Human data - Comparison of preprocessing methods"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
 ---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/")
+```
 
 
 ## 1. Import
 
-```{r import-librairies}
+```{r import-librairies, message=FALSE}
 # Libraries
 library(ggplot2)
 library(cowplot)
@@ -16,7 +24,6 @@ library(harmony)
 library(Matrix)
 library(tidyverse)
 ```
-
 
 ```{r import-data}
 # Data (sorted human iNKT cells from 3 subjects)
@@ -45,9 +52,6 @@ mat.hu8  <- convert_to_matrix(human8) # 1913 cells
 mat.hu12 <- convert_to_matrix(human12) # 344 cells
 ```
 
-
-
-
 ## 2. Preprocessing
 
 ```{r create-seurat}
@@ -60,7 +64,6 @@ seur.h12 <- CreateSeuratObject(mat.hu12, project="Hu_Thymus_NKT_12", min.cells=1
 seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('Hu5', 'Hu8', 'Hu12'), project="HuNKT") # 2661 cells and 18,520 features
 print(seur.combined)
 ```
-
 
 ```{r quality-control}
 # QC
@@ -77,14 +80,11 @@ table(seur.combined@meta.data$orig.ident) # 399 cells hu5; 1828 cells hu8; 331 c
 print(seur.combined)
 ```
 
-
-
-
 ## 3. SCTransform and Harmony
 
 Code combining SCTransform and Harmony based on this [forum discussion](https://github.com/immunogenomics/harmony/issues/41) and this [seurat tutorial](https://htmlpreview.github.io/?https://github.com/satijalab/seurat.wrappers/blob/master/docs/harmony.html)
 
-```{r SCTransform-Harmony}
+```{r SCTransform1, message=F}
 # Normalize with SCTransform and find variable features
 seur.list <- SplitObject(seur.combined, split.by = "orig.ident")
 seur.list <- lapply(X = seur.list, FUN = SCTransform) # weird, SCTransform adds features?!
@@ -97,11 +97,12 @@ VariableFeatures(seur.SCT) <- sct.hvg
 
 
 # Run PCA (don't scale data when using SCTransform)
-seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50)
+seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, verbose=F)
 DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident")
-ElbowPlot(seur.SCT)
+# ElbowPlot(seur.SCT)
+```
 
-
+```{r Harmony}
 # Run Harmony for integration
 seur.harmony <- RunHarmony(object = seur.SCT,
                            assay.use = "SCT",
@@ -109,17 +110,16 @@ seur.harmony <- RunHarmony(object = seur.SCT,
                            dims.use = 1:50,
                            group.by.vars = "orig.ident",
                            plot_convergence = F) # converged only after 2 iterations
-seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:30)
-seur.harmony <- FindNeighbors(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:30) %>%
-  FindClusters(resolution = 0.8)
+seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:30, verbose=F)
+seur.harmony <- FindNeighbors(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:30, verbose=F) %>%
+  FindClusters(resolution = 0.8, verbose=F)
 
 
 # First glance at UMAP
 DimPlot(seur.harmony, pt.size = 0.1, label = T, label.size = 7) + ggtitle("SCTransform+Harmony") + theme(legend.position="none")
 ```
 
-
-```{r SCTransform-Harmony-plot}
+```{r SCTransform-Harmony-plot, fig.height=5, fig.width=15}
 # Display UMAP
 p1 <- DimPlot(seur.harmony, group.by = c("orig.ident"), pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
 p2 <- DimPlot(seur.harmony, pt.size = 0.1, label = TRUE) + labs(title="Integrated (2558 cells)") + theme(legend.position="none")
@@ -149,17 +149,16 @@ LabelPoints(plot = VariableFeaturePlot(seur.mnn),
 
 
 # Run integration & dimension reduction
-seur.mnn <- RunFastMNN(object.list = SplitObject(seur.mnn, split.by = "orig.ident"), k = 20)
-seur.mnn <- RunUMAP(seur.mnn, reduction = "mnn", dims = 1:30)
-seur.mnn <- FindNeighbors(seur.mnn, reduction = "mnn", dims = 1:30, compute.SNN = TRUE)
-seur.mnn <- FindClusters(seur.mnn, resolution = 0.8)
+seur.mnn <- RunFastMNN(object.list = SplitObject(seur.mnn, split.by = "orig.ident"), k = 20, verbose=F)
+seur.mnn <- RunUMAP(seur.mnn, reduction = "mnn", dims = 1:30, verbose=F)
+seur.mnn <- FindNeighbors(seur.mnn, reduction = "mnn", dims = 1:30, compute.SNN = TRUE, verbose=F)
+seur.mnn <- FindClusters(seur.mnn, resolution = 0.8, verbose=F)
 
 # First glance at UMAP
 DimPlot(seur.mnn, pt.size = 0.1, label = T, label.size = 7) + ggtitle("LogNormalize + fastMNN") + theme(legend.position="none")
 ```
 
-
-```{r lognormalize-mnn-plot}
+```{r lognormalize-mnn-plot, fig.height=5, fig.width=15}
 # Display UMAP
 # ggsave("~/Downloads/hu_umap.jpeg", width=5, height=5)
 
@@ -175,9 +174,7 @@ ggdraw()+
 ```
 
 
-
-
-### 5. Compare methods
+## 5. Compare methods
 
 ```{r merge-metadata}
 # Rename cluster columns for merging downstream
@@ -197,28 +194,30 @@ seur.mnn@meta.data <- metadata
 seur.harmony@meta.data <- metadata
 
 # Sanity checks
-DimPlot(seur.mnn, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + labs(title="LogNorm+MNN") + theme(legend.position="none")
-DimPlot(seur.harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + labs(title="SCT+Harmony") + theme(legend.position="none")
+DimPlot(seur.mnn, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + scale_color_brewer(palette="Set2")+ labs(title="LogNorm+MNN") + theme(legend.position="none")
+DimPlot(seur.harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + scale_color_brewer(palette="Paired")+ labs(title="SCT+Harmony") + theme(legend.position="none")
 ```
 
-
-```{r cross-plot}
+```{r cross-plot, fig.width=10, fig.height=10}
 # Check which cluster corresponds to which across methods
-mnn1 <- DimPlot(seur.mnn, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + labs(title="LogNorm+MNN | Clust on MNN") + theme(legend.position="none")
-mnn2 <- DimPlot(seur.mnn, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + labs(title="LogNorm+MNN | Clust on Harmony") + theme(legend.position="none")
-harm1 <- DimPlot(seur.harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + labs(title="SCT+Harmony | Clust on Harmony") + theme(legend.position="none")
-harm2 <- DimPlot(seur.harmony, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + labs(title="SCT+Harmony  | Clust on MNN") + theme(legend.position="none")
+mnn1 <- DimPlot(seur.mnn, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + scale_color_brewer(palette="Set2")+
+  labs(title="LogNorm+MNN | Clust on MNN") + theme(legend.position="none")
+mnn2 <- DimPlot(seur.mnn, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + scale_color_brewer(palette="Paired")+
+  labs(title="LogNorm+MNN | Clust on Harmony") + theme(legend.position="none")
+harm1 <- DimPlot(seur.harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) +scale_color_brewer(palette="Paired")+
+  labs(title="SCT+Harmony | Clust on Harmony") + theme(legend.position="none")
+harm2 <- DimPlot(seur.harmony, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + scale_color_brewer(palette="Set2")+
+  labs(title="SCT+Harmony  | Clust on MNN") + theme(legend.position="none")
 
 ggdraw()+
   draw_plot(mnn1, x=0,  y=.5, width=.5, height=.5)+
-  draw_plot(mnn1, x=.5, y=.5, width=.5, height=.5)+
+  draw_plot(mnn2, x=.5, y=.5, width=.5, height=.5)+
   draw_plot(harm2, x=0, y=0, width=.5, height=.5) +
   draw_plot(harm1, x=.5, y=0, width=.5, height=.5)
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/salomecode_comparemethods.jpeg", width=9, height=8)
 ```
 
-
-
-```{r key-genes}
+```{r key-genes, fig.width=7, fig.height=3}
 # Function to look at genes of interest
 plotFeatBoth <- function(gene){
   mnn <- FeaturePlot(seur.mnn, features=gene) +
@@ -229,22 +228,221 @@ plotFeatBoth <- function(gene){
   mnn | harm
 }
 
-# Look at genes of interest
-plotFeatBoth("ZBTB16")
-plotFeatBoth("EOMES")
-plotFeatBoth("GZMK")
-plotFeatBoth("CCR7")
-plotFeatBoth("CCR9")
-plotFeatBoth("SELL")
-plotFeatBoth("PLAC8")
-plotFeatBoth("CD69")
-plotFeatBoth("CD4")
-
-# mouse markers?
-plotFeatBoth("EGR2")
-plotFeatBoth("SLAMF1")
-plotFeatBoth("CD44")
-plotFeatBoth("NKG7")
-plotFeatBoth("KLRB1")
+# Look at genes of interest (with MNN umap on the left, Harmony umap on the right)
+genes.of.interest <- c("ZBTB16", "EOMES", "GZMK", "CCR7", "CCR9", "SELL", "PLAC8", "CD69", "CD4", "ISG15", "EGR2", "SLAMF1", "CD44", "NKG7", "KLRB1")
+for (i in genes.of.interest){
+  print(plotFeatBoth(i))
+}
 ```
 
+
+```{r, echo = FALSE, include=FALSE, eval=FALSE}
+selectInput("gene", label = "Feature:",
+              choices = genes.of.interest, selected = "ZBTB16")
+```
+
+```{r echo = FALSE, include=FALSE, eval=FALSE}
+renderPlot({
+  plotFeatBoth(input$gene)
+})
+```
+
+
+
+## 6. Laurent's code
+
+#### a) Create seurat object
+
+```{r create-seurat-only-shared-genes}
+# Get the matrices into one list
+all.data <- list("NKT_8_Thymus" = human8,
+                 "NKT_12_Thymus" = human12,
+                 "NKT_5_Thymus" = human5)
+
+# Get sample names and gene names
+shared_genes <- Reduce(intersect, lapply(X = all.data, FUN = function(x){ colnames(x) }))
+shared_genes <- shared_genes[!shared_genes %in% 'Cell_Index']
+sample.names <- names(all.data)
+
+
+# Create seurat objects, keeping only genes present in all 3 individuals/datasets
+all.seurat <- lapply(X = 1:length(all.data), FUN = function(x){
+  sample.counts <- all.data[[x]]
+  rownames(sample.counts) <- sample.counts$Cell_Index
+  sample.counts$Cell_Index <- NULL
+  transpose.df <- as.data.frame(t(as.matrix(sample.counts))) # have genes as rows, cells as cols
+  transpose.df <- transpose.df[match(shared_genes, rownames(transpose.df)), ] # keep only genes present in all 3 individuals
+  seurat.obj <- CreateSeuratObject(counts = transpose.df, project = sample.names[x])
+})
+
+# Merge into one seurat object
+merged_seurat <- merge(x = all.seurat[[1]], y = all.seurat[2:length(all.seurat)],
+                       add.cell.ids = sample.names, project = 'Human_Innate') # 2661 cells with 19,693 genes
+print(merged_seurat)
+```
+
+#### b) Quality-control
+
+```{r qc}
+# Cell filtering
+merged_seurat[["percent.mt"]] <- PercentageFeatureSet(merged_seurat, pattern = "^MT\\.")
+VlnPlot(merged_seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+
+filtered_seurat <- subset(merged_seurat, subset = nFeature_RNA >= 500 & nFeature_RNA < 4000 & nCount_RNA >=500 & percent.mt < 25) # 2558 cells
+VlnPlot(filtered_seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size = 0)
+
+
+# Keep only non-ribosomal-mt genes and genes that are present in at least 10 cells
+counts <- GetAssayData(object = filtered_seurat, slot = "counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 10
+genes.to.remove <- rownames(filtered_seurat)[grep(rownames(filtered_seurat), pattern = "^RPL|^RPS|^MT\\.")]
+keep_genes[which(names(keep_genes) %in% genes.to.remove)] = FALSE
+filtered_counts <- counts[keep_genes, ]
+
+filtered_seurat <- CreateSeuratObject(filtered_counts, meta.data = filtered_seurat@meta.data) # 11,304 genes
+print(filtered_seurat)
+```
+
+#### c) SCTransform and Harmony
+
+```{r SCTransform}
+# Import metadata
+# sample_metadata <- read.csv(file = "/Volumes/Samsung_T5/Human_MAIT_NKT/Data/Metadata.csv") %>% 
+#   dplyr::select(-sample.id, -X, -file)
+# 
+# rownames(sample_metadata) <- sample_metadata$orig.ident
+# cell_metadata <- sample_metadata[filtered_seurat$orig.ident,]
+# for(meta in names(cell_metadata)){
+#   filtered_seurat[[meta]] <- cell_metadata[[meta]]
+# }
+# 
+# filtered_seurat@meta.data
+
+
+# Normalize with SCTransform
+filtered_seurat <- NormalizeData(filtered_seurat) # why log-normalize before using SCT?...
+filtered_seurat <- SCTransform(filtered_seurat, vars.to.regress = c('percent.mt'), 
+                               verbose=F, method = "glmGamPoi")
+
+# Run dimension reduction (linear & non-linear)
+filtered_seurat <- RunPCA(filtered_seurat, verbose=F)
+# ElbowPlot(filtered_seurat)
+filtered_seurat <- RunUMAP(filtered_seurat, dims = 1:15, min.dist = 0.3, spread = 0.5, verbose=F)
+filtered_seurat <- FindNeighbors(filtered_seurat, dims = 1:15, verbose=F)
+filtered_seurat <- FindClusters(filtered_seurat, resolution = 0.7, verbose=F)
+
+
+# Run integration with Harmony (from the SCTransform data)
+set.seed(0229)
+
+DefaultAssay(filtered_seurat) <- "SCT"
+# filtered_seurat_Harmony <- RunHarmony(filtered_seurat, group.by.vars = c("Batch", "Method"), assay.use = "SCT",
+filtered_seurat_Harmony <- RunHarmony(filtered_seurat,
+                                      group.by.vars = c("orig.ident"),
+                                      assay.use = "SCT",
+                                      max.iter.harmony = 20) # 11 iterations
+filtered_seurat_Harmony <- RunUMAP(filtered_seurat_Harmony, reduction = "harmony", dims = 1:15, verbose=F)
+filtered_seurat_Harmony <- FindNeighbors(filtered_seurat_Harmony, reduction = "harmony", dims = 1:15, verbose=F)
+filtered_seurat_Harmony <- FindClusters(filtered_seurat_Harmony, resolution = 0.5, verbose=F)
+
+DimPlot(filtered_seurat_Harmony, group.by = c("seurat_clusters"),
+              pt.size = 1, 
+              ncol = 1, 
+              label = TRUE, label.size = 6) + NoLegend()
+```
+
+#### d) LogNormalize and MNN
+
+```{r mnn}
+# Go back to the RNA assay that was lognormalized
+DefaultAssay(filtered_seurat) <- "RNA"
+filtered_seurat_MNN <- RunFastMNN(object.list = SplitObject(filtered_seurat, split.by = "orig.ident"), k = 20, 
+                                  auto.merge = TRUE, verbose=F)
+filtered_seurat_MNN <- RunUMAP(filtered_seurat_MNN, reduction = "mnn", dims = 1:15, verbose=F)
+filtered_seurat_MNN <- FindNeighbors(filtered_seurat_MNN, reduction = "mnn", dims = 1:15, verbose=F)
+filtered_seurat_MNN <- FindClusters(filtered_seurat_MNN, resolution = 0.5, verbose=F)
+
+DimPlot(filtered_seurat_MNN, group.by = c("seurat_clusters"),
+              pt.size = 1, 
+              ncol = 1, 
+              label = TRUE, label.size = 6) + NoLegend()
+```
+
+#### e) Compare methods
+
+```{r compare-methods, fig.width=10, fig.height=10}
+# Rename cluster columns for merging downstream
+head(filtered_seurat_MNN@meta.data)
+colnames(filtered_seurat_MNN@meta.data)[8] <- "mnn_clusters"
+head(filtered_seurat_Harmony@meta.data)
+colnames(filtered_seurat_Harmony@meta.data)[8] <- "harmony_clusters"
+
+# Merge the metadata df
+metadata <- merge(filtered_seurat_MNN@meta.data, filtered_seurat_Harmony@meta.data, by=c("row.names", "orig.ident"))
+rownames(metadata) <- metadata$Row.names
+metadata$Row.names <- NULL
+head(metadata)
+
+# Replace the metadata df in the seurat objects
+filtered_seurat_MNN@meta.data <- metadata
+filtered_seurat_Harmony@meta.data <- metadata
+
+# Sanity checks
+# DimPlot(filtered_seurat_MNN, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) + labs(title="LogNorm+MNN") + theme(legend.position="none")
+# DimPlot(filtered_seurat_Harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) + labs(title="SCT+Harmony") + theme(legend.position="none")
+
+# Check which cluster corresponds to which across methods
+mnn1 <- DimPlot(filtered_seurat_MNN, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) +
+  scale_color_brewer(palette="Set2")+
+  labs(title="LogNorm+MNN | Clust on MNN") +
+  theme(legend.position="none")
+mnn2 <- DimPlot(filtered_seurat_MNN, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) +
+  scale_color_brewer(palette="Paired")+
+  labs(title="LogNorm+MNN | Clust on Harmony") + theme(legend.position="none")
+harm1 <- DimPlot(filtered_seurat_Harmony, group.by="harmony_clusters", pt.size = 0.1, label = TRUE) +
+  scale_color_brewer(palette="Paired")+
+  labs(title="SCT+Harmony | Clust on Harmony") + theme(legend.position="none")
+harm2 <- DimPlot(filtered_seurat_Harmony, group.by="mnn_clusters", pt.size = 0.1, label = TRUE) +
+  scale_color_brewer(palette="Set2") +
+  labs(title="SCT+Harmony  | Clust on MNN") + theme(legend.position="none")
+
+ggdraw()+
+  draw_plot(mnn1, x=0,  y=.5, width=.5, height=.5)+
+  draw_plot(mnn2, x=.5, y=.5, width=.5, height=.5)+
+  draw_plot(harm2, x=0, y=0, width=.5, height=.5) +
+  draw_plot(harm1, x=.5, y=0, width=.5, height=.5)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/laurentcode_comparemethods.jpeg", width=9, height=8)
+```
+
+```{r genes-of-interest, fig.width=7, fig.height=3}
+# Function to look at genes of interest
+plotFeat <- function(gene){
+  mnn <- FeaturePlot(filtered_seurat_MNN, features=gene) +
+    labs(title=gene)
+  harm <- FeaturePlot(filtered_seurat_Harmony, features=gene) +
+    labs(title=gene)
+  # Plot both side-by-side
+  mnn | harm
+}
+
+# Look at genes of interest (with MNN umap on the left, Harmony umap on the right)
+for(i in genes.of.interest){
+  print(plotFeat(i))
+}
+
+FeaturePlot(filtered_seurat_MNN, features=c("ZBTB16", "EOMES", "GZMK", "CCR7", "CCR9", "SELL", "PLAC8", "CD69", "CD4", "ISG15"), cols = c('#deebf7', 'red'))
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/lognorm-mnn_features.jpeg", width=18, height=12)
+```
+
+```{r echo = FALSE, include=FALSE, eval=FALSE}
+selectInput("feature", label = "Feature:",
+            choices = genes.of.interest,
+            selected = "ZBTB16")
+```
+
+```{r echo = FALSE, include=FALSE, eval=FALSE}
+renderPlot({
+  plotFeat(input$feature)
+})
+```

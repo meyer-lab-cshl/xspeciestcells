@@ -1,3 +1,6 @@
 data/
 .Rproj.user
 *.Rproj
+.DS_Store
+scripts/*.nb.html
+scripts/.DS_Store

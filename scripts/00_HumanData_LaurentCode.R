@@ -98,7 +98,7 @@ filtered_seurat@meta.data
 
 
 # Normalize with SCTransform
-filtered_seurat <- NormalizeData(filtered_seurat) # why log-normalize before using SCT?...
+filtered_seurat <- NormalizeData(filtered_seurat)
 filtered_seurat <- SCTransform(filtered_seurat, vars.to.regress = c('percent.mt'), 
                                verbose=TRUE, method = "glmGamPoi")
 

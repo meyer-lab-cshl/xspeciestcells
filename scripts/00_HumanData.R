@@ -56,7 +56,7 @@ seur.h8  <- CreateSeuratObject(mat.hu8, project="Hu_Thymus_NKT_8")
 seur.h12 <- CreateSeuratObject(mat.hu12, project="Hu_Thymus_NKT_12")
 
 # Combine into one seurat object
-seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('Hu5', 'Hu8', 'Hu12'), project="HuNKT") # 2661 cells
+seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('Hu5', 'Hu8', 'Hu12'), project="HuNKT") # 2661 cells and 28,479 genes
 
 # Keep only expressed genes and export them for the ortholog table
 # keep_feature <- rowSums(seur.combined[["RNA"]]@counts) > 0
@@ -96,19 +96,19 @@ table(seur.combined@meta.data$orig.ident) # 399 cells hu5; 1828 cells hu8; 331 c
 
 # Normalize and find variable features
 set.seed(123)
-seur.combined <- NormalizeData(seur.combined) # normalized data is saved in seur.combined[["RNA"]]@data
-seur.combined <- FindVariableFeatures(seur.combined) # return 2,000 HVGs
+seur.mnn <- NormalizeData(seur.combined) # normalized data is saved in seur.combined[["RNA"]]@data
+seur.mnn <- FindVariableFeatures(seur.mnn) # return 2,000 HVGs
 # plot variable features with labels
-LabelPoints(plot = VariableFeaturePlot(seur.combined),
-            points = head(VariableFeatures(seur.combined), 10), repel = TRUE)
+LabelPoints(plot = VariableFeaturePlot(seur.mnn),
+            points = head(VariableFeatures(seur.mnn), 10), repel = TRUE)
 # ggsave(file.path(path.plots, "hu_hvg.jpeg"), width=8, height=6, bg="white")
 
 
 # Run integration & dimension reduction
-seur.combined <- RunFastMNN(object.list = SplitObject(seur.combined, split.by = "orig.ident"), k = 20)
-seur.combined <- RunUMAP(seur.combined, reduction = "mnn", dims = 1:30)
-seur.combined <- FindNeighbors(seur.combined, reduction = "mnn", dims = 1:30, compute.SNN = TRUE)
-seur.combined <- FindClusters(seur.combined, resolution = 0.8)
+seur.mnn <- RunFastMNN(object.list = SplitObject(seur.mnn, split.by = "orig.ident"), k = 20)
+seur.mnn <- RunUMAP(seur.mnn, reduction = "mnn", dims = 1:30)
+seur.mnn <- FindNeighbors(seur.mnn, reduction = "mnn", dims = 1:30, compute.SNN = TRUE)
+seur.mnn <- FindClusters(seur.mnn, resolution = 0.8)
 
 
 
@@ -116,12 +116,12 @@ seur.combined <- FindClusters(seur.combined, resolution = 0.8)
 #### FIGURES ####
 
 # Display UMAP
-DimPlot(seur.combined, pt.size = 0.1, label = T, label.size = 7) + ggtitle("Human (2,558 cells)") + theme(legend.position="none")
+DimPlot(seur.mnn, pt.size = 0.1, label = T, label.size = 7) + ggtitle("Human (2,558 cells)") + theme(legend.position="none")
 # ggsave("~/Downloads/hu_umap.jpeg", width=5, height=5)
 
-p1 <- DimPlot(seur.combined, group.by = c("orig.ident"), pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
-p2 <- DimPlot(seur.combined, pt.size = 0.1, label = TRUE) + labs(title="Integrated (2558 cells)") + theme(legend.position="none")
-p3 <- DimPlot(seur.combined, pt.size = 0.1, split.by = "orig.ident", ncol = 3)
+p1 <- DimPlot(seur.mnn, group.by = c("orig.ident"), pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
+p2 <- DimPlot(seur.mnn, pt.size = 0.1, label = TRUE) + labs(title="Integrated (2558 cells)") + theme(legend.position="none")
+p3 <- DimPlot(seur.mnn, pt.size = 0.1, split.by = "orig.ident", ncol = 3)
 
 # jpeg(filename = file.path(path.plots, "hu_umap.jpeg"), width=5000, height=1500, res=300)
 ggdraw()+
@@ -132,25 +132,25 @@ ggdraw()+
 
 
 # Display differentially expressed genes on UMAP
-rownames(seur.combined)[stringr::str_detect(rownames(seur.combined),"CD4")]
-FeaturePlot(seur.combined, features = c('CD24', 'MKI67', 'ZBTB16', 'RORC', 'TBX21'),
+rownames(seur.mnn)[stringr::str_detect(rownames(seur.mnn),"CD4")]
+FeaturePlot(seur.mnn, features = c('CD24', 'MKI67', 'ZBTB16', 'RORC', 'TBX21'),
             cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
 # ggsave(file.path(path.plots, "hu_umap_deg.jpeg"), width=25, height=6)
 
 
 # Create a dotplot of genes highly expressed in different iNKT subsets
-levels(seur.combined) <- c("4", "0", "1", "5", "6", "2", "3")
+levels(seur.mnn) <- c("4", "0", "1", "5", "6", "2", "3")
 markers.to.plot <- c("CD24", "CD69", "EGR2", "IL2RB", "IFNG", "TBX21", "CCR6", "RORC", "IL17RB", 
                      "CCR7", "IL4", "GATA3", "ZBTB16", "CD4", "CD44")
-DotPlot(seur.combined, features = markers.to.plot, cols = "RdBu", dot.scale = 8, col.min=-1, col.max=1) +
+DotPlot(seur.mnn, features = markers.to.plot, cols = "RdBu", dot.scale = 8, col.min=-1, col.max=1) +
   theme(axis.text.x=element_text(angle=45, hjust=1))
 # ggsave(file.path(path.plots, "hu_dotplot.jpeg"), width=8, height=6, bg="white")
 
 # Create a heatmap of differentially expressed genes by cluster
-levels(seur.combined) <- as.character(0:6)
-diff.markers <- FindAllMarkers(seur.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+levels(seur.mnn) <- as.character(0:6)
+diff.markers <- FindAllMarkers(seur.mnn, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
 top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
-DoHeatmap(seur.combined, features = top5$gene, slot="data") + scale_fill_gradientn(colors = c("#f0f0f0", "#b2182b"))
+DoHeatmap(seur.mnn, features = top5$gene, slot="data") + scale_fill_gradientn(colors = c("#f0f0f0", "#b2182b"))
 # ggsave(file.path(path.plots, "hu_heatmap.jpeg"), width=8, height=6, bg="white")
 
 
@@ -159,34 +159,34 @@ DoHeatmap(seur.combined, features = top5$gene, slot="data") + scale_fill_gradien
 #### DE Genes & Average Exp data for cross-species ####
 
 # Get differentially expressed genes by cluster
-diff.markers <- FindAllMarkers(seur.combined, assay="RNA", only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.25)
+diff.markers <- FindAllMarkers(seur.mnn, assay="RNA", only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.25)
 dim(diff.markers) # 3594 genes
 # sanity check
 # top5 <- diff.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
-# DoHeatmap(seur.combined, features = top5$gene, slot="data") + NoLegend()
+# DoHeatmap(seur.mnn, features = top5$gene, slot="data") + NoLegend()
 saveRDS(diff.markers, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_DEG.rds")
 
 
 # Get average expression data per cluster
-avgexp <- AverageExpression(seur.combined)
+avgexp <- AverageExpression(seur.mnn)
 avgexp <- as.data.frame(avgexp$RNA) # get it into a df
 colnames(avgexp) <- paste0("hu_iNKT_", 0:6)
 head(avgexp, 10)
 dim(avgexp) # 7 clusters and 28479 genes
 saveRDS(avgexp, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_avgexp.rds")
 
-table(seur.combined@meta.data$seurat_clusters)
+table(seur.mnn@meta.data$seurat_clusters)
 
 
 
 
 # Look at genes of interest that differentiate cluster 3 and 6
-FeaturePlot(seur.combined, features = c("CCR9", 'CCR7', "ZBTB16", "EOMES", "GZMK", "GZMA", "KLRB1", "NKG7", "CXCR6", "PRF1","CD69", "LY6E", "IFIT3", "IFIT1", "ISG15", "RORC", "CCR6", "IL23R"),
+FeaturePlot(seur.mnn, features = c("CCR9", 'CCR7', "ZBTB16", "EOMES", "GZMK", "GZMA", "KLRB1", "NKG7", "CXCR6", "PRF1","CD69", "LY6E", "IFIT3", "IFIT1", "ISG15", "RORC", "CCR6", "IL23R"),
             cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
 ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/hu_umap_features_clus3vs6.jpeg", width=25, height=18)
-FeaturePlot(seur.combined, features = c("CCND2", "KLF2", "IL6R", "PLAC8", "IL7R", "TRIB2", "LTB", "S100B", "CXCR6", "S1PR1"),
+FeaturePlot(seur.mnn, features = c("CCND2", "KLF2", "IL6R", "PLAC8", "IL7R", "TRIB2", "LTB", "S100B", "CXCR6", "S1PR1"),
             cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
-VlnPlot(seur.combined, features="JUNB")
-FeaturePlot(seur.combined, features = c("RORC", "CCR6", "IL23R"),
+VlnPlot(seur.mnn, features="JUNB")
+FeaturePlot(seur.mnn, features = c("RORC", "CCR6", "IL23R"),
             cols = c('#deebf7', 'red'), pt.size = 0.7, ncol = 5)
 

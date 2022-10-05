@@ -5,7 +5,7 @@ output: html_notebook
 
 # IMPORT
 
-```{r import-librairies}
+```{r import-librairies, message=FALSE}
 library(ggplot2)
 library(tidyverse)
 library(corrplot)
@@ -25,9 +25,46 @@ ExpressionTable_pig <- readRDS(file.path(path, "pig_avgexp.rds"))
 DEgenes_hu.df <- readRDS(file.path(path, "hu_DEG.rds"))
 ExpressionTable_hu <- readRDS(file.path(path, "hu_avgexp.rds"))
 
-# Import orthologs table
+# Import orthologs tables
 ortholog.df <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv")
+ortholog.gapin <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/Cleaned_gene_correspondance_Human_Mouse.csv")
 ```
+
+
+# COMPARE MS x HU ORTHOLOGS (biomart vs Laurent's table)
+
+```{r compare-ms-hu-orthologs}
+# Number of human & mouse genes in each dataframe
+length(unique(ortholog.df$ms_symbol_data)) # 17,085 ms genes
+length(unique(ortholog.gapin$mouse)) # 17,870 ms genes
+length(setdiff(unique(ortholog.gapin$mouse), unique(ortholog.df$ms_symbol_data))) # 2069 ms genes from Laurent's table are not in the biomart table
+length(setdiff(unique(ortholog.gapin$mouse), rownames(ExpressionTable_ms))) # 918 ms genes from Laurent's table are not in the expression table
+
+length(unique(ortholog.df$hu_symbol)) # 17,152 hu genes
+length(unique(ortholog.gapin$human)) # 18,849 hu genes
+length(setdiff(unique(ortholog.gapin$human), unique(ortholog.df$hu_symbol))) # 2242 hu genes from Laurent's table are not in the biomart table
+length(setdiff(unique(ortholog.gapin$human), rownames(ExpressionTable_hu))) # 2067 hu genes from Laurent's table are not in the expression table
+
+
+# Merge dataframes to compare them
+jointdf <- ortholog.df %>%
+  select(ms_ensemblID, ms_symbol_bmt, ms_symbol_data, hu_ensemblID, hu_symbol, hu_homology_type, hu_orthology_confidence) %>%
+  distinct() %>% # 18,389 rows
+  left_join(ortholog.gapin, by=c("hu_symbol"="human")) %>%
+  rename(ms_symbol_gapin=mouse)
+
+# Check how many human genes have different mouse orthologs (biomart vs laurent's table)
+jointdf %>%
+  filter(ms_symbol_bmt != ms_symbol_gapin) # 977 different gene names
+jointdf %>%
+  filter(ms_symbol_data != ms_symbol_gapin) # 1320 different ms gene names
+table(rownames(ExpressionTable_ms) %in% unique(ortholog.gapin$mouse)) # 14101 genes in expression table not in Laurent's ortholog table
+table(rownames(ExpressionTable_ms) %in% unique(ortholog.df$ms_symbol_data)) # 13969 genes in expression table not in the biomart ortholog table
+
+table(rownames(ExpressionTable_hu) %in% unique(ortholog.gapin$human)) # 11597 genes in expression table not in Laurent's ortholog table
+table(rownames(ExpressionTable_hu) %in% unique(ortholog.df$hu_symbol)) # 12775 genes in expression table not in the biomart ortholog table
+```
+
 
 
 
@@ -38,9 +75,9 @@ Step 1: Take intersect, union, species1 or species2 of DEgenes for analysis
 
 ```{r select-DEgenes}
 # First, check whether DEgenes can all be found in the ortholog table (many can't be found because I removed genes with orthology confidence=0)
-table(unique(DEgenes_ms.df$gene) %in% ortholog.df$ms_symbol_data) # 500 not
-table(unique(DEgenes_hu.df$gene) %in% ortholog.df$hu_symbol) # 353 not
-table(unique(DEgenes_pig.df$gene) %in% ortholog.df$pig_symbol_data) # 444 not
+table(unique(DEgenes_ms.df$gene) %in% ortholog.df$ms_symbol_data) # 193 not
+table(unique(DEgenes_hu.df$gene) %in% ortholog.df$hu_symbol) # 179 not
+table(unique(DEgenes_pig.df$gene) %in% ortholog.df$pig_symbol_data) # 218 not
 
 # Get the nb of human and pig DEgenes
 length(unique(DEgenes_ms.df$gene)) # 2448
@@ -79,6 +116,19 @@ DEgenes <- ortholog.df %>%
   filter(ms_symbol_data %in% rownames(ExpressionTable_ms)) %>%
   # filter(hu_symbol %in% rownames(ExpressionTable_hu))
   filter(pig_symbol_data %in% rownames(ExpressionTable_pig))
+
+# Subset the ortholog table to only genes of interest (2 species), with Laurent's ortholog table
+DEgenes <- ortholog.gapin %>%
+  # Intersection
+  filter(mouse %in% unique(DEgenes_ms.df$gene) & human %in% unique(DEgenes_hu.df$gene)) %>%
+  # Union
+  # filter(ms_symbol_data %in% unique(DEgenes_ms.df$gene) | hu_symbol %in% unique(DEgenes_hu.df$gene)) %>%
+  # filter(ms_symbol_data %in% unique(DEgenes_ms.df$gene) | pig_symbol_data %in% unique(DEgenes_pig.df$gene)) %>%
+  filter(!is.na(mouse)) %>%
+  # Keep only genes that can be found in the expression tables
+  filter(mouse %in% rownames(ExpressionTable_ms)) %>%
+  filter(human %in% rownames(ExpressionTable_hu)) %>%
+  rename(hu_symbol=human, ms_symbol_data=mouse)
 ```
 
 
@@ -199,27 +249,36 @@ shuffled.cor.list = list()
 pb   <- txtProgressBar(1, 100, style=3)
 nPermutations <- 1000
 
-# Calculate correlations on shuffled expression table
+# Calculate correlations on shuffled expression table (for 2 species)
 for (i in 1:nPermutations){
-  # set.seed(123)
   # Just for 2 species
-  # shuffled = apply(geTable[,1:ncol(AvgExp.ms)],1,sample)
-  # shuffled2 = apply(geTable[,(ncol(AvgExp.ms)+1):ncol(geTable)],1,sample)
-  # shuffled = cbind(t(shuffled),t(shuffled2)) # bind the 2 species back together
-  # For 3 species: split dataframe by species to shuffle by species
-  split <- sapply(c("ms", "hu", "pig"), function(x) geTable[startsWith(names(geTable), x)], simplify=FALSE)
-  shuffled  = apply(split$ms,  1, sample)
-  shuffled2 = apply(split$hu,  1, sample)
-  shuffled3 = apply(split$pig, 1, sample)
-  shuffled = cbind(t(shuffled),t(shuffled2), t(shuffled3)) # bind the 3 species back together
+  shuffled = apply(geTable[,1:ncol(AvgExp.ms)],1,sample)
+  shuffled2 = apply(geTable[,(ncol(AvgExp.ms)+1):ncol(geTable)],1,sample)
+  shuffled = cbind(t(shuffled),t(shuffled2)) # bind the 2 species back together
   # Correlation
   shuffled.cor = cor(shuffled,method=corr.method)
   shuffled.cor.list[[i]] = shuffled.cor
-  rm(list=c('shuffled','shuffled2', 'shuffled3', 'shuffled.cor'))
+  rm(list=c('shuffled','shuffled2', 'shuffled.cor'))
   if ((i %% 100) ==0){
     setTxtProgressBar(pb, (i*100)/nPermutations)
   }
 }
+# Calculate correlations on shuffled expression table (for 3 species)
+# for (i in 1:nPermutations){
+#   # For 3 species: split dataframe by species to shuffle by species
+#   split <- sapply(c("ms", "hu", "pig"), function(x) geTable[startsWith(names(geTable), x)], simplify=FALSE)
+#   shuffled  = apply(split$ms,  1, sample)
+#   shuffled2 = apply(split$hu,  1, sample)
+#   shuffled3 = apply(split$pig, 1, sample)
+#   shuffled = cbind(t(shuffled),t(shuffled2), t(shuffled3)) # bind the 3 species back together
+#   # Correlation
+#   shuffled.cor = cor(shuffled,method=corr.method)
+#   shuffled.cor.list[[i]] = shuffled.cor
+#   rm(list=c('shuffled','shuffled2', 'shuffled3', 'shuffled.cor'))
+#   if ((i %% 100) ==0){
+#     setTxtProgressBar(pb, (i*100)/nPermutations)
+#   }
+# }
   
 # Make empty p.value and corr mean matrixes
 p.value.table = matrix(ncol=ncol(geTable), nrow = ncol(geTable))
@@ -272,14 +331,14 @@ Step 8: Plot
 ```{r plot-correlation}
 # comp.intersect <- SpPermute(ExpressionTableSpecies1, species1=Species1, DEgenesSpecies1, ExpressionTableSpecies2, species2=Species2, DEgenesSpecies2, nPermutations=1000, genes.use= Method1,corr.method="spearman")
 
-# Get the correlation and ptable with only mouse x rest
-# comp_table <- t(Corr.Coeff.Table[1:ncol(ExpressionTable_ms), (ncol(ExpressionTable_ms)+1):nrow(Corr.Coeff.Table)])
-# p_table <- t(p.value.table[1:ncol(ExpressionTable_ms), (ncol(ExpressionTable_ms)+1):nrow(Corr.Coeff.Table)])
-# p_table <- (-p_table)
+# Get the correlation and ptable with only 2 species (mouse x other)
+comp_table <- t(Corr.Coeff.Table[1:ncol(ExpressionTable_ms), (ncol(ExpressionTable_ms)+1):nrow(Corr.Coeff.Table)])
+p_table <- t(p.value.table[1:ncol(ExpressionTable_ms), (ncol(ExpressionTable_ms)+1):nrow(Corr.Coeff.Table)])
+p_table <- (-p_table)
 
 # Get the correlation and ptable with all species
-comp_table <- Corr.Coeff.Table
-p_table <- p.value.table
+# comp_table <- Corr.Coeff.Table
+# p_table <- p.value.table
 
 # Prepare colors
 col1 <- colorRampPalette(c("darkblue", "white","darkred"))
@@ -291,25 +350,30 @@ text_col <- text_col[corrMatOrder(Corr.Coeff.Table, order="hclust", hclust.metho
 # comp_table <- comp_table[c("pig_iNKT2.0", "pig_iNKT2.2", "pig_iNKTc", "pig_iNKTt", "pig_iNKT2.1", "pig_iNKT2.3", "pig_iNKT-ISG", "pig_iNKT-sw"),]
 # p_table <- p_table[c("pig_iNKT2.0", "pig_iNKT2.2", "pig_iNKTc", "pig_iNKTt", "pig_iNKT2.1", "pig_iNKT2.3", "pig_iNKT-ISG", "pig_iNKT-sw"),]
 
+# Ms-hu
+
 # Plot
-title <- "Union between DEgenes"
-jpeg("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/all_species_union_hclust.jpeg", width=2000, height=2000, res=300)
+title <- "Intersect between DEgenes"
+jpeg("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/ms_hu_corrplot_laurent-orthologs.jpeg", width=1500, height=1500, res=300)
 corrplot(comp_table,
          # 2 species
-         # order="original",
-         # tl.col="black",
+         order="original",
+         tl.col="black",
+         
          # 3 species
-         order="hclust",
-         hclust.method = "ward.D",
-         tl.col=text_col,
-         diag=F, # no color in the diagonal
+         # order="hclust",
+         # hclust.method = "ward.D",
+         # tl.col=text_col,
+         # insig="blank",
+         # diag=F, # no color in the diagonal
+         
+         # other parameters
          tl.pos="lt", method="color",
          col=col1(200),
          # cl.lim=c(min(comp_table.intersect),max(comp_table.intersect)),
-         is.corr=F, tl.cex=0.7, sig.level=0.05,
+         is.corr=F, tl.cex=0.7, sig.level=-0.05,
          p.mat=p_table, # significance
-         # insig="pch", pch=19, pch.cex=0.25, pch.col="black",
-         insig="blank",
+         insig="pch", pch=19, pch.cex=0.25, pch.col="black",
          addrect = 3,
          main= paste(title,"-",length(rownames(geTable)), "genes", sep=" "),mar=c(3,1,5,1),cl.align.text="l") #%>%
   # corrRect(c(1,6,13, 20))

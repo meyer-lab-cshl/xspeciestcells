@@ -214,7 +214,7 @@ ggdraw()+
   draw_plot(mnn2, x=.5, y=.5, width=.5, height=.5)+
   draw_plot(harm2, x=0, y=0, width=.5, height=.5) +
   draw_plot(harm1, x=.5, y=0, width=.5, height=.5)
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/salomecode_comparemethods.jpeg", width=9, height=8)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/salomecode_comparemethods.jpeg", width=9, height=8)
 ```
 
 ```{r key-genes, fig.width=7, fig.height=3}
@@ -431,8 +431,12 @@ for(i in genes.of.interest){
   print(plotFeat(i))
 }
 
-FeaturePlot(filtered_seurat_MNN, features=c("ZBTB16", "EOMES", "GZMK", "CCR7", "CCR9", "SELL", "PLAC8", "CD69", "CD4", "ISG15"), cols = c('#deebf7', 'red'))
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/lognorm-mnn_features.jpeg", width=18, height=12)
+# Save feature plot
+# FeaturePlot(filtered_seurat_MNN, features=c("ZBTB16", "EOMES", "GZMK", "CCR7", "CCR9", "SELL", "PLAC8", "CD69", "CD4", "ISG15"), cols = c('#deebf7', 'red'))
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/lognorm-mnn_features.jpeg", width=18, height=12)
+
+# Look at other genes
+plotFeat("MME")
 ```
 
 ```{r echo = FALSE, include=FALSE, eval=FALSE}

@@ -1,0 +1,270 @@
+---
+title: "Mouse data - Integrate thymocyte & iNKT data"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/mouse-thymus/")
+```
+
+
+## 1. Import
+
+```{r import-librairies, message=FALSE}
+# Libraries
+library(ggplot2)
+library(cowplot)
+library(Seurat)
+library(SeuratWrappers)
+library(harmony)
+library(tidyverse)
+```
+
+```{r import-data}
+# Mouse iNKT data
+path.data <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data"
+inkt1 <- Read10X(file.path(path.data, "B6_1"))
+inkt2 <- Read10X(file.path(path.data, "B6_2"))
+# Create Seurat Object
+seur.inkt <- merge(CreateSeuratObject(inkt1, project="B6_iNKT_1"),
+                   y = CreateSeuratObject(inkt2, project="B6_iNKT_2"),
+                   add.cell.ids = c('iNKT1', 'iNKT2'), project = "iNKT")
+# Sanity check
+print(seur.inkt) # 12617 cells and 31,053 features
+
+
+# Mouse thymocyte data
+path.data <- "~/Projects/20220316_mouse_scRNAseq-UTX/data/00_core_facility"
+thymus1 <- Read10X_h5(file.path(path.data, "Meyer_KP01_data/filtered_feature_bc_matrix.h5"))
+thymus2 <- Read10X_h5(file.path(path.data, "Meyer_KP02_data/KP02_Thymus_WT/filtered_feature_bc_matrix.h5"))
+# Keep only thymus WT data from rep1 (cells with "3" at the end of their barcode)
+thymus1 <- thymus1[, grepl("3", colnames(thymus1))]
+# Create thymus Seurat object
+seur.thymus <- merge(CreateSeuratObject(thymus1, project="B6_Thymus_1"),
+                     y = CreateSeuratObject(thymus2, project="B6_Thymus_2"),
+                     add.cell.ids = c('Thym1', 'Thym2'), project = "Thymus")
+
+# Sanity check
+print(seur.thymus) # 14015 cells and 32,285 features
+```
+
+
+
+## 2. Preprocessing
+
+### a) Cell quality filtering
+
+```{r quality-control-iNKT}
+# QC Mouse iNKT data
+seur.inkt[["percent.mt"]] <- PercentageFeatureSet(seur.inkt, pattern = "^mt-")
+# head(seur.inkt@meta.data, 5)
+FeatureScatter(seur.inkt, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(seur.inkt, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+VlnPlot(seur.inkt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01)
+seur.inkt <- subset(seur.inkt, subset = nFeature_RNA >= 500 & nFeature_RNA < 4100 & nCount_RNA >=1000 & percent.mt < 6)
+table(seur.inkt@meta.data$orig.ident) # 7,231 iNKT cells mouse 1 and 3,651 iNKT cells mouse 2
+
+
+# Add cell type information to the metadata ####
+# import iNKT annotation
+seur.inkt.annot <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_Reproduce_UMAPs/ms_seurobj.rds")
+seur.inkt.annot@meta.data$Barcode <- substring(rownames(seur.inkt.annot@meta.data), 5)
+annot.inkt <- seur.inkt.annot@meta.data[, c("orig.ident", "Barcode", "cell_type")]
+annot.inkt$Barcode <- ifelse(annot.inkt$orig.ident=="B6_Thymus_NKT_1",
+                             paste0("iNKT1_", annot.inkt$Barcode),
+                             paste0("iNKT2_", annot.inkt$Barcode))
+rownames(annot.inkt) <- annot.inkt$Barcode
+# table(rownames(seur.inkt@meta.data) %in% annot.inkt$Barcode) # sanity check: there are 65 cells from that weird "cluster 11" that we have to remove
+
+# Merge metadata
+meta.inkt <- merge(seur.inkt@meta.data, annot.inkt[, c("Barcode", "cell_type")], by="row.names", all.x=T)
+rownames(meta.inkt) <- meta.inkt$Row.names
+meta.inkt <- meta.inkt[,c("orig.ident", "nCount_RNA", "nFeature_RNA", "percent.mt", "cell_type")]
+# table(meta.inkt$orig.ident, useNA="ifany")
+
+# Add some information
+meta.inkt$dataset <- "inkt"
+meta.inkt$replicate <- ifelse(meta.inkt$orig.ident=="B6_iNKT_1", "HK01", "HK02")
+# table(meta.inkt$replicate)
+colnames(meta.inkt)[5] <- "cell_state"
+meta.inkt$cell_state <- as.character(meta.inkt$cell_state)
+meta.inkt[is.na(meta.inkt$cell_state),"cell_state"] <- "DISCARD"
+# table(meta.inkt$cell_state, useNA="ifany")
+
+# Put the updated metadata in the seurat object
+seur.inkt@meta.data <- meta.inkt
+
+# Remove the 65 weird cells
+seur.inkt <- subset(seur.inkt, subset= cell_state!="DISCARD")
+```
+
+```{r quality-control-Thymocyte}
+# QC Mouse iNKT data
+seur.thymus[["percent.mt"]] <- PercentageFeatureSet(seur.thymus, pattern = "^mt-")
+# head(seur.thymus@meta.data, 5)
+FeatureScatter(seur.thymus, feature1 = "nCount_RNA", feature2 = "percent.mt")
+FeatureScatter(seur.thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+VlnPlot(seur.thymus, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01)
+seur.thymus <- subset(seur.thymus, subset = nFeature_RNA >= 500 & nFeature_RNA < 4100 & nCount_RNA >=800 & percent.mt < 8)
+table(seur.thymus@meta.data$orig.ident) # 6,490 thymocytes mouse 1 and 5,781 thymocytes cells mouse 2
+
+
+# Add cell type information to the metadata ####
+# Thymocyte annotation
+seur.thym.annot <- readRDS("~/Projects/20220316_mouse_scRNAseq-UTX/data/04_cell-annotation/seur_thymus_annotated.rds")
+annot.thym <- seur.thym.annot@meta.data[,c("SampleID", "Replicate", "Barcode", "final_celltype")]
+annot.thym <- annot.thym[annot.thym$SampleID == "Thymus_WT",]
+# table(annot.thym$Replicate)
+# table(annot.thym$SampleID)
+annot.thym$Barcode <- ifelse(annot.thym$Replicate=="KP01",
+                             paste0("Thym1_", annot.thym$Barcode),
+                             paste0("Thym2_", annot.thym$Barcode))
+# table(rownames(seur.thymus@meta.data) %in% annot.thym$Barcode) # sanity check
+rownames(annot.thym) <- annot.thym$Barcode
+meta.thym <- merge(seur.thymus@meta.data, annot.thym[, c("Barcode", "final_celltype", "Replicate")], by="row.names", all.x=T)
+rownames(meta.thym) <- meta.thym$Row.names
+meta.thym <- meta.thym[,c("orig.ident", "nCount_RNA", "nFeature_RNA", "percent.mt", "final_celltype", "Replicate")]
+colnames(meta.thym)[5] <- "cell_state"
+colnames(meta.thym)[6] <- "replicate"
+# table(meta.thym$orig.ident, useNA="ifany")
+# table(meta.thym$replicate)
+meta.thym$dataset <- "thymocyte"
+meta.thym[is.na(meta.thym$cell_state),"cell_state"] <- "DISCARD" # 27 cells have unknown cell type
+table(meta.thym$cell_state)
+
+# Put the updated metadata in the seurat object
+seur.thymus@meta.data <- meta.thym
+
+# Remove the 27 cells with unknown cell state
+seur.thymus <- subset(seur.thymus, subset= cell_state!="DISCARD")
+```
+
+
+### b) Feature filtering
+
+```{r feature-filt}
+# Keep features present in at least 2 cells
+seur.inkt <- CreateSeuratObject(counts=GetAssayData(object = seur.inkt, slot = "counts"),
+                                meta.data=seur.inkt@meta.data,
+                                min.cells=2)
+seur.thymus <- CreateSeuratObject(counts=GetAssayData(object = seur.thymus, slot = "counts"),
+                                  meta.data=seur.thymus@meta.data,
+                                  min.cells=2)
+print(seur.inkt)
+print(seur.thymus)
+```
+
+
+### c) Combine seurat objects
+
+```{r combine-seurat}
+# Get the counts and metadata
+counts.inkt <- GetAssayData(object = seur.inkt, slot = "counts")
+counts.thym <- GetAssayData(object = seur.thymus, slot = "counts")
+meta.inkt <- seur.inkt@meta.data
+meta.thym <- seur.thymus@meta.data
+
+# Identify the common features, subset the count matrix on these common features
+shared_genes <- unique(intersect(rownames(counts.inkt), rownames(counts.thym))) # 14,258 features
+# quick sanity check that genes that we remove don't have a huge total count
+# hist(rowSums(counts.inkt[!rownames(counts.inkt) %in% shared_genes,]), xlim=c(0,1000), breaks=10000, xlab="Total count", ylab="# features", main="iNKT data")
+# hist(rowSums(counts.thym[!rownames(counts.thym) %in% shared_genes,]), xlim=c(0,1000), breaks=10000, xlab="Total count", ylab="# features", main="thymocyte data")
+counts.inkt <- counts.inkt[shared_genes,]
+counts.thym <- counts.thym[shared_genes,]
+
+# Combine counts
+# table(rownames(counts.inkt) == rownames(counts.thym)) # all true
+# sum(ncol(counts.inkt), ncol(counts.thym))
+counts <- cbind(counts.inkt, counts.thym) # 23,061 cells
+
+# Remove mitochondrial and ribosomal genes
+genes.to.remove <- rownames(counts)[grep(rownames(counts), pattern = "^Rpl|^Rps|^mt-")]
+counts <- counts[!rownames(counts) %in% genes.to.remove,]
+
+
+# Combine metadata
+# sum(nrow(meta.inkt), nrow(meta.thym))
+meta <- rbind(meta.inkt, meta.thym)
+# table(meta$dataset)
+# table(meta$replicate)
+
+
+# Create combined seurat object ####
+seur.combined <- CreateSeuratObject(counts, meta.data=meta)
+# Sanity checks
+print(seur.combined)
+print(head(seur.combined@meta.data))
+print(table(seur.combined@meta.data$orig.ident))
+print(table(seur.combined@meta.data$cell_type, useNA="ifany"))
+```
+
+
+
+
+## 3. Integration
+
+### a) Normalize
+
+```{r normalize}
+# Normalize with SCTransform and find variable features
+seur.list <- SplitObject(seur.combined, split.by = "orig.ident")
+seur.list <- lapply(X = seur.list, FUN = SCTransform) # weird, SCTransform adds features?!
+sct.hvg   <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 2000)
+
+# Merge back seurat objects to run Harmony afterwards
+seur.SCT <- merge(seur.list$B6_iNKT_1, y = c(seur.list$B6_iNKT_2, seur.list$B6_Thymus_1, seur.list$B6_Thymus_2),
+                      project = "MouseThy", merge.data = TRUE) # weird, now there are 28074 genes
+VariableFeatures(seur.SCT) <- sct.hvg
+
+
+# Run PCA (don't scale data when using SCTransform)
+seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, verbose=F)
+DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident")
+ElbowPlot(seur.SCT)
+```
+
+
+```{r Harmony}
+# Run Harmony for integration
+set.seed(123)
+seur.harmony <- RunHarmony(object = seur.SCT,
+                           assay.use = "SCT",
+                           reduction = "pca",
+                           dims.use = 1:20,
+                           # group.by.vars = "orig.ident",
+                           group.by.vars = c("dataset", "replicate"),
+                           plot_convergence = F) # converged after 2 iterations
+seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F, seed.use = 42)
+# seur.harmony <- FindNeighbors(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F) %>%
+#   FindClusters(resolution = 0.8, verbose=F)
+
+
+# First glance at UMAP
+# DimPlot(seur.harmony, pt.size = 0.1, label = T, label.size = 7) + ggtitle("SCTransform+Harmony") + theme(legend.position="none")
+DimPlot(seur.harmony, split.by = "dataset", group.by = "cell_state", pt.size = 0.1, label = TRUE, ncol=2, repel=T) +
+  ggtitle("Harmony dataset+replicate | 20 PCs | No Rb-Mt genes") +
+  theme_bw()+
+  scale_color_manual(values=c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c",
+                              "#1b9e77", "#d95f02", "#7570b3", "#e7298a",
+                              "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00",
+                              "#66a61e",
+                              "#cab2d6"))
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/harmony_20PCs_noRbMt.jpeg", width=10, height=5)
+```
+
+```{r SCTransform-Harmony-plot}
+table(seur.harmony@meta.data$cell_type, useNA="ifany")
+
+# Display UMAP
+p1 <- DimPlot(seur.harmony, group.by = "orig.ident", pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
+p2 <- DimPlot(seur.harmony, split.by = "dataset", group.by = "cell_state", pt.size = 0.1, label = TRUE, ncol=2)
+p3 <- DimPlot(seur.harmony, pt.size = 0.1, split.by = "orig.ident", ncol = 2)
+ggdraw()+
+  draw_plot(p1, x=0, y=0, width=.25, height=1)+
+  draw_plot(p2, x=.25, y=0, width=.25, height=1)+
+  draw_plot(p3, x=.5, y=0, width=.5, height=1)
+```

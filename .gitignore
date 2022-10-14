@@ -2,5 +2,6 @@ data/
 .Rproj.user
 *.Rproj
 .DS_Store
-scripts/*.nb.html
+scripts/cross-species/*.nb.html
+scripts/human-thymus/*.nb.html
 scripts/.DS_Store

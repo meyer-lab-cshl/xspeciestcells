@@ -281,6 +281,7 @@ merged_seurat <- merge(x = all.seurat[[1]], y = all.seurat[2:length(all.seurat)]
 print(merged_seurat)
 ```
 
+
 #### b) Quality-control
 
 ```{r qc}
@@ -303,6 +304,7 @@ filtered_counts <- counts[keep_genes, ]
 filtered_seurat <- CreateSeuratObject(filtered_counts, meta.data = filtered_seurat@meta.data) # 11,304 genes
 print(filtered_seurat)
 ```
+
 
 #### c) SCTransform and Harmony
 
@@ -352,6 +354,7 @@ DimPlot(filtered_seurat_Harmony, group.by = c("seurat_clusters"),
               label = TRUE, label.size = 6) + NoLegend()
 ```
 
+
 #### d) LogNormalize and MNN
 
 ```{r mnn}
@@ -368,6 +371,7 @@ DimPlot(filtered_seurat_MNN, group.by = c("seurat_clusters"),
               ncol = 1, 
               label = TRUE, label.size = 6) + NoLegend()
 ```
+
 
 #### e) Compare methods
 
@@ -436,17 +440,13 @@ for(i in genes.of.interest){
 # ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/lognorm-mnn_features.jpeg", width=18, height=12)
 
 # Look at other genes
-plotFeat("MME")
+# plotFeat("MME")
 ```
 
-```{r echo = FALSE, include=FALSE, eval=FALSE}
-selectInput("feature", label = "Feature:",
-            choices = genes.of.interest,
-            selected = "ZBTB16")
+
+#### f) Verify clustering stability with scClustEval
+
+```{r check-clust-stability}
+
 ```
 
-```{r echo = FALSE, include=FALSE, eval=FALSE}
-renderPlot({
-  plotFeat(input$feature)
-})
-```

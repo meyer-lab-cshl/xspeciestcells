@@ -54,6 +54,7 @@ print(seur.thymus) # 14015 cells and 32,285 features
 
 
 
+
 ## 2. Preprocessing
 
 ### a) Cell quality filtering
@@ -100,6 +101,13 @@ seur.inkt@meta.data <- meta.inkt
 
 # Remove the 65 weird cells
 seur.inkt <- subset(seur.inkt, subset= cell_state!="DISCARD")
+
+# Quick visualization
+# DimPlot(seur.inkt.annot)+
+#   theme_cowplot()+
+#   scale_color_manual(values=c("#1b9e77", "#7570b3", "#e7298a", "#66a61e", "#d95f02"))+
+#   ggtitle("Mouse thymic iNKT cell data (2 C57BL/6 mice)")
+# ggsave("~/Downloads/ms_umap.jpeg", width=6, height=5)
 ```
 
 ```{r quality-control-Thymocyte}
@@ -228,36 +236,61 @@ ElbowPlot(seur.SCT)
 ```
 
 
+### b) Normalize with Harmony
+
 ```{r Harmony}
 # Run Harmony for integration
 set.seed(123)
 seur.harmony <- RunHarmony(object = seur.SCT,
                            assay.use = "SCT",
                            reduction = "pca",
-                           dims.use = 1:20,
+                           dims.use = 1:15,
                            # group.by.vars = "orig.ident",
                            group.by.vars = c("dataset", "replicate"),
-                           plot_convergence = F) # converged after 2 iterations
-seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F, seed.use = 42)
+                           plot_convergence = T) # converged after 2 iterations
+# DimPlot(object = seur.harmony, reduction = "harmony", pt.size = .1, group.by = "orig.ident") # check that the integration worked well
+seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:15, verbose=F, seed.use = 42, n.components=3L)
 # seur.harmony <- FindNeighbors(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F) %>%
 #   FindClusters(resolution = 0.8, verbose=F)
+```
 
 
+### c) Plot
+
+```{r UMAP-in-2D}
 # First glance at UMAP
 # DimPlot(seur.harmony, pt.size = 0.1, label = T, label.size = 7) + ggtitle("SCTransform+Harmony") + theme(legend.position="none")
 DimPlot(seur.harmony, split.by = "dataset", group.by = "cell_state", pt.size = 0.1, label = TRUE, ncol=2, repel=T) +
-  ggtitle("Harmony dataset+replicate | 20 PCs | No Rb-Mt genes") +
+  ggtitle("Harmony dataset+replicate | 15 PCs | No Rb-Mt genes") +
   theme_bw()+
   scale_color_manual(values=c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c",
                               "#1b9e77", "#d95f02", "#7570b3", "#e7298a",
                               "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00",
                               "#66a61e",
                               "#cab2d6"))
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/harmony_20PCs_noRbMt.jpeg", width=10, height=5)
-```
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/harmony_15PCs_noRbMt.jpeg", width=10, height=5)
 
-```{r SCTransform-Harmony-plot}
-table(seur.harmony@meta.data$cell_type, useNA="ifany")
+# Highlight only iNKT cells or thymocytes
+DimPlot(seur.harmony, 
+        cells.highlight=colnames(subset(seur.harmony, subset= dataset=="inkt")),
+        pt.size = 0.1, label = F, cols="#d9d9d9", sizes.highlight = 0.1)+
+  theme_bw()+
+  theme(legend.position="none")+
+  ggtitle("Thymic iNKT cells")
+DimPlot(seur.harmony, 
+        cells.highlight=colnames(subset(seur.harmony, subset= dataset=="thymocyte")),
+        pt.size = 0.1, label = F, cols="#d9d9d9", sizes.highlight = 0.1)+
+  theme_bw()+
+  theme(legend.position="none")+
+  ggtitle("All thymocytes")
+
+# Color UMAP by dataset
+DimPlot(seur.harmony, group.by="dataset", pt.size=0.1)+
+  theme_bw()+
+  scale_color_manual(values=c("#e41a1c", "#a6cee3"))+
+  ggtitle("Integrated data with Harmony (15 PCs)")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/harmony_15PCs_noRbMt_all.jpeg", width=6.5, height=5)
+
 
 # Display UMAP
 p1 <- DimPlot(seur.harmony, group.by = "orig.ident", pt.size = 0.1, label = F) + theme(legend.position="top", title = element_text(size=0))
@@ -267,4 +300,59 @@ ggdraw()+
   draw_plot(p1, x=0, y=0, width=.25, height=1)+
   draw_plot(p2, x=.25, y=0, width=.25, height=1)+
   draw_plot(p3, x=.5, y=0, width=.5, height=1)
+
+
+# Save seurat object
+# saveRDS(seur.harmony, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/seur_ms_noRbMt.rds")
 ```
+
+
+```{r UMAP-in-3D}
+library(plotly)
+
+# Prepare a dataframe for cell plotting
+plot.data <- FetchData(object = seur.harmony, vars = c("UMAP_1", "UMAP_2", "UMAP_3", "cell_state"))
+
+# Make a column of row name identities (these will be your cell/barcode names)
+plot.data$label <- paste(rownames(plot.data))
+
+# Plot your data, in this example my Seurat object had 21 clusters (0-20)
+plot_ly(data = plot.data, 
+        x = ~UMAP_1, y = ~UMAP_2, z = ~UMAP_3, 
+        color = ~cell_state, 
+        colors = c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c",
+                              "#1b9e77", "#d95f02", "#7570b3", "#e7298a",
+                              "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00",
+                              "#66a61e",
+                              "#cab2d6"),
+        type = "scatter3d", 
+        mode = "markers", 
+        marker = list(size = 2, width=2), # controls size of points
+        text=~label, #This is that extra column we made earlier for which we will use for cell ID
+        hoverinfo="text") #When you visualize your plotly object, hovering your mouse pointer over a point shows cell names
+```
+
+
+### d) Plot with cell cycle scoring
+
+```{r}
+# Get cell cycle genes (human to mouse)
+convertHumanGeneList <- function(x){
+  require("biomaRt")
+  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+  humanx <- unique(genesV2[, 2])
+  # Print the first 6 genes found to the screen
+  print(head(humanx))
+  return(humanx)
+}
+sgenes <- convertHumanGeneList(cc.genes$s.genes)
+g2mgenes <- convertHumanGeneList(cc.genes$g2m.genes)
+
+
+# Assign cell cycle scoring
+seur.cc <- CellCycleScoring(seur.harmony, s.features = , g2m.features = , set.ident = TRUE)
+
+```
+

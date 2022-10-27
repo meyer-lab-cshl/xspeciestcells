@@ -42,7 +42,7 @@ seur.human@meta.data
 DimPlot(seur.human, pt.size = 0.1, label = F, split.by="group.ident", ncol=3) +
   theme_bw() +
   theme(legend.position="none")
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_cells.jpeg", width=8, height=10)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_cells.jpeg", width=8, height=10)
 
 # CD4 Thymus
 a <- DimPlot(seur.human, pt.size = 0.1, label = F, cells.highlight=WhichCells(seur.human, idents="CD4_Thymus"), cols.highlight="#e41a1c", cols="#d9d9d9", sizes.highlight = 0.1)+
@@ -62,13 +62,46 @@ d <- DimPlot(seur.human, pt.size = 0.1, label = F, cells.highlight=WhichCells(se
   ggtitle("Thymic MAIT cells")
 
 ggpubr::ggarrange(a,b,c,d, ncol=2, nrow=2)
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_SPthymocytes.jpeg", width=10, height=9)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_SPthymocytes.jpeg", width=10, height=9)
 
 
 # Color by cluster
 DimPlot(seur.human, pt.size = 0.1, label = F, group.by="seurat_clusters") +
   theme_bw()
 ```
+
+Try UMAP in 3D:
+
+```{r umap-3D}
+test <- seur.human
+test <- RunUMAP(test, reduction = "harmony", dims = 1:15, verbose=F, n.components=3L)
+
+# Plot in 2D
+DimPlot(test, reduction="umap", group.by="new_clusters", pt.size = 0.1, label = T) +
+  scale_color_manual(values=colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(18))
+
+# Plot in 3D
+library(plotly)
+
+# Prepare a dataframe for cell plotting
+plot.data <- FetchData(object = test, vars = c("UMAP_1", "UMAP_2", "UMAP_3", "new_clusters", "group.ident"))
+
+# Make a column of row name identities (these will be your cell/barcode names)
+plot.data$label <- paste(rownames(plot.data))
+
+# Plot your data, in this example my Seurat object had 21 clusters (0-20)
+plot_ly(data = plot.data, 
+        x = ~UMAP_1, y = ~UMAP_2, z = ~UMAP_3, 
+        color = ~group.ident, 
+        # colors = colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(18), # new_clusters
+        colors = RColorBrewer::brewer.pal(12, "Paired"), # group.ident
+        type = "scatter3d", 
+        mode = "markers", 
+        marker = list(size = 2, width=2), # controls size of points
+        text=~label, #This is that extra column we made earlier for which we will use for cell ID
+        hoverinfo="text") #When you visualize your plotly object, hovering your mouse pointer over a point shows cell names
+```
+
 
 
 ## 3. Create Shiny app

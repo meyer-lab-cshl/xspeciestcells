@@ -1,5 +1,5 @@
 ---
-title: "Human data - Comparison of preprocessing methods"
+title: "Human iNKT data - Comparison of preprocessing methods"
 output:
   html_document:
     df_print: paged
@@ -55,13 +55,17 @@ mat.hu12 <- convert_to_matrix(human12) # 344 cells
 ## 2. Preprocessing
 
 ```{r create-seurat}
+# Hu8_ is NKT_1_Thymus_
+# Hu12_ is NKT_2_Thymus_
+# Hu5_ is NKT_3_Thymus_
+
 # Create Seurat Object, keep only features expressed in at least 1 cell
-seur.h5  <- CreateSeuratObject(mat.hu5, project="Hu_Thymus_NKT_5", min.cells=1)
-seur.h8  <- CreateSeuratObject(mat.hu8, project="Hu_Thymus_NKT_8", min.cells=1)
-seur.h12 <- CreateSeuratObject(mat.hu12, project="Hu_Thymus_NKT_12", min.cells=1)
+seur.h5  <- CreateSeuratObject(mat.hu5, project="NKT_3_Thymus", min.cells=1)
+seur.h8  <- CreateSeuratObject(mat.hu8, project="NKT_1_Thymus", min.cells=1)
+seur.h12 <- CreateSeuratObject(mat.hu12, project="NKT_2_Thymus", min.cells=1)
 
 # Combine into one seurat object
-seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('Hu5', 'Hu8', 'Hu12'), project="HuNKT") # 2661 cells and 18,520 features
+seur.combined <- merge(seur.h5, y=c(seur.h8,seur.h12), add.cell.ids=c('NKT_3_Thymus', 'NKT_1_Thymus', 'NKT_2_Thymus'), project="HuNKT") # 2661 cells and 18,520 features
 print(seur.combined)
 ```
 
@@ -155,7 +159,8 @@ seur.mnn <- FindNeighbors(seur.mnn, reduction = "mnn", dims = 1:30, compute.SNN 
 seur.mnn <- FindClusters(seur.mnn, resolution = 0.8, verbose=F)
 
 # First glance at UMAP
-DimPlot(seur.mnn, pt.size = 0.1, label = T, label.size = 7) + ggtitle("LogNormalize + fastMNN") + theme(legend.position="none")
+DimPlot(seur.mnn, pt.size = 0.5, label = T, label.size = 7) + ggtitle("LogNormalize + fastMNN") + theme(legend.position="none")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_inkt_umap_lognorm-mnn.jpeg", width=6, height=6)
 ```
 
 ```{r lognormalize-mnn-plot, fig.height=5, fig.width=15}
@@ -171,6 +176,10 @@ ggdraw()+
   draw_plot(p1, x=0, y=0, width=.25, height=1)+
   draw_plot(p2, x=.25, y=0, width=.25, height=1)+
   draw_plot(p3, x=.5, y=0, width=.5, height=1)
+
+# PLZF expression
+FeaturePlot(seur.mnn, features=c("CCR9", "CCR7","ZBTB16"), cols = c('#deebf7', 'red'), pt.size = 0.7, ncol=3)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_inkt_features_lognorm-mnn.jpeg", width=16, height=5)
 ```
 
 
@@ -236,17 +245,6 @@ for (i in genes.of.interest){
 ```
 
 
-```{r, echo = FALSE, include=FALSE, eval=FALSE}
-selectInput("gene", label = "Feature:",
-              choices = genes.of.interest, selected = "ZBTB16")
-```
-
-```{r echo = FALSE, include=FALSE, eval=FALSE}
-renderPlot({
-  plotFeatBoth(input$gene)
-})
-```
-
 
 
 ## 6. Laurent's code
@@ -254,10 +252,14 @@ renderPlot({
 #### a) Create seurat object
 
 ```{r create-seurat-only-shared-genes}
+# Hu8_ is NKT_1_Thymus_
+# Hu12_ is NKT_2_Thymus_
+# Hu5_ is NKT_3_Thymus_
+
 # Get the matrices into one list
-all.data <- list("NKT_8_Thymus" = human8,
-                 "NKT_12_Thymus" = human12,
-                 "NKT_5_Thymus" = human5)
+all.data <- list("NKT_1_Thymus" = human8,
+                 "NKT_2_Thymus" = human12,
+                 "NKT_3_Thymus" = human5)
 
 # Get sample names and gene names
 shared_genes <- Reduce(intersect, lapply(X = all.data, FUN = function(x){ colnames(x) }))
@@ -349,9 +351,27 @@ filtered_seurat_Harmony <- FindNeighbors(filtered_seurat_Harmony, reduction = "h
 filtered_seurat_Harmony <- FindClusters(filtered_seurat_Harmony, resolution = 0.5, verbose=F)
 
 DimPlot(filtered_seurat_Harmony, group.by = c("seurat_clusters"),
-              pt.size = 1, 
+              pt.size = 0.5, 
               ncol = 1, 
-              label = TRUE, label.size = 6) + NoLegend()
+              label = TRUE, label.size = 6) + NoLegend()+
+  scale_color_brewer(palette="Paired")
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/sctransform_harmony/hu_inkt_umap_sctransform-harmony.jpeg", width=6, height=6)
+
+
+# PLZF expression
+FeaturePlot(filtered_seurat_Harmony, features=c("CCR9", "CCR7","ZBTB16"), cols = c('#deebf7', 'red'), pt.size = 0.7, ncol=3)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_inkt_features_sct-harmony.jpeg", width=16, height=5)
+
+# Check out PCA and top genes
+DimPlot(filtered_seurat_Harmony, reduction="harmony") + scale_color_brewer(palette="Paired")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/sctransform_harmony/hu_inkt_pca_sct-harmony.jpeg", width=7, height=6)
+# Top features
+DimHeatmap(filtered_seurat_Harmony, dims=1, reduction="harmony", balanced=T, nfeatures=30, fast=F)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/sctransform_harmony/hu_inkt_pca_topfeaturesPC1.jpeg", width=7, height=5)
+
+FeaturePlot(filtered_seurat_Harmony, features=c("ITM2A", "SATB1","TOX2", "HIVEP3",
+                                                "KLF2", "IL7R", "S100A4", "JUNB"), cols = c('#deebf7', 'red'), pt.size = 0.7, ncol=4)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/sctransform_harmony/hu_inkt_umap_topfeaturesPC1.jpeg", width=17, height=8)
 ```
 
 

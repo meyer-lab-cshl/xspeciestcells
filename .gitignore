@@ -5,3 +5,5 @@ data/
 scripts/cross-species/*.nb.html
 scripts/human-thymus/*.nb.html
 scripts/.DS_Store
+scripts/human-thymus/shinyApp*
+shinyApp*

@@ -303,7 +303,12 @@ ggdraw()+
 
 
 # Save seurat object
-# saveRDS(seur.harmony, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_MouseIntegration/seur_ms_noRbMt.rds")
+# saveRDS(seur.harmony, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/05_MouseIntegration/seur_ms_noRbMt.rds")
+# seur.harmony <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/05_MouseIntegration/seur_ms_noRbMt.rds")
+
+# Feature plot PLZF
+FeaturePlot(seur.harmony, features="Zbtb16", split.by="dataset") + theme(legend.position="right")
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/05_MouseIntegration/harmony_15PCs_noRbMt_PLZF.jpeg", width=10, height=5)
 ```
 
 
@@ -336,12 +341,13 @@ plot_ly(data = plot.data,
 ### d) Plot with cell cycle scoring
 
 ```{r}
+require("biomaRt")
+human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+
 # Get cell cycle genes (human to mouse)
 convertHumanGeneList <- function(x){
-  require("biomaRt")
-  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
-  genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+  genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x, mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
   humanx <- unique(genesV2[, 2])
   # Print the first 6 genes found to the screen
   print(head(humanx))
@@ -350,6 +356,8 @@ convertHumanGeneList <- function(x){
 sgenes <- convertHumanGeneList(cc.genes$s.genes)
 g2mgenes <- convertHumanGeneList(cc.genes$g2m.genes)
 
+test <- listAttributes(human)
+test[test$name=="hgnc_symbol",]
 
 # Assign cell cycle scoring
 seur.cc <- CellCycleScoring(seur.harmony, s.features = , g2m.features = , set.ident = TRUE)

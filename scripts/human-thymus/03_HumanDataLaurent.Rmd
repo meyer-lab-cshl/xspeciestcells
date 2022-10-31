@@ -35,6 +35,7 @@ seur.human@meta.data
 
 
 
+
 ## 2. UMAP
 
 ```{r all-data}
@@ -152,6 +153,26 @@ ggpubr::ggarrange(a,b, nrow=2)
 # FeaturePlot(seur.nkt12.new, features="ZBTB16", order=T, reduction="pca", dims=c(1,2))
 # DimPlot(seur.human, reduction = "pca", group.by = "new_clusters", dims=c(5,3), label=T)
 ```
+
+
+Compare CD4 and CD8A expression between PLZF+ and PLZF- iNKT cells:
+```{r}
+# Keep only iNKT cells (thymus & periphery)
+nkt <- subset(seur.human, subset= cell.ident=="NKT")
+
+# Add column in metadata to identify PLZF+ and PLZF- cells
+nkt@meta.data$PLZF <- ifelse(rownames(nkt@meta.data) %in% WhichCells(nkt, expression= ZBTB16>0), "PLZF+", "PLZF-")
+# table(nkt@meta.data$PLZF)
+
+RidgePlot(nkt, features=c("ZBTB16", "CD4", "CD8A"), group.by="PLZF", log=T, stack=T, combine=T)+ labs(x="Expression level (log scale)")
+# ggsave("~/Projects/meyerLabNotebook/pelicanNotebook/content/images/2022-10-28_HumanNKT-PLZF/cd4_cd8.jpeg", width=10, height=5)
+
+# Look at DEGs between PLZF+ and PLZF- iNKT cells
+FindMarkers(nkt,
+            ident.1 = WhichCells(object = nkt, expression = ZBTB16 > 1, slot = 'data'),
+            ident.2 = WhichCells(object = nkt, expression = ZBTB16 <= 1, slot = 'data'))
+```
+
 
 
 ## 5. Overlap iNKT clusters from cross-species analysis to the big cluster

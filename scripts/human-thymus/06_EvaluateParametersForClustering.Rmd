@@ -1,0 +1,77 @@
+---
+title: "Human data - evaluate clusters based on k.param, # PCs and resolution"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/human-thymus/")
+```
+
+
+## 1. Import
+
+```{r import-librairies, message=FALSE}
+# Libraries
+library(ggplot2)
+library(cowplot)
+library(Seurat)
+library(SeuratWrappers)
+# library(harmony)
+library(tidyverse)
+library(scclusteval)
+```
+
+```{r import-data}
+# Import data
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+subsample_idents  <- readRDS("../../data/04_HumanNKTdata/scclusteval/gather_subsample.rds")
+fullsample_idents <- readRDS("../../data/04_HumanNKTdata/scclusteval/gather_full_sample.rds")
+
+
+# Take quick peek at the data
+print(seur.human) # 79,801 cells and 34,778 genes
+# seur.human@meta.data
+
+table(fullsample_idents$pc)
+table(fullsample_idents$resolution)
+table(fullsample_idents$k_param)
+```
+
+
+Take a quick look at the PBMC 5k data
+```{r}
+pbmc <- readRDS("~/Downloads/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
+fullsample_idents<- readRDS("~/Downloads/pbmc/gather_full_sample.rds")
+
+mouse1
+
+pbmc@meta.data
+```
+
+
+
+
+## 2. Explore full dataset
+
+```{r}
+# how many PCs to include
+ElbowPlot(seur.human)
+
+# a tibble with a list column
+fullsample_idents
+
+# what's the relationship of clusters between resolution 0.05, 0.1 and 0.3 with the same and k_param
+fullsample_idents %>% mutate(id = row_number()) %>%
+  filter(pc == 150, resolution == 0.8, k_param == 10)
+
+## x-axis is resolution of 0.1, and y-axis is resolution of 0.05
+PairWiseJaccardSetsHeatmap(fullsample_idents$original_ident_full[[6]],
+                           fullsample_idents$original_ident_full[[7]],
+                           show_row_dend = F, show_column_dend = F,
+                           cluster_row = F, cluster_column =F)
+```
+

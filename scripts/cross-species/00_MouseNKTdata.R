@@ -17,7 +17,7 @@ library(tidyverse)
 
 # Data
 path.plots <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_Reproduce_UMAPs"
-path.data <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data"
+path.data <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data/NKT_Gapin"
 mouse1 <- Read10X(file.path(path.data, "B6_1"))
 mouse2 <- Read10X(file.path(path.data, "B6_2"))
 

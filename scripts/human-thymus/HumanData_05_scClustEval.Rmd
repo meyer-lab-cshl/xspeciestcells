@@ -42,14 +42,31 @@ table(fullsample_idents$k_param)
 ```
 
 
+## 2. Trying scClustEval on 5k PBMC data
+
 Take a quick look at the PBMC 5k data
 ```{r}
-pbmc <- readRDS("~/Downloads/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
-fullsample_idents<- readRDS("~/Downloads/pbmc/gather_full_sample.rds")
+# Import data
+pbmc <- readRDS("../../data/07_scClustEval/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
+subsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_subsample.rds")
+fullsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_full_sample.rds")
 
-mouse1
+# pbmc@meta.data
+```
 
-pbmc@meta.data
+
+Explore full dataset
+
+```{r}
+## how many PCs to include
+ElbowPlot(pbmc, ndims = 40)
+
+# a tibble with a list column
+fullsample_idents
+
+## how many clusters for each different comibination of parameter set?
+fullsample_idents %>%
+  mutate(cluster_num = purrr::map_dbl(original_ident_full, ~length(unique(.x))))
 ```
 
 

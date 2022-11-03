@@ -1,0 +1,34 @@
+---
+title: "Human MAIT data - create seurat object for cross-species"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+# IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(harmony)
+library(Seurat)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+
+# Sanity check
+print(seur.human) # 79,801 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human)
+```

@@ -1,0 +1,233 @@
+---
+title: "xx_Harmony-vs-PCA"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+# IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(harmony)
+library(Seurat)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+
+# Sanity check
+print(seur.human) # 79,801 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human)
+```
+
+
+# DIFFERENT PREPROCESSING METHODS
+
+## SCTransform + Harmony + PCA
+```{r harmony-and-pca, message=FALSE}
+# Subset seurat object
+NKT_Thymus_samples <- subset(seur.human, ident = "NKT_Thymus") # 2551 cells
+
+# Normalize & integrate with Harmony+PCA
+# NKT_Thymus_samples <- NormalizeData(NKT_Thymus_samples) # not necessary because we'll use SCTransform afterwards
+NKT_Thymus_samples <- SCTransform(NKT_Thymus_samples,
+                                  assay="RNA",
+                                  new.assay.name="SCT",
+                                  vars.to.regress = c('percent.mt'), 
+                                  verbose=FALSE,
+                                  method = "glmGamPoi")
+NKT_Thymus_samples <- RunHarmony(NKT_Thymus_samples,
+                                 group.by.vars = c("Method", "Batch"),
+                                 assay.use = "SCT",
+                                 max.iter.harmony = 20,
+                                 verbose=FALSE)
+NKT_Thymus_samples <- RunPCA(NKT_Thymus_samples)
+NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:15, verbose=FALSE)
+NKT_Thymus_samples <- FindNeighbors(NKT_Thymus_samples, dims = 1:15, verbose=FALSE)
+NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = 0.7, verbose=FALSE)
+
+# Plot
+DimPlot(NKT_Thymus_samples)
+```
+
+
+## SCTransform + PCA
+```{r pca, message=FALSE}
+# Subset seurat object
+NKT_Thymus_samples <- subset(seur.human, ident = "NKT_Thymus") # 2551 cells
+
+# Normalize & integrate with Harmony+PCA
+NKT_Thymus_samples <- SCTransform(NKT_Thymus_samples,
+                                  assay="RNA",
+                                  new.assay.name="SCT",
+                                  vars.to.regress = c('percent.mt'), 
+                                  verbose=FALSE,
+                                  method = "glmGamPoi")
+# NKT_Thymus_samples <- RunHarmony(NKT_Thymus_samples,
+#                                  group.by.vars = c("Method", "Batch"),
+#                                  assay.use = "SCT",
+#                                  max.iter.harmony = 20,
+#                                  verbose=FALSE)
+NKT_Thymus_samples <- RunPCA(NKT_Thymus_samples)
+NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:15, verbose=FALSE)
+NKT_Thymus_samples <- FindNeighbors(NKT_Thymus_samples, dims = 1:15, verbose=FALSE)
+NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = 0.7, verbose=FALSE)
+
+# Plot
+DimPlot(NKT_Thymus_samples)
+```
+
+It gives the same result =) That's because the default `reduction` parameter in `RunUMAP()` and `FindNeighbors()` functions is `reduction="pca"`. The `RunHarmony()` doesn't change the counts matrix, it is "just" a dimension reduction method to replace the PCA, so that unlikes the usual PCA, it takes into account batch effects. So we actually don't need to run the PCA, but just say `reduction="harmony"` in the `RunUMAP()` and `FindNeighbors()` functions after running harmony.
+
+
+## SCTransform + Harmony
+
+```{r harmony, message=FALSE}
+# Subset seurat object
+NKT_Thymus_samples <- subset(seur.human, ident = "NKT_Thymus") # 2551 cells
+
+# Normalize & integrate with Harmony+PCA
+NKT_Thymus_samples <- SCTransform(NKT_Thymus_samples,
+                                  assay="RNA",
+                                  new.assay.name="SCT",
+                                  vars.to.regress = c('percent.mt'), 
+                                  verbose=FALSE,
+                                  method = "glmGamPoi")
+NKT_Thymus_samples <- RunHarmony(NKT_Thymus_samples,
+                                 group.by.vars = c("Method", "Batch"),
+                                 assay.use = "SCT",
+                                 max.iter.harmony = 20,
+                                 verbose=FALSE)
+# NKT_Thymus_samples <- RunPCA(NKT_Thymus_samples)
+NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:15, verbose=FALSE, reduction="harmony")
+NKT_Thymus_samples <- FindNeighbors(NKT_Thymus_samples, dims = 1:15, verbose=FALSE, reduction="harmony")
+NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = 0.7, verbose=FALSE)
+
+# Plot
+DimPlot(NKT_Thymus_samples)
+```
+
+
+
+
+# LAURENT'S FIGURE ON DATA PREPROCESSED WITH HARMONY
+
+## UMAP
+
+```{r umap-harmony}
+# Rename clusters so that they follow the same order as they appear on the UMAP
+NKT_Thymus_samples$new_clusters_NKT <- case_when(
+  NKT_Thymus_samples$seurat_clusters == '8' ~ '0',
+  NKT_Thymus_samples$seurat_clusters == '5' ~ '1',
+  NKT_Thymus_samples$seurat_clusters == '3' ~ '2',
+  NKT_Thymus_samples$seurat_clusters == '2' ~ '3',
+  NKT_Thymus_samples$seurat_clusters == '0' ~ '4',
+  NKT_Thymus_samples$seurat_clusters == '6' ~ '5',
+  NKT_Thymus_samples$seurat_clusters == '4' ~ '6',
+  NKT_Thymus_samples$seurat_clusters == '1' ~ '7',
+  NKT_Thymus_samples$seurat_clusters == '7' ~ '8'
+)
+NKT_Thymus_samples$new_clusters_NKT  <- as.factor(NKT_Thymus_samples$new_clusters_NKT)
+Idents(NKT_Thymus_samples) <- "new_clusters_NKT"
+
+# colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#74c8c3", "2" = "#5a97c1", "3" = "#9f5691", "4" = "gold",
+#                      "5" = "#a40000", "6" = "grey50")
+colors_clusters_NKT <- RColorBrewer::brewer.pal(9, "Paired")
+names(colors_clusters_NKT) <- as.character(0:8)
+
+# DimPlot(NKT_Thymus_samples, cols = colors_clusters_NKT, pt.size = 1)
+
+SCpubr::do_DimPlot(sample = NKT_Thymus_samples, 
+                   label = FALSE, 
+                   label.color = "black", colors.use = colors_clusters_NKT,
+                   legend.position = "right")
+```
+
+
+## PERCENT OF CELLS
+
+```{r percent-of-cells}
+NKT_cell_numbers_thymus <- as.data.frame(NKT_Thymus_samples@meta.data) %>%
+  # get nb of cells per donor and per cluster
+  dplyr::select(Donor, new_clusters_NKT) %>%
+  group_by(new_clusters_NKT, Donor) %>%
+  summarize(nb_cells = n()) %>%
+  ungroup() %>%
+  # get proportion of cells in each cluster per donor
+  group_by(Donor) %>%
+  mutate(total_cell_nb_per_donor = sum(nb_cells)) %>%
+  ungroup() %>%
+  mutate(prop_per_donor=nb_cells*100/total_cell_nb_per_donor)
+
+# sanity check
+# NKT_cell_numbers_thymus %>%
+#   group_by(Donor) %>%
+#   summarize(total_percent=sum(prop_per_donor)) # everything sums to 100% in each donor
+
+
+# Plot
+ggplot(data= NKT_cell_numbers_thymus, aes(x = Donor, y = prop_per_donor, fill = forcats::fct_rev(factor(new_clusters_NKT)))) +
+  geom_bar(stat="identity") +
+  scale_fill_manual(values = colors_clusters_NKT,
+                    # labels = levels(distribution_donors_thymus$new_clusters_NKT),
+                    drop = FALSE, #limits = levels(distribution_donors_thymus$new_clusters_NKT),
+                    guide = guide_legend(reverse=TRUE)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = "Donors", y = "%", fill = "Clusters") + theme_classic()
+```
+
+
+## DOTPLOT WITH DEG
+
+```{r dotplot-markers, width=20}
+# Get DEGs (or marker genes)
+NKT.clusters.markers <- FindAllMarkers(NKT_Thymus_samples, test.use = 'wilcox', 
+                                       logfc.threshold = 0.3, min.pct = 0.3, only.pos = TRUE)
+top5 <- NKT.clusters.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+top5_distinct <- base::unique(top5$gene)
+
+
+# Make Dotplot
+NKT_Thymus_samples <- ScaleData(NKT_Thymus_samples, features = top5_distinct)
+DotPlot_colors <- c("lightsteelblue1", "#1E466E")
+
+DotPlot(NKT_Thymus_samples, features = top5_distinct, dot.scale = 8, cols = DotPlot_colors,
+              col.min = -1, col.max = 2, dot.min = 0) + RotatedAxis()
+
+```
+
+
+
+## FEATURE PLOTS
+
+```{r umap-features, width=30, height=15}
+NKT_Thymus_samples <- NormalizeData(NKT_Thymus_samples)
+
+featplot <- function(gene){
+  plot <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                       features = gene,
+                       plot.title = gene,
+                       reduction = "umap",
+                       viridis_color_map = "inferno",
+                       legend.position="none")
+  return(plot)
+}
+
+print(featplot("EGR2") | featplot("HIVEP3") | featplot("ZBTB16") | featplot("CCR9") | featplot("CCR7"))
+print(featplot("FOS") | featplot("KLRB1") | featplot("TBX21") | featplot("EOMES") | featplot("GZMK"))
+```
+
+

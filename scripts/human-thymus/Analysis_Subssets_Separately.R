@@ -75,7 +75,7 @@ ggplot(NKT_Thymus@meta.data, aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)
 
 counts <- GetAssayData(object = NKT_Thymus, slot = "counts")
 nonzero <- counts > 0
-keep_genes <- Matrix::rowSums(nonzero) >= 10
+keep_genes <- Matrix::rowSums(nonzero) >= 20
 filtered_counts <- counts[keep_genes,]
 
 NKT_Thymus_samples <- CreateSeuratObject(counts = filtered_counts, meta.data = NKT_Thymus@meta.data)
@@ -102,7 +102,7 @@ ElbowPlot(NKT_Thymus_samples, ndims = 50, reduction = "pca")
 pcs <- 15
 NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:pcs, 
                                reduction = "pca", assay = "SCT", n.neighbors = 30, 
-                               seed.use = 42, reduction.name =  "initial_umap")
+                               seed.use = 29, reduction.name =  "initial_umap")
 
 DimPlot(NKT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "orig.ident")
 DimPlot(NKT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "Sex")
@@ -117,9 +117,9 @@ NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = c(0.4),
 NKT_Thymus_samples <- RunHarmony(NKT_Thymus_samples, group.by.vars = c("Sex", "Method"), 
                                   assay.use = "SCT", reduction.save= "harmony_sample", max.iter.harmony = 30)
 NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:pcs, reduction = "harmony_sample", 
-                               assay = "SCT", n.neighbors = 30, seed.use = 42)
+                               assay = "SCT", n.neighbors = 30, seed.use = 29)
 NKT_Thymus_samples <- FindNeighbors(NKT_Thymus_samples, reduction = "harmony_sample", dims = 1:pcs, assay = "SCT")
-NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = c(0.4), algorithm = 1, random.seed = 42)
+NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = c(0.4), algorithm = 1, random.seed = 29)
 
 DimPlot(NKT_Thymus_samples, dims = 1:2, reduction = "umap", group.by = "orig.ident")
 DimPlot(NKT_Thymus_samples, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T)
@@ -128,9 +128,10 @@ NKT_Thymus_samples$new_clusters_NKT <- case_when(
   NKT_Thymus_samples$SCT_snn_res.0.4 == '3' ~ '0',
   NKT_Thymus_samples$SCT_snn_res.0.4 == '2' ~ '1',
   NKT_Thymus_samples$SCT_snn_res.0.4 == '1' ~ '2',
-  NKT_Thymus_samples$SCT_snn_res.0.4 == '5' ~ '3',
-  NKT_Thymus_samples$SCT_snn_res.0.4 == '0' ~ '4',
-  NKT_Thymus_samples$SCT_snn_res.0.4 == '4' ~ '5'
+  NKT_Thymus_samples$SCT_snn_res.0.4 == '6' ~ '3',
+  NKT_Thymus_samples$SCT_snn_res.0.4 == '5' ~ '4',
+  NKT_Thymus_samples$SCT_snn_res.0.4 == '4' ~ '5',
+  NKT_Thymus_samples$SCT_snn_res.0.4 == '0' ~ '6'
 )
 
 NKT_Thymus_samples$new_clusters_NKT  <- as.factor(NKT_Thymus_samples$new_clusters_NKT)
@@ -141,22 +142,177 @@ colors_clusters <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#
                      "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
                      "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "olivedrab2")
 
-colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#74c8c3", "2" = "#5a97c1", "3" = "#9f5691", "4" = "#a40000", 
-                     "5" = "grey50")
+colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#74c8c3", "2" = "#5a97c1", "3" = "#9f5691", "4" = "#17154f",
+                          "5" = "grey50", "6" = "#a40000") 
 
-DimPlot(NKT_Thymus_samples, cols = colors_clusters_NKT, pt.size = 1, reduction = "umap")
+DimPlot(NKT_Thymus_samples, cols = colors_clusters_NKT, pt.size = 1, reduction = "umap", label = T)
 
-SCpubr::do_DimPlot(sample = NKT_Thymus_samples, 
-                   label = FALSE, 
-                   label.color = "black", colors.use = colors_clusters_NKT,
-                   legend.position = "right")
+pdf(paste0(fig_dir, "NKT_analysis_clusters_SCPubR.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = NKT_Thymus_samples, 
+                        label = FALSE, 
+                        label.color = "black", colors.use = colors_clusters_NKT,
+                        legend.position = "right")
+print(p)
+dev.off()
 
 NKT_Thymus_samples <- NormalizeData(NKT_Thymus_samples)
-SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
-                       features = "CCR9",
+
+Cd8aa_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "PRKCH", "CD28", "LCP2", "CD2", "CD8A",
+                      "GNG4", "SH3BGRL3", "ELOVL5", "TOX", "SH2D1A", "CAPZA1"))
+
+Egress <- list(c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
+                 "S100A4", "S100A6", "EMP3"))
+
+NKT_Thymus_samples <- AddModuleScore(object = NKT_Thymus_samples, features = Cd8aa_score,
+                                      assay = "SCT", name = 'Cd8aa_score')
+
+NKT_Thymus_samples <- AddModuleScore(object = NKT_Thymus_samples, features = Egress,
+                                     assay = "SCT", name = 'Egress_score')
+
+pdf(paste0(fig_dir, "Egress_signature_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                       features = "Egress_score1",
                        plot.title = "",
                        reduction = "umap",
                        viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CD8aa_signature_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "Cd8aa_score1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+
+pdf(paste0(fig_dir, "RAG1_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "RAG1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "EGR2_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "EGR2",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "HIVEP3_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "HIVEP3",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR9_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "CCR9",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR7_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "CCR7",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "ZBTB16_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "ZBTB16",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "KLRB1_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "KLRB1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "EOMES_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "EOMES",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "TBX21_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "TBX21",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "FOS_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "FOS",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "GZMK_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "GZMK",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CD4_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "CD4",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CD8A_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "CD8A",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CD79A_NKT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                            features = "CD79A",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
 
 ##DEGs#################################################################################################################
 Idents(NKT_Thymus_samples) <- "new_clusters_NKT"
@@ -258,13 +414,13 @@ correlations %>% dplyr::filter(str_detect(pathway, "Stage"))
 
 umap <- vision.obj.seurat.Harmony@Projections$Seurat_umap
 
-corr_response <- correlations %>% dplyr::filter(str_detect(pathway, "^NKT1_signature$"))
-sigScores <- getSignatureScores(vision.obj.seurat.Harmony)[, "NKT1_signature"]
+corr_response <- correlations %>% dplyr::filter(str_detect(pathway, "^Stage0_signature$"))
+sigScores <- getSignatureScores(vision.obj.seurat.Harmony)[, "Stage0_signature"]
 ggplot() + aes(x=umap[, 1], y=umap[, 2], color = sigScores) + 
   geom_point(size = 1) +
-  xlim(-10, 12) + ylim(-7.5, 5.5) +
+  xlim(-10, 10) + ylim(-7.5, 10) +
   scale_colour_viridis(option = "magma", limits = c(0, 1), oob = scales::squish) +
-  ggtitle(glue("NKT1_signature\n C' = {round(corr_response[2], digit = 2)}, FDR = {round(corr_response[4], digit = 2)}")) +
+  ggtitle(glue("Stage0_signature\n C' = {round(corr_response[2], digit = 2)}, FDR = {round(corr_response[4], digit = 2)}")) +
   labs(x = "", y = "") + theme_classic() +
   theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12, vjust = 0.2)) + NoLegend()
 
@@ -328,7 +484,7 @@ plot_cells(cds,
            label_roots = FALSE,
            label_leaves = FALSE,
            cell_size = 1, show_trajectory_graph = TRUE) + 
-  viridis::scale_color_viridis(option = "D") + xlim(-12, 12) + ylim(-7.5, 5.5)
+  viridis::scale_color_viridis(option = "D") + xlim(-10, 10) + ylim(-7.5, 10)
 
 # cells ordered by monocle3 pseudotime
 pseudotime(cds)
@@ -374,8 +530,12 @@ Trav10_cells <- TCR_data_NKT_cells.df %>% dplyr::filter(TRAV == "TRAV10*01") %>%
 length(Trav10_cells)
 
 pdf(paste0(fig_dir, "TRAV10_cells_NKT__Thymus.pdf"), width=7, height=7)
-p <- DimPlot(NKT_Thymus_samples, cells.highlight = Trav10_cells, 
-             na.value = "gray10", pt.size = 1, sizes.highlight = 2) + NoLegend()
+p <- SCpubr::do_DimPlot(sample = NKT_Thymus_samples, 
+                        label = FALSE,
+                        cells.highlight = Trav10_cells,
+                        legend.position = "none",
+                        na.value = "grey90",
+                        sizes.highlight = 2, colors.use = "#a40000")
 print(p)
 dev.off()
 
@@ -575,7 +735,7 @@ DimPlot(filtered_seurat_Harmony, order = TRUE, pt.size = 1.2, cols = colors_clus
 
 ###################################################################
 
-saveRDS(NKT_Thymus_samples, "/Volumes/Samsung_T5/Human_MAIT_NKT/Data/Thymic_NKT_102722.RDS")
+saveRDS(NKT_Thymus_samples, "/Volumes/Samsung_T5/Human_MAIT_NKT/Data/Thymic_NKT_110322.RDS")
 
 ###################################################################
 
@@ -611,7 +771,7 @@ ggplot(MAIT_Thymus@meta.data, aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt
 
 counts <- GetAssayData(object = MAIT_Thymus, slot = "counts")
 nonzero <- counts > 0
-keep_genes <- Matrix::rowSums(nonzero) >= 10
+keep_genes <- Matrix::rowSums(nonzero) >= 20
 filtered_counts <- counts[keep_genes,]
 
 MAIT_Thymus_samples <- CreateSeuratObject(counts = filtered_counts, meta.data = MAIT_Thymus@meta.data)
@@ -667,8 +827,8 @@ MAIT_Thymus_samples$new_clusters_MAIT <- case_when(
   MAIT_Thymus_samples$seurat_clusters == '5' ~ '0',
   MAIT_Thymus_samples$seurat_clusters == '4' ~ '1',
   MAIT_Thymus_samples$seurat_clusters == '3' ~ '2',
-  MAIT_Thymus_samples$seurat_clusters == '0' ~ '3',
-  MAIT_Thymus_samples$seurat_clusters == '1' ~ '4',
+  MAIT_Thymus_samples$seurat_clusters == '1' ~ '3',
+  MAIT_Thymus_samples$seurat_clusters == '0' ~ '4',
   MAIT_Thymus_samples$seurat_clusters == '6' ~ '5',
   MAIT_Thymus_samples$seurat_clusters == '7' ~ '6',
   MAIT_Thymus_samples$seurat_clusters == '2' ~ '7'
@@ -682,10 +842,13 @@ DimPlot(MAIT_Thymus_samples, dims = 1:2, reduction = "umap", group.by = "new_clu
 colors_clusters_MAIT <- c("0" = "#d8443c", "1" = "#e09351", "2" = "hotpink3", "3" = "aquamarine3", "4" = "steelblue3", 
                          "5" = "#9f5691", "6" = "gold2", "7" = "mistyrose4")
 
-SCpubr::do_DimPlot(sample = MAIT_Thymus_samples, 
+pdf(paste0(fig_dir, "MAIT_analysis_clusters_SCPubR.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = MAIT_Thymus_samples, 
                    label = FALSE, 
                    label.color = "black", colors.use = colors_clusters_MAIT,
                    legend.position = "right")
+print(p)
+dev.off()
 
 SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
                        features = "GNG4",
@@ -693,23 +856,141 @@ SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples,
                        reduction = "umap",
                        viridis_color_map = "inferno")
 
-Cd8aa_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "PRKCH", "CD28", "LCP2", "CD2",
+Cd8aa_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "PRKCH", "CD28", "LCP2", "CD2", "CD8A",
                        "GNG4", "SH3BGRL3", "ELOVL5", "TOX", "SH2D1A", "CAPZA1"))
 
 MAIT_Thymus_samples <- AddModuleScore(object = MAIT_Thymus_samples, features = Cd8aa_score,
                                           assay = "SCT", name = 'Cd8aa_score')
 
-SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+MAIT_Thymus_samples <- AddModuleScore(object = MAIT_Thymus_samples, features = Egress,
+                                     assay = "SCT", name = 'Egress_score')
+
+pdf(paste0(fig_dir, "Egress_signature_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "Egress_score1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CD8aa_signature.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
                        features = "Cd8aa_score1",
                        plot.title = "",
                        reduction = "umap",
                        viridis_color_map = "inferno")
+print(p)
+dev.off()
 
-SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+pdf(paste0(fig_dir, "RAG1_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "RAG1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "EGR2_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "EGR2",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "HIVEP3_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "HIVEP3",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR9_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "CCR9",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR7_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "CCR7",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "ZBTB16_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "ZBTB16",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "KLRB1_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "KLRB1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "EOMES_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "EOMES",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "TBX21_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "TBX21",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "FOS_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "FOS",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "GZMK_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
                        features = "GZMK",
                        plot.title = "",
                        reduction = "umap",
                        viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR6_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = MAIT_Thymus_samples, 
+                            features = "CCR6",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
 
 ##DEGs#################################################################################################################
 Idents(MAIT_Thymus_samples) <- "new_clusters_MAIT"
@@ -721,8 +1002,6 @@ top5_distinct <- base::unique(top5$gene)
 write.csv(MAIT.clusters.markers, "/Volumes/Samsung_T5/Human_MAIT_NKT/Final_Figures/clusters.markers.MAIT.csv")
 
 MAIT_Thymus_samples <- ScaleData(MAIT_Thymus_samples, features = top5_distinct)
-#DotPlot_colors <- met.brewer("Hiroshige", type = "discrete", n = 2)
-#DotPlot_colors <- c("#72bcd5", "#1E466E")
 DotPlot_colors <- c("lightsteelblue1", "#1E466E")
 
 fig_dir <- "/Volumes/Samsung_T5/Human_MAIT_NKT/Final_Figures/"
@@ -775,7 +1054,7 @@ print(p)
 dev.off()
 
 ####VISION###############################################################################################################
-signatures <- c("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/MouseNKTsubsets.signatures.gmt")
+signatures <- c("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/MouseMAITsubsets.signatures.gmt")
 
 vision.obj.seurat.Harmony <- Vision(MAIT_Thymus_samples, signatures = signatures, 
                                     projection_methods = NULL, meta = MAIT_Thymus_samples@meta.data)
@@ -793,13 +1072,13 @@ correlations %>% dplyr::filter(str_detect(pathway, "Stage"))
 
 umap <- vision.obj.seurat.Harmony@Projections$Seurat_umap
 
-corr_response <- correlations %>% dplyr::filter(str_detect(pathway, "^Stage0_signature$"))
-sigScores <- getSignatureScores(vision.obj.seurat.Harmony)[, "Stage0_signature"]
+corr_response <- correlations %>% dplyr::filter(str_detect(pathway, "^MAITTp_signature$"))
+sigScores <- getSignatureScores(vision.obj.seurat.Harmony)[, "MAITTp_signature"]
 ggplot() + aes(x=umap[, 1], y=umap[, 2], color = sigScores) + 
   geom_point(size = 1) +
-  xlim(-17, 7) + ylim(-6.5, 7) +
+  xlim(-7, 16) + ylim(-8, 6.5) +
   scale_colour_viridis(option = "magma", limits = c(0, 1), oob = scales::squish) +
-  ggtitle(glue("Stage0_signature\n C' = {round(corr_response[2], digit = 2)}, FDR = {round(corr_response[4], digit = 2)}")) +
+  ggtitle(glue("MAITp_signature\n C' = {round(corr_response[2], digit = 2)}, FDR = {round(corr_response[4], digit = 2)}")) +
   labs(x = "", y = "") + theme_classic() +
   theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12, vjust = 0.2)) + NoLegend()
 
@@ -863,7 +1142,7 @@ plot_cells(cds,
            label_roots = FALSE,
            label_leaves = FALSE,
            cell_size = 1, show_trajectory_graph = TRUE) + 
-  viridis::scale_color_viridis(option = "D") + xlim(-17, 7) + ylim(-6.5, 7)
+  viridis::scale_color_viridis(option = "D") + xlim(-7, 16) + ylim(-8, 6.5)
 
 # cells ordered by monocle3 pseudotime
 pseudotime(cds)
@@ -902,8 +1181,16 @@ table(TCR_data_MAIT_cells.df$TRAV)
 Trav1_cells <- TCR_data_MAIT_cells.df %>% dplyr::filter(TRAV %in% c("TRAV1-1*01", "TRAV1-1*02",
                                                                     "TRAV1-2*01")) %>% row.names()
 length(Trav1_cells)
-DimPlot(MAIT_Thymus_samples, cells.highlight = Trav1_cells, na.value = "gray10", pt.size = 1, reduction = "umap",
-        sizes.highlight = 2) + NoLegend()
+
+pdf(paste0(fig_dir, "TRAV1_MAIT.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = MAIT_Thymus_samples, 
+                         label = FALSE,
+                         cells.highlight = Trav1_cells,
+                         legend.position = "none",
+                         na.value = "grey90",
+                         sizes.highlight = 2, colors.use = "#a40000")
+print(p)
+dev.off()
 
 #determine how many TRAV and TRAJ are in the samples
 V_alpha_genes <- unique(Total_TRAV_TRAJ_distribution$TRAV) %>% sort()
@@ -1148,4 +1435,347 @@ saveRDS(MAIT_Thymus_samples, "/Volumes/Samsung_T5/Human_MAIT_NKT/Data/Thymic_MAI
 
 ###################################################################
 
+######################################
+## Reclustering of Thymic GD T cells ##
+######################################
+Idents(filtered_seurat_Harmony) <- "group.ident"
+GDT_cells_Total <- subset(filtered_seurat_Harmony, ident = c("GD_Thymus", "GD_PBMC"))
+Idents(GDT_cells_Total) <- "group.ident"
+GDT_Thymus <- subset(GDT_cells_Total, ident = c("GD_Thymus"))
+
+DefaultAssay(GDT_Thymus) <- "RNA"
+
+ggplot(GDT_Thymus@meta.data, aes(color =  orig.ident, x=nCount_RNA, fill = orig.ident)) +
+  geom_density(alpha = 0.2) +
+  scale_x_log10() +
+  theme_classic() +
+  ylab("Cell density")
+
+ggplot(GDT_Thymus@meta.data, aes(color =  orig.ident, x=nFeature_RNA, fill = orig.ident)) +
+  geom_density(alpha = 0.2) +
+  scale_x_log10() +
+  theme_classic() +
+  ylab("Cell density")
+
+ggplot(GDT_Thymus@meta.data, aes(x=nCount_RNA, y=nFeature_RNA, color=percent.mt)) +
+  geom_point() +
+  scale_colour_gradient(low = "gray90", high = "black") +
+  stat_smooth(method = lm) +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_classic() +
+  facet_wrap(~orig.ident)
+
+counts <- GetAssayData(object = GDT_Thymus, slot = "counts")
+nonzero <- counts > 0
+keep_genes <- Matrix::rowSums(nonzero) >= 20
+filtered_counts <- counts[keep_genes,]
+
+GDT_Thymus_samples <- CreateSeuratObject(counts = filtered_counts, meta.data = GDT_Thymus@meta.data)
+
+GDT_Thymus_samples <- NormalizeData(object = GDT_Thymus_samples,
+                                    normalization.method = "LogNormalize", 
+                                    assay = "RNA")
+GDT_Thymus_samples <- FindVariableFeatures(GDT_Thymus_samples, selection.method = "vst", 
+                                           nfeatures= 2000, assay = "RNA")
+HVFInfo(GDT_Thymus_samples, selection.method = "vst", status = TRUE, assay = "RNA") -> variableGenes
+ggplot(variableGenes, aes(x = log(mean), y= log(variance), color = variable$vst.variable)) + geom_point()
+
+GDT_Thymus_samples <- ScaleData(GDT_Thymus_samples, assay = "RNA")
+GDT_Thymus_samples <- RunPCA(GDT_Thymus_samples, assay = "RNA", seed.use = 42, npcs = 50, weight.by.var = TRUE)
+
+FeaturePlot(GDT_Thymus_samples, features = "percent.mt", reduction = "pca", split.by = "orig.ident")
+
+GDT_Thymus_samples <- SCTransform(GDT_Thymus_samples, vars.to.regress = c("percent.mt"), 
+                                  assay = "RNA", new.assay.name = "SCT", do.correct.umi = TRUE, ncells = 5000)
+
+GDT_Thymus_samples <- RunPCA(GDT_Thymus_samples, assay = "SCT", seed.use = 42, npcs = 50, weight.by.var = T)
+
+ElbowPlot(GDT_Thymus_samples, ndims = 50, reduction = "pca")
+pcs <- 15
+GDT_Thymus_samples <- RunUMAP(GDT_Thymus_samples, dims = 1:pcs, 
+                              reduction = "pca", assay = "SCT", n.neighbors = 30, 
+                              seed.use = 29, reduction.name =  "initial_umap")
+
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "orig.ident")
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "Sex")
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "Donor")
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "Batch")
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "initial_umap", group.by = "Method")
+
+GDT_Thymus_samples <- FindNeighbors(GDT_Thymus_samples, reduction = "pca", dims = 1:pcs, assay = "SCT")
+GDT_Thymus_samples <- FindClusters(GDT_Thymus_samples, resolution = c(0.4), 
+                                   algorithm = 1, random.seed = 42)
+
+GDT_Thymus_samples <- RunHarmony(GDT_Thymus_samples, group.by.vars = c("Sex", "Method"), 
+                                 assay.use = "SCT", reduction.save= "harmony_sample", max.iter.harmony = 30)
+GDT_Thymus_samples <- RunUMAP(GDT_Thymus_samples, dims = 1:pcs, reduction = "harmony_sample", 
+                              assay = "SCT", n.neighbors = 30, seed.use = 29)
+GDT_Thymus_samples <- FindNeighbors(GDT_Thymus_samples, reduction = "harmony_sample", dims = 1:pcs, assay = "SCT")
+GDT_Thymus_samples <- FindClusters(GDT_Thymus_samples, resolution = c(0.4), algorithm = 1, random.seed = 29)
+
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "umap", group.by = "orig.ident")
+DimPlot(GDT_Thymus_samples, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T)
+
+SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                       features = "NCR3",
+                       plot.title = "",
+                       reduction = "umap",
+                       viridis_color_map = "inferno")
+
+colors_clusters_GDT <- c("0" = "#2673a3", "1" = "#e8b960", "2" = "#473d7d", "3" = "#318f49", "4" = "#582310",
+                         "5" = "gray50", "6" = "#0cb4bb") 
+
+pdf(paste0(fig_dir, "GDT_analysis_clusters_SCPubR.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = GDT_Thymus_samples, 
+                        label = FALSE, 
+                        label.color = "black", colors.use = colors_clusters_GDT,
+                        legend.position = "right")
+print(p)
+dev.off()
+
+GDT_Thymus_samples <- NormalizeData(GDT_Thymus_samples)
+
+GDT_Thymus_samples <- AddModuleScore(object = GDT_Thymus_samples, features = Cd8aa_score,
+                                      assay = "SCT", name = 'Cd8aa_score')
+
+GDT_Thymus_samples <- AddModuleScore(object = GDT_Thymus_samples, features = Egress,
+                                      assay = "SCT", name = 'Egress_score')
+
+pdf(paste0(fig_dir, "CD8aa_signature_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "Cd8aa_score1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "Egress_signature_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "Egress_score1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "MKi67_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "MKI67",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "GZMK_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "GZMK",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "KLRB1_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "KLRB1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "FOS_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "FOS",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+
+pdf(paste0(fig_dir, "ZBTB16_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "ZBTB16",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "MX1_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "MX1",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "EOMES_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "EOMES",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR7_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "CCR7",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "CCR9_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "CCR9",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "HIVEP3_GDT.pdf"), width=7, height=7)
+p <- SCpubr::do_FeaturePlot(sample = GDT_Thymus_samples, 
+                            features = "HIVEP3",
+                            plot.title = "",
+                            reduction = "umap",
+                            viridis_color_map = "inferno")
+print(p)
+dev.off()
+
+##DEGs#################################################################################################################
+Idents(GDT_Thymus_samples) <- "seurat_clusters"
+DefaultAssay(GDT_Thymus_samples) <- "RNA"
+GDT.clusters.markers <- FindAllMarkers(GDT_Thymus_samples, test.use = 'wilcox', 
+                                        logfc.threshold = 0.4, min.pct = 0.3, only.pos = TRUE)
+top5 <- GDT.clusters.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+top5_distinct <- base::unique(top5$gene)
+
+write.csv(GDT.clusters.markers, "/Volumes/Samsung_T5/Human_MAIT_NKT/Final_Figures/clusters.markers.GDT.csv")
+
+GDT_Thymus_samples <- ScaleData(GDT_Thymus_samples, features = top5_distinct)
+DotPlot_colors <- c("#F2D5D5", "#b75347")
+
+fig_dir <- "/Volumes/Samsung_T5/Human_MAIT_NKT/Final_Figures/"
+
+pdf(paste0(fig_dir, "Features_per_GDT_clusters.pdf"), width=10, height=5)
+p3 <- DotPlot(GDT_Thymus_samples, features = top5_distinct, dot.scale = 8, cols = DotPlot_colors,
+              col.min = -2, col.max = 6, dot.min = 0) + RotatedAxis()
+print(p3)
+dev.off()
+
+###Distribution of cells per Donor####################################################################################
+Idents(GDT_Thymus_samples) <- "seurat_clusters"
+GDT_cell_numbers_thymus <- as.data.frame(GDT_Thymus_samples@meta.data) %>%
+  dplyr::select(Donor, seurat_clusters) %>% group_by(seurat_clusters, Donor) %>% summarize(N = n()) %>% ungroup()
+GDT_cell_numbers_thymus <- GDT_cell_numbers_thymus %>% complete(seurat_clusters, fill=list(N=0))
+
+GDT_cell_numbers_thymus_donor3 <- GDT_cell_numbers_thymus %>% dplyr::filter(Donor == 3)
+
+GDT_cell_numbers_thymus_donor3_test <- GDT_cell_numbers_thymus_donor3 %>% 
+  mutate(freq = N/sum(GDT_cell_numbers_thymus_donor3$N)*100) %>% ungroup()
+
+GDT_cell_numbers_thymus_donor4 <- GDT_cell_numbers_thymus %>% dplyr::filter(Donor == 4)
+
+GDT_cell_numbers_thymus_donor4_test <- GDT_cell_numbers_thymus_donor4 %>% 
+  mutate(freq = N/sum(GDT_cell_numbers_thymus_donor4$N)*100) %>% ungroup()
+
+distribution_donors_thymus <- rbind(GDT_cell_numbers_thymus_donor3_test, 
+                                    GDT_cell_numbers_thymus_donor4_test)
+
+distribution_donors_thymus$Donor <- factor(distribution_donors_thymus$Donor)
+
+distribution_donors_thymus <- distribution_donors_thymus %>% complete(seurat_clusters, fill=list(N=0, freq=0))
+
+pdf(paste0(fig_dir, "Distribution_per_cluster_GDT_Thymus.pdf"), width=7, height=7)
+p <- ggplot(data= subset(distribution_donors_thymus, !is.na(Donor)), aes(x = Donor, y = freq, 
+                                                                         fill = forcats::fct_rev(factor(seurat_clusters)))) +
+  geom_bar(stat="identity") +
+  scale_fill_manual(values = colors_clusters_GDT, 
+                    labels = levels(distribution_donors_thymus$seurat_clusters), 
+                    drop = FALSE, limits = levels(distribution_donors_thymus$seurat_clusters),
+                    guide = guide_legend(reverse=TRUE)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = "Donors", y = "%", fill = "Clusters") + theme_classic() + My_Theme 
+print(p)
+dev.off()
+
+#############################################################################################
+TCR_data_GD_cells.df <- as.data.frame(GDT_Thymus_samples@meta.data)
+TCR_data_GD_cells.df <- TCR_data_GD_cells.df %>%
+  dplyr::select(-nCount_RNA, -nFeature_RNA, -percent.mt, -cell.ident, -Sex, -Age_in_weeks, -Donor, -Batch, -Method, -nCount_SCT,
+                -nFeature_SCT, -SCT_snn_res.0.7, -seurat_clusters, -orig.ident, -Tissue, -Test_cell_ident_for_cLISI,- SCT_snn_res.0.9,
+                -SCT_snn_res.1, -group.ident, -TCRa_g_chain, -TCRa_g_clonotype, -TCRb_d_chain, -TCRb_d_clonotype, 
+                -TRAV10_TRAJ18, -TRAV1_TRAJ33, -TRAV1, -new_clusters, -Cd8aa_score1, -Egress_score1) %>%
+  na.omit() %>%
+  dplyr::rename(TRGV = TCR_Alpha_Gamma_V_gene_Dominant, TRGJ = TCR_Alpha_Gamma_J_gene_Dominant, CDR3g = TCR_Alpha_Gamma_CDR3_Translation_Dominant,
+                TRDV = TCR_Beta_Delta_V_gene_Dominant, TRDD = TCR_Beta_Delta_D_gene_Dominant, TRDJ = TCR_Beta_Delta_J_gene_Dominant,
+                CDR3d = TCR_Beta_Delta_CDR3_Translation_Dominant) %>%
+  mutate(CDR3d = paste0("C", CDR3d)) %>%
+  mutate(CDR3g = paste0("C", CDR3g))
+
+Total_TRDV_TRDJ_distribution <- TCR_data_GD_cells.df %>%
+  dplyr::select(-CDR3g, -TRGV, -TRDD, -TRGJ, -CDR3d) %>%
+  mutate(TRDV = str_remove(TRDV, pattern = "\\*[^.]*$"),
+         TRDJ = str_remove(TRDJ, pattern = "\\*[^.]*$")) %>%
+  group_by(TRDV, TRDJ) %>%
+  summarise(n = n()) %>% ungroup() %>% as.data.frame()
+
+table(TCR_data_GD_cells.df$TRDV)
+TRDV1_cells <- TCR_data_GD_cells.df %>% dplyr::filter(TRDV %in% c("TRDV1*01")) %>% row.names()
+
+TRDV2_cells <- TCR_data_GD_cells.df %>% dplyr::filter(TRDV %in% c("TRDV2*01", "TRDV2*03")) %>% row.names()
+
+TRDV3_cells <- TCR_data_GD_cells.df %>% dplyr::filter(TRDV %in% c("TRDV3*01")) %>% row.names()
+
+pdf(paste0(fig_dir, "TRDV1_GD.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = GDT_Thymus_samples, 
+                        label = FALSE,
+                        cells.highlight = TRDV1_cells,
+                        legend.position = "none",
+                        na.value = "grey90",
+                        sizes.highlight = 2, colors.use = "#a40000")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "TRDV2_GD.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = GDT_Thymus_samples, 
+                        label = FALSE,
+                        cells.highlight = TRDV2_cells,
+                        legend.position = "none",
+                        na.value = "grey90",
+                        sizes.highlight = 2, colors.use = "#2673a3")
+print(p)
+dev.off()
+
+pdf(paste0(fig_dir, "TRDV3_GD.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = GDT_Thymus_samples, 
+                        label = FALSE,
+                        cells.highlight = TRDV3_cells,
+                        legend.position = "none",
+                        na.value = "grey90",
+                        sizes.highlight = 2, colors.use = "#318f49")
+print(p)
+dev.off()
+
+table(TCR_data_GD_cells.df$TRGV)
+TRGV9_cells <- TCR_data_GD_cells.df %>% dplyr::filter(TRGV %in% c("TRGV9*01")) %>% row.names()
+
+pdf(paste0(fig_dir, "TRGV9_GD.pdf"), width=7, height=7)
+p <- SCpubr::do_DimPlot(sample = GDT_Thymus_samples, 
+                        label = FALSE,
+                        cells.highlight = TRGV9_cells,
+                        legend.position = "none",
+                        na.value = "grey90",
+                        sizes.highlight = 2, colors.use = "#d35e17")
+print(p)
+dev.off()
 

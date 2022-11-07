@@ -36,7 +36,34 @@ seur.human@meta.data
 
 
 
-## 2. UMAP
+## 2. Quality control
+
+```{r qc}
+# Visualize on UMAP
+FeaturePlot(seur.human, features="nFeature_RNA", cols= c("lightgrey", "#67000D")) |
+  FeaturePlot(seur.human, features="nCount_RNA", cols= c("lightgrey", "#54278f")) |
+  FeaturePlot(seur.human, features="percent.mt", cols= c("lightgrey", "#045a8d"))
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_on_umap.jpeg", width=15, height=5)
+
+
+# QC violin plots
+VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.001,
+        group.by="group.ident")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_group.jpeg", width=12, height=6)
+VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
+        group.by="Donor")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_donor.jpeg", width=12, height=6)
+VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
+        group.by="Method")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_method.jpeg", width=8, height=6)
+VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
+        group.by="Batch")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_batch.jpeg", width=10, height=6)
+```
+
+
+
+## 3. UMAP
 
 ```{r all-data}
 # Color by cell identity

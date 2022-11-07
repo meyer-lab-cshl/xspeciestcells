@@ -52,6 +52,9 @@ mat.hu8  <- convert_to_matrix(human8) # 1913 cells
 mat.hu12 <- convert_to_matrix(human12) # 344 cells
 ```
 
+
+
+
 ## 2. Preprocessing
 
 ```{r create-seurat}
@@ -83,6 +86,9 @@ table(seur.combined@meta.data$orig.ident) # 399 cells hu5; 1828 cells hu8; 331 c
 # See number of cells and features post-processing
 print(seur.combined)
 ```
+
+
+
 
 ## 3. SCTransform and Harmony
 
@@ -181,6 +187,8 @@ ggdraw()+
 FeaturePlot(seur.mnn, features=c("CCR9", "CCR7","ZBTB16"), cols = c('#deebf7', 'red'), pt.size = 0.7, ncol=3)
 # ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_inkt_features_lognorm-mnn.jpeg", width=16, height=5)
 ```
+
+
 
 
 ## 5. Compare methods

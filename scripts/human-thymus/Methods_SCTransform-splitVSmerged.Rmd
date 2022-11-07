@@ -1,0 +1,218 @@
+---
+title: "Human unconventional T cell data - Compare SCTransform on split or merged data"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+# IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(harmony)
+library(Seurat)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+
+# Sanity check
+print(seur.human) # 79,801 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human)
+```
+
+
+
+
+# DEFINE FUNCTIONS
+
+```{r functions}
+Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Method", "Batch"), printComputation=T){
+  
+    # Extract the counts data (from RNA assay) and metadata
+  counts <- GetAssayData(object = seuratobject, slot = "counts", assay="RNA")
+  metadata <- seuratobject@meta.data
+  metadata[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
+  colnames(metadata)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
+  # Create new seurat object with only the counts and the "cleaned" metadata
+  initseurat <- CreateSeuratObject(counts = counts, meta.data = metadata, min.cells=20) # keep only genes expressed in at least 20 cells
+  
+  cat("Initial seurat object:\n")
+  print(initseurat) # this is for sanity check
+  
+  if(SCTsplit==T){
+    cat("\n1-Perform SCTransform on split data\n")
+    # Normalize with SCTransform by splitting object (per batch)
+    seur.list <- SplitObject(initseurat, split.by = "orig.ident")
+    for(i in 1:length(seur.list)){
+      cat("...SCTransform on", names(seur.list)[i], "\n")
+      seur.list[[i]] <-  SCTransform(seur.list[[i]], vars.to.regress = 'percent.mt', verbose=printComputation)
+    }
+    # seur.list <- lapply(X = seur.list, FUN = SCTransform, vars.to.regress="percent.mt", method="glmGamPois") # not working
+    sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 3000)
+    seur.SCT <- merge(seur.list[[1]], y = unlist(seur.list[-1], use.names=FALSE), merge.data = TRUE)
+    VariableFeatures(seur.SCT) <- sct.hvg
+  }
+  
+  else if(SCTsplit==F){
+    cat("\n1-Perform SCTransform on merged data")
+    # Normalize with SCTransform (without splitting object)
+    seur.SCT <- SCTransform(initseurat,
+                            assay="RNA",
+                            new.assay.name="SCT",
+                            vars.to.regress = c('percent.mt'),
+                            verbose=printComputation)
+  }
+  
+  # Run PCA (don't scale data when using SCTransform)
+  cat("\n2-Run PCA pre-integration")
+  seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, verbose=printComputation)
+  p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
+  ElbowPlot(seur.SCT)
+  cat("\nSeurat object pre-integration:\n")
+  print(seur.SCT)
+  
+  # Run Harmony for integration
+  cat("\n3-Run Harmony\n")
+  seur.harmony <- RunHarmony(object = seur.SCT,
+                             assay.use = "SCT",
+                             reduction = "pca",
+                             dims.use = 1:50,
+                             group.by.vars = harmony_vars,
+                             plot_convergence = printComputation)
+  cat("\nSeurat object post-integration:\n")
+  print(seur.harmony)
+  cat("\n4-Run UMAP & clustering\n")
+  seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation)
+  seur.harmony <- FindNeighbors(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation) %>%
+    FindClusters(resolution = res, verbose=printComputation)
+  
+  # Show PCA after integration
+  p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
+  
+  print(p1 | p2)
+  
+  return(seur.harmony)
+}
+```
+
+
+
+
+
+# THYMIC MAIT CELLS
+
+## 1. Preprocessing
+
+```{r mait-thym-preprocessing, fig.width=10}
+# Isolate MAIT cells
+MAIT_Thymus <- subset(seur.human, ident = "MAIT_Thymus") # 4689 cells
+
+# Quick QC
+FeatureScatter(MAIT_Thymus, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch")
+FeatureScatter(MAIT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Batch")
+
+# PREPROCESS
+MAIT_SCTsplit <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = T, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+```
+
+
+## 2. Visualize
+
+```{r mait-thym-umap, fig.width=10}
+# Sanity checks
+# DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Sex")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Donor")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Batch")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Method")
+
+# Look at clusters
+DimPlot(MAIT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on split data") |
+  DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
+```
+
+
+
+
+# THYMIC NKT CELLS
+
+## 1. Preprocessing
+
+```{r nkt-thym-preprocessing, fig.width=10}
+# Isolate NKT cells
+NKT_Thymus <- subset(seur.human, ident = "NKT_Thymus") # 2551 cells
+
+# Quick QC
+FeatureScatter(NKT_Thymus, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch")
+FeatureScatter(NKT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Batch")
+
+# PREPROCESS
+NKT_SCTsplit <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = T, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+```
+
+
+## 2. Visualize
+
+```{r nkt-thym-umap, fig.width=10}
+# Sanity checks
+# DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Sex")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Donor")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Batch")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Method")
+
+# Look at clusters
+DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
+  DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+```
+
+
+
+
+# THYMIC GD T CELLS
+
+## 1. Preprocessing
+
+```{r gdt-thym-preprocessing, fig.width=10}
+# Isolate gdT cells
+gdT_Thymus <- subset(seur.human, ident = "GD_Thymus") # 2981 cells
+
+# Quick QC
+FeatureScatter(gdT_Thymus, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch")
+FeatureScatter(gdT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Batch")
+
+# PREPROCESS
+gdT_SCTsplit <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = T, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+```
+
+
+## 2. Visualize
+
+```{r gdt-thym-umap, fig.width=10}
+# Sanity checks
+# DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Sex")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Donor")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Batch")
+# DimPlot(seur.harmony, dims = 1:2, group.by = "Method")
+
+# Look at clusters
+DimPlot(gdT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
+  DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+```

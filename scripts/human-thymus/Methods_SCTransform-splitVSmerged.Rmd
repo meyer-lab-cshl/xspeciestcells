@@ -39,6 +39,9 @@ DimPlot(seur.human)
 # DEFINE FUNCTIONS
 
 ```{r functions}
+#_______________
+# PREPROCESSING #
+#________________
 Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Method", "Batch"), printComputation=T){
   
     # Extract the counts data (from RNA assay) and metadata
@@ -58,11 +61,11 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
     seur.list <- SplitObject(initseurat, split.by = "orig.ident")
     for(i in 1:length(seur.list)){
       cat("...SCTransform on", names(seur.list)[i], "\n")
-      seur.list[[i]] <-  SCTransform(seur.list[[i]], vars.to.regress = 'percent.mt', verbose=printComputation)
+      seur.list[[i]] <-  SCTransform(seur.list[[i]], vars.to.regress = 'percent.mt', verbose=printComputation, seed.use = 1448145)
     }
     # seur.list <- lapply(X = seur.list, FUN = SCTransform, vars.to.regress="percent.mt", method="glmGamPois") # not working
-    sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 3000)
     seur.SCT <- merge(seur.list[[1]], y = unlist(seur.list[-1], use.names=FALSE), merge.data = TRUE)
+    sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 3000)
     VariableFeatures(seur.SCT) <- sct.hvg
   }
   
@@ -72,13 +75,14 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
     seur.SCT <- SCTransform(initseurat,
                             assay="RNA",
                             new.assay.name="SCT",
-                            vars.to.regress = c('percent.mt'),
+                            vars.to.regress = 'percent.mt',
+                            seed.use = 1448145,
                             verbose=printComputation)
   }
   
   # Run PCA (don't scale data when using SCTransform)
   cat("\n2-Run PCA pre-integration")
-  seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, verbose=printComputation)
+  seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=printComputation)
   p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
   ElbowPlot(seur.SCT)
   cat("\nSeurat object pre-integration:\n")
@@ -90,14 +94,15 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
                              assay.use = "SCT",
                              reduction = "pca",
                              dims.use = 1:50,
+                             max.iter.harmony=30,
                              group.by.vars = harmony_vars,
                              plot_convergence = printComputation)
   cat("\nSeurat object post-integration:\n")
   print(seur.harmony)
   cat("\n4-Run UMAP & clustering\n")
-  seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation)
+  seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation, seed.use=42)
   seur.harmony <- FindNeighbors(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation) %>%
-    FindClusters(resolution = res, verbose=printComputation)
+    FindClusters(resolution = res, verbose=printComputation, random.seed=42)
   
   # Show PCA after integration
   p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
@@ -105,6 +110,58 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
   print(p1 | p2)
   
   return(seur.harmony)
+}
+
+
+
+
+#__________________
+# GENE SIGNATURES #
+#__________________
+
+# Gene signatures from Park paper
+# DN_score <- list(c("AC002454.1", "CD7", "IGLL1", "RCBTB2", "SMIM24", "TPM4", "C1orf228", "CTHRC1", "CKLF",
+#                    "SELL", "MLLT11", "CDK6", "MZB1", "SPNS3", "IFITM1", "CD34", "CD82", "SERPINB1", "LPAR6", "ETV5")) # negative control (DNearly)
+# DN_score <- list(c("PTCRA", "MAL", "JCHAIN", "CD1E", "ADA", "UGT3A2", "LRRC28", "IL7R", "LIMS2", "RP11-404O13.5",
+#                    "TRDC", "ATP6AP1L", "ID1", "SELL", "GALNT2", "AC011893.3", "ADGRG1", "TFDP2", "MSI2", "CD7")) # negative control (DNQ)
+DPq_score <- list(c("SH3TC1", "CD8B", "RAG2", "CD1B", "ELOVL4", "RAG1", "LYST", "LTB", "SMPD3", "SIT1",
+                    "AQP3", "CD38", "PTCRA", "CD8A", "NFATC3", "CD52", "RP11-620J15.3", "ARPP21", "H1FX", "AEBP1"))
+DPp_score <- list(c("SMPD3", "CD8A", "CD1E", "UHRF1", "RP11-144L1.4", "SH3TC1", "CD8B", "CD1B", "CD1A", "ELOVL4",
+                    "TCF7", "SH2D1A", "ANAPC15", "ACOT7", "AQP3", "TTK", "SMC2", "PITPNM2", "HNRNPR", "CHRNA3"))
+Cd8aa1_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "TRAC", "PRKCH", "CD28", "LCP2", "CD2", "IKZF1", "AQP3", "CD8A",
+                      "GNG4", "SH3BGRL3", "LIMD2", "ELOVL5", "TOX", "SH2D1A", "CAPZA1", "XCL1"))
+Cd8aa2_score <- list(c("CTSW", "TRGC2", "SMC4", "CD7", "IKZF2", "ZNF683", "ACTN1", "SMIM24", "HCST", "MME", "CD8A",
+                       "TRG-AS1", "RGS2", "RTKN2", "PPP2R5C", "ID3", "TRGC1", "CLEC2D", "DCXR", "ELF1", "CPNE7"))
+NKT_score <- list(c("GZMK", "NKG7", "CST7", "GZMM", "XCL1", "SAMD3", "CCL5", "GIMAP4", "ITM2C", "CD8A",
+                    "CLEC2B", "IL32", "TRGC1", "HSPD1", "TRDC", "LITAF", "HSPA1B", "CD44", "PYHIN1", "HSPA1A"))
+SPentry_score <- list(c("SATB1", "TOX2", "CHI3L2", "CCR9", "ITM2A", "AIF1", "RPS4Y1", "TRAC", "ANKRD44", "FYB", "ODF2L",
+                   "EPHB6", "CCT2", "BANF1", "POLR2J3", "ANXA6", "NUDC", "MAD1L1", "CD1A", "CD1E"))
+Tago_score <- list(c("UBE2F", "DHRS3", "MAGEH1", "ITM2A", "C1orf228", "SMS", "BACH2", "TNFRSF1B", "COTL1",
+                     "SERPINE2", "NREP", "LCP2", "CD247", "LAT", "ITGAE", "VASP", "CREM", "CD40LG", "PHB", "CCND2"))
+gdT_score <- list(c("TRDC", "ANXA1", "LAT", "SELL", "CCR9", "SMPD3", "FCGRT", "TESPA1", "SH3BP5", "AES", "TDG",
+                    "LIMD2", "SEMA4D", "MYL6B", "CD247", "ARL4C", "ID3", "RTKN2", "MLLT11", "TRGC2"))
+NK_score <- list(c("GNLY", "TYROBP", "KLRD1", "NKG7", "KLRC1", "CMC1", "KLRB1", "XCL2", "KLRF1", "HOPX",
+                   "FCER1G", "CTSW", "PRF1", "MATK", "GZMB", "CCL3", "IL2RB", "IFITM2", "GZMH", "XCL1"))
+Egress <- list(c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
+                 "S100A4", "S100A6", "EMP3"))
+
+
+# Function to look at these gene signatures
+signatures <- function(seuratobject=NKT_SCTmerged, scorelist=DN_score, scorename="DN_score", celltype="NKT"){
+  # Add signatures to new seurat object
+  # NKT_SCTsplit_score <- AddModuleScore(object = NKT_SCTsplit, features = scorelist, assay = "SCT", name = scorename)
+  seurat_scored <- AddModuleScore(object = seuratobject, features = scorelist, assay = "SCT", name = scorename)
+
+  # SCpubr::do_FeaturePlot(sample = NKT_SCTsplit_score,
+  #                        features = paste0(scorename, "1"),
+  #                        plot.title = "NKT cells | SCTransform on split data",
+  #                        reduction = "umap",
+  #                        viridis_color_map = "inferno") |
+  SCpubr::do_FeaturePlot(sample = seurat_scored, 
+                         features = paste0(scorename, "1"),
+                         plot.title = paste(celltype, "cells"),
+                         reduction = "umap",
+                         viridis_color_map = "inferno")
 }
 ```
 
@@ -134,16 +191,43 @@ MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3
 
 ```{r mait-thym-umap, fig.width=10}
 # Sanity checks
-# DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Sex")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Donor")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Batch")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Method")
+# DimPlot(MAIT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on split data") |
+#   DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on merged data")
 
 # Look at clusters
 DimPlot(MAIT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on split data") |
   DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
+
+# Look at gene signatures
+# signatures(scorelist=DN_score, scorename="DN_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=gdT_score, scorename="gdT_score") # negative control
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=DPq_score,  scorename="DPq_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=DPp_score,  scorename="DPp_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Cd8aa1_score,  scorename="CD8aa1_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Cd8aa2_score,  scorename="CD8aa2_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=NKT_score,     scorename="NKT_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=SPentry_score, scorename="SPentry_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Tago_score,    scorename="Tagonist_score")
+signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Egress,    scorename="Egress_score")
+# signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
+
+ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
 ```
+
+
+```{r mait-cluster-resolutions}
+# Try different resolutions
+MAIT_SCT_06 <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.6, harmony_vars = c("Sex", "Method"), printComputation = F)
+MAIT_SCT_08 <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.8, harmony_vars = c("Sex", "Method"), printComputation = F)
+MAIT_SCT_1 <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 1, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("res=0.3") |
+  DimPlot(MAIT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
+  DimPlot(MAIT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
+  DimPlot(MAIT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/mait_sctransform-merged_resolutions.jpeg", width=20, height=5)
+```
+
 
 
 
@@ -170,16 +254,49 @@ NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, 
 
 ```{r nkt-thym-umap, fig.width=10}
 # Sanity checks
-# DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Sex")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Donor")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Batch")
-# DimPlot(seur.harmony, dims = 1:2, group.by = "Method")
+# DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on split data") |
+#   DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on merged data")
 
 # Look at clusters
 DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
   DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+
+# Look at gene signatures
+# signatures(scorelist=DN_score, scorename="DN_score")  # several genes are not found
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=gdT_score, scorename="gdT_score") # negative control
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_1.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=DPq_score,  scorename="DPq_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_2.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=DPp_score,  scorename="DPp_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_3.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Cd8aa1_score,  scorename="CD8aa1_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_4.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Cd8aa2_score,  scorename="CD8aa2_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_5.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=NKT_score,     scorename="NKT_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_6.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=SPentry_score, scorename="SPentry_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_7.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Tago_score,    scorename="Tagonist_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_8.jpeg", width=9, height=7)
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Egress,    scorename="Egress_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_9.jpeg", width=9, height=7)
+# signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
 ```
+
+```{r nkt-cluster-resolutions}
+# Try different resolutions
+NKT_SCT_06 <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.6, harmony_vars = c("Sex", "Method"), printComputation = F)
+NKT_SCT_08 <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.8, harmony_vars = c("Sex", "Method"), printComputation = F)
+NKT_SCT_1 <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 1, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("res=0.4") |
+  DimPlot(NKT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
+  DimPlot(NKT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
+  DimPlot(NKT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_sctransform-merged_resolutions.jpeg", width=20, height=5)
+```
+
 
 
 
@@ -215,4 +332,50 @@ gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, 
 # Look at clusters
 DimPlot(gdT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
   DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+
+
+# Look at gene signatures
+# signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DN_score, scorename="DN_score")  # several genes are not found
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=gdT_score, scorename="gdT_score") # negative control
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_1.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DPq_score,  scorename="DPq_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_2.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DPp_score,  scorename="DPp_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_3.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Cd8aa1_score,  scorename="CD8aa1_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_4.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Cd8aa2_score,  scorename="CD8aa2_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_5.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=NKT_score,     scorename="NKT_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_6.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=SPentry_score, scorename="SPentry_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_7.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Tago_score,    scorename="Tagonist_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_8.jpeg", width=9, height=7)
+signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Egress,    scorename="Egress_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_9.jpeg", width=9, height=7)
+# signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
+
+# rownames(seur.human)[grep("CD1", rownames(seur.human))]
 ```
+
+
+```{r gdt-cluster-resolutions}
+# Try different resolutions
+GDT_SCT_06 <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.6, harmony_vars = c("Sex", "Method"), printComputation = F)
+GDT_SCT_08 <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.8, harmony_vars = c("Sex", "Method"), printComputation = F)
+GDT_SCT_1 <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 1, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("res=0.4") |
+  DimPlot(GDT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
+  DimPlot(GDT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
+  DimPlot(GDT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/gdt_sctransform-merged_resolutions.jpeg", width=20, height=5)
+```
+
+
+
+
+
+
+

@@ -44,7 +44,7 @@ DimPlot(seur.human)
 #________________
 Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Method", "Batch"), printComputation=T){
   
-    # Extract the counts data (from RNA assay) and metadata
+  # Extract the counts data (from RNA assay) and metadata
   counts <- GetAssayData(object = seuratobject, slot = "counts", assay="RNA")
   metadata <- seuratobject@meta.data
   metadata[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
@@ -184,6 +184,11 @@ FeatureScatter(MAIT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", 
 # PREPROCESS
 MAIT_SCTsplit <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = T, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
 MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+# SAVE OBJECT (for scClustEval)
+# MAIT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
+# colnames(MAIT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
+# saveRDS(MAIT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/mait_object_22-11-10.rds")
 ```
 
 
@@ -211,7 +216,7 @@ signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Tago_score,
 signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Egress,    scorename="Egress_score")
 # signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
 
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
 ```
 
 
@@ -247,6 +252,11 @@ FeatureScatter(NKT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", g
 # PREPROCESS
 NKT_SCTsplit <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = T, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
 NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+# SAVE OBJECT (for scClustEval)
+# NKT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
+# colnames(NKT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
+# saveRDS(NKT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/nkt_object_22-11-10.rds")
 ```
 
 
@@ -282,6 +292,12 @@ signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Tago_score,  
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Egress,    scorename="Egress_score")
 # ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_9.jpeg", width=9, height=7)
 # signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
+
+# Signatures of c1 vs c2 cells
+c1_score <- list(c("CD4", "COTL1", "LEF1", "MAP3K1", "PLP2", "XCL1", "ICOS"))
+c2_score <- list(c("GNLY", "GZMB", "GZMH", "KLRD1", "KLRF1", "KLRK1", "NKG7", "PRF1", "TYROBP", "DBN1", "CD161", "CD94", "CCR5"))
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=c1_score,    scorename="c1_score")
+signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=c2_score,    scorename="c2_score")
 ```
 
 ```{r nkt-cluster-resolutions}
@@ -316,6 +332,11 @@ FeatureScatter(gdT_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", g
 # PREPROCESS
 gdT_SCTsplit <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = T, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
 gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+# SAVE OBJECT (for scClustEval)
+# gdT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
+# colnames(gdT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
+# saveRDS(gdT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/gdt_object_22-11-10.rds")
 ```
 
 

@@ -63,10 +63,87 @@ ElbowPlot(pbmc, ndims = 40)
 
 # a tibble with a list column
 fullsample_idents
+# fullsample_idents[1,]$original_ident_full[[1]] # original_ident_full is the vector of cells with the cluster number they are assigned to.
 
 ## how many clusters for each different comibination of parameter set?
 fullsample_idents %>%
-  mutate(cluster_num = purrr::map_dbl(original_ident_full, ~length(unique(.x))))
+  mutate(cluster_number = purrr::map_dbl(original_ident_full, ~length(unique(.x))))
+
+###_________________________________________
+# HEATMAPS
+# what's the relationship of clusters between k_param 8, 20, 100, with same pc=20 and resolution = 0.6
+
+# Get the row numbers
+fullsample_idents %>% mutate(id = row_number()) %>%
+  filter(pc == 20, resolution == 0.6, k_param %in% c(8, 20, 100))
+
+## x-axis is k_param = 20, and y-axis is k_param = 8
+PairWiseJaccardSetsHeatmap(fullsample_idents$original_ident_full[[2]],
+                           fullsample_idents$original_ident_full[[11]],
+                           show_row_dend = F, show_column_dend = F,
+                           cluster_row = T, cluster_column =T)
+
+## x-axis is k_param = 100, and y-axis is k_param = 8
+PairWiseJaccardSetsHeatmap(fullsample_idents$original_ident_full[[2]],
+                           fullsample_idents$original_ident_full[[29]],
+                           show_row_dend = F, show_column_dend = F,
+                           cluster_row = T, cluster_column =T)
+
+# The k.param in the k-nearest neighbor algorithm after which a SNN graph is constructed. This parameter determines the resolution of the clustering where a bigger k yields a more interconnected graph and bigger clusters. We see if we increase the k param to 100, we get fewer number of total number of clusters.
+
+###_________________________________________
+# DIMENSION REDUCTION
+# Let’s check how the clusters are splitting when we increase the k.param.
+k8_ident <- fullsample_idents %>%
+  filter(pc == 20, resolution == 0.6, k_param == 8)  %>%
+  pull(original_ident_full) %>%
+  `[[`(1)
+pbmc <- AddMetaData(pbmc, metadata = k8_ident, col.name = "res0.6_k8")
+
+k100_ident <- fullsample_idents %>%
+  filter(pc == 20, resolution == 0.6, k_param == 100)  %>%
+  pull(original_ident_full) %>%
+  `[[`(1)
+pbmc <- AddMetaData(pbmc, metadata = k100_ident, col.name = "res0.6_k100")
+
+DimPlot(pbmc, reduction = "umap", label = TRUE, group.by = "res0.6_k8", repel = TRUE) + ggtitle("k_param 8") + NoLegend() |
+  DimPlot(pbmc, reduction = "umap", label = TRUE, group.by = "res0.6_k100", repel = TRUE) + ggtitle("k_param 100") + NoLegend()
+
+# Check the clusters vs the predicted cell types at k = 8
+PairWiseJaccardSetsHeatmap(set_names(pbmc@meta.data$res0.6_k8, nm=colnames(pbmc)),
+                           set_names(pbmc@meta.data$predicted.id, nm=colnames(pbmc)),
+                           show_row_dend = F, show_column_dend = F,
+                           cluster_row = F, cluster_column =F)
+PairWiseJaccardSetsHeatmap(set_names(pbmc@meta.data$res0.6_k100, nm=colnames(pbmc)),
+                           set_names(pbmc@meta.data$predicted.id, nm=colnames(pbmc)),
+                           show_row_dend = F, show_column_dend = F,
+                           cluster_row = F, cluster_column =F)
+# when the k_param is big (100), many cell types are merged together.
+
+
+###_________________________________________
+# SILHOUETTE PLOTS
+## change idents to cluster id when k is 8
+Idents(pbmc)<- pbmc@meta.data$res0.6_k8
+silhouette_scores<- CalculateSilhouette(pbmc, dims = 1:20)
+sil_p1<- SilhouetteRainCloudPlot(silhouette_scores) + ggtitle("k_param 8")
+
+## check silhouette score when k is 100
+Idents(pbmc)<- pbmc@meta.data$res0.6_k100
+silhouette_scores<- CalculateSilhouette(pbmc, dims = 1:20)
+sil_p2<- SilhouetteRainCloudPlot(silhouette_scores) + ggtitle("k_param 100")
+
+sil_p1 / sil_p2
+
+# cluster 5 (k=100) split into clusters 7 and 12 (k=8)
+# silhouette width for cluster 5 (k=100) is higher than clusters 7 and 12 (k=8), suggesting that k=100 is a better option?
+```
+
+
+Explore the subsampled data
+
+```{r pbmc-subsampled-data}
+
 ```
 
 

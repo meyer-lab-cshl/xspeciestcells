@@ -20,26 +20,12 @@ library(ggplot2)
 library(cowplot)
 library(Seurat)
 library(SeuratWrappers)
-# library(harmony)
+library(harmony)
 library(tidyverse)
 library(scclusteval)
 ```
 
-```{r import-data}
-# Import data
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
-subsample_idents  <- readRDS("../../data/04_HumanNKTdata/scclusteval/gather_subsample.rds")
-fullsample_idents <- readRDS("../../data/04_HumanNKTdata/scclusteval/gather_full_sample.rds")
 
-
-# Take quick peek at the data
-print(seur.human) # 79,801 cells and 34,778 genes
-# seur.human@meta.data
-
-table(fullsample_idents$pc)
-table(fullsample_idents$resolution)
-table(fullsample_idents$k_param)
-```
 
 
 ## 2. Trying scClustEval on 5k PBMC data
@@ -52,8 +38,8 @@ subsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gath
 fullsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_full_sample.rds")
 
 # pbmc@meta.data
+# DimPlot(pbmc)
 ```
-
 
 Explore full dataset
 
@@ -140,32 +126,121 @@ sil_p1 / sil_p2
 ```
 
 
-Explore the subsampled data
 
-```{r pbmc-subsampled-data}
 
+## 3. scClustEval on thymic iNKT cells
+
+```{r import-data-inkt}
+# Import data
+thym.nkt <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
+subsample_idents  <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_subsample.rds")
+fullsample_idents <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_full_sample.rds")
+
+
+# Take quick peek at the data
+# thym.nkt
+# thym.nkt@meta.data
+DimPlot(thym.nkt)
+```
+
+
+### 3.1. Preprocess NKT data
+
+We will need a visualization of the NKT cells preprocessed separately (and not based on all T cells).
+
+```{r nkt-preprocessing}
+# Create new seurat object with only genes expressed in >20 cells
+initseurat <- CreateSeuratObject(counts = GetAssayData(object = thym.nkt, slot = "counts", assay="RNA"),
+                                 meta.data = thym.nkt@meta.data,
+                                 min.cells=20)
+# print(initseurat) # sanity check
+
+# Normalize with SCTransform (without splitting object)
+seur.SCT <- SCTransform(initseurat,
+                        assay="RNA",
+                        new.assay.name="SCT",
+                        vars.to.regress = 'percent.mt',
+                        seed.use = 1448145,
+                        verbose=F)
+  
+# Run PCA (don't scale data when using SCTransform)
+seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=F)
+p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
+# ElbowPlot(seur.SCT)
+# print(seur.SCT) # sanity check
+  
+  # Run Harmony for integration
+seur.harmony <- RunHarmony(object = seur.SCT,
+                           assay.use = "SCT",
+                           reduction = "pca",
+                           dims.use = 1:50,
+                           max.iter.harmony=30,
+                           group.by.vars = c("Sex", "Method"),
+                           plot_convergence = F)
+p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
+print(p1 | p2)
+
+# Run UMAP
+seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=F, seed.use=42)
+# seur.harmony <- FindNeighbors(object = seur.harmony, dims = 1:10, assay = "SCT", reduction = "harmony", verbose=F) %>%
+#     FindClusters(resolution = res, verbose=F, random.seed=42)
+
+DimPlot(seur.harmony)
 ```
 
 
 
+### 3.2. Explore different parameters on NKT dataset
 
-## 2. Explore full dataset
+```{r nkt-full-data, width=15}
+#___________________________
+# DEFINE FUNCTION
+paramUMAP <- function(seuratobject, pc_nb=c(15,15,15), res=c(0.7, 0.7, 0.7), knn=c(20,20,20)){
+  # Plot1
+  cat("Set1:", pc_nb[1], res[1], knn[1], "\n")
+  ident1 <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb[1], resolution == res[1], k_param == knn[1])  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+  seuratobject <- AddMetaData(seuratobject, metadata = ident1, col.name = "set1")
 
-```{r}
-# how many PCs to include
-ElbowPlot(seur.human)
+  # Plot2
+  cat("Set2:", pc_nb[2], res[2], knn[2], "\n")
+  ident2 <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb[2], resolution == res[2], k_param == knn[2])  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+  seuratobject <- AddMetaData(seuratobject, metadata = ident2, col.name = "set2")
+  
+  # Plot3
+  cat("Set3:", pc_nb[3], res[3], knn[3], "\n")
+  ident3 <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb[3], resolution == res[3], k_param == knn[3])  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+  seuratobject <- AddMetaData(seuratobject, metadata = ident3, col.name = "set3")
+  
+  # Combine plots
+  p1 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by = "set1", repel = TRUE) +
+    ggtitle(paste0("PC=", pc_nb[1], ", resolution=", res[1], ", k.param=", knn[1])) #+ NoLegend()
+  p2 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by = "set2", repel = TRUE) +
+    ggtitle(paste0("PC=", pc_nb[2], ", resolution=", res[2], ", k.param=", knn[2])) #+ NoLegend()
+  p3 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by = "set3", repel = TRUE) +
+    ggtitle(paste0("PC=", pc_nb[3], ", resolution=", res[3], ", k.param=", knn[3])) #+ NoLegend()
+  print(p1 | p2 | p3)
+}
+#___________________________
 
-# a tibble with a list column
-fullsample_idents
 
-# what's the relationship of clusters between resolution 0.05, 0.1 and 0.3 with the same and k_param
-fullsample_idents %>% mutate(id = row_number()) %>%
-  filter(pc == 150, resolution == 0.8, k_param == 10)
+# Look at some different parameter sets
+paramUMAP(seur.harmony, res=c(0.4, 0.7, 1))
+paramUMAP(seur.harmony, knn=c(10, 20, 50))
+paramUMAP(seur.harmony, res=c(0.4, 0.7, 1), knn=c(50, 20, 10))
 
-## x-axis is resolution of 0.1, and y-axis is resolution of 0.05
-PairWiseJaccardSetsHeatmap(fullsample_idents$original_ident_full[[6]],
-                           fullsample_idents$original_ident_full[[7]],
-                           show_row_dend = F, show_column_dend = F,
-                           cluster_row = F, cluster_column =F)
+
+## nb of clusters for each different combination of parameter set
+fullsample_idents %>%
+  mutate(cluster_num = purrr::map_dbl(original_ident_full, ~length(unique(.x)))) # 5 to 15 clusters
+
 ```
 

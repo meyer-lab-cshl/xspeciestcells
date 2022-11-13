@@ -33,6 +33,13 @@ print(seur.human) # 79,801 cells (it's the whole seurat object)
 DimPlot(seur.human)
 ```
 
+```{r export-seurat-human-scclusteval, include=FALSE}
+# Modify seurat object to be fed to scClustEval
+seur.human@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
+colnames(seur.human@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
+# saveRDS(seur.human, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/tcells_full_object_22-11-10.rds")
+```
+
 
 
 
@@ -194,6 +201,8 @@ MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3
 
 ## 2. Visualize
 
+### 2.1. MAIT UMAP with SCTransform on split vs merged data
+
 ```{r mait-thym-umap, fig.width=10}
 # Sanity checks
 # DimPlot(MAIT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on split data") |
@@ -202,7 +211,11 @@ MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3
 # Look at clusters
 DimPlot(MAIT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on split data") |
   DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
+```
 
+### 2.2. MAIT gene signatures
+
+```{r mait-signatures}
 # Look at gene signatures
 # signatures(scorelist=DN_score, scorename="DN_score")
 signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=gdT_score, scorename="gdT_score") # negative control
@@ -219,6 +232,8 @@ signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Egress,    
 # ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
 ```
 
+
+### 2.3. MAIT clustering resolution
 
 ```{r mait-cluster-resolutions}
 # Try different resolutions
@@ -262,6 +277,8 @@ NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, 
 
 ## 2. Visualize
 
+### 2.1. NKT UMAP with SCTransform on split vs merged data
+
 ```{r nkt-thym-umap, fig.width=10}
 # Sanity checks
 # DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on split data") |
@@ -270,7 +287,11 @@ NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, 
 # Look at clusters
 DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
   DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+```
 
+### 2.2. NKT gene signatures
+
+```{r nkt-signatures}
 # Look at gene signatures
 # signatures(scorelist=DN_score, scorename="DN_score")  # several genes are not found
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=gdT_score, scorename="gdT_score") # negative control
@@ -299,6 +320,9 @@ c2_score <- list(c("GNLY", "GZMB", "GZMH", "KLRD1", "KLRF1", "KLRK1", "NKG7", "P
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=c1_score,    scorename="c1_score")
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=c2_score,    scorename="c2_score")
 ```
+
+
+### 2.3. NKT clustering resolution
 
 ```{r nkt-cluster-resolutions}
 # Try different resolutions
@@ -342,6 +366,9 @@ gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, 
 
 ## 2. Visualize
 
+
+### 2.1. gdT UMAP with SCTransform on split vs merged data
+
 ```{r gdt-thym-umap, fig.width=10}
 # Sanity checks
 # DimPlot(seur.harmony, dims = 1:2, group.by = "orig.ident")
@@ -353,8 +380,11 @@ gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, 
 # Look at clusters
 DimPlot(gdT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
   DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+```
 
+### 2.2. gdT gene signatures
 
+```{r gdT-signatures}
 # Look at gene signatures
 # signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DN_score, scorename="DN_score")  # several genes are not found
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=gdT_score, scorename="gdT_score") # negative control
@@ -380,6 +410,8 @@ signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Egress,    sc
 # rownames(seur.human)[grep("CD1", rownames(seur.human))]
 ```
 
+
+### 2.3. gdT clustering resolution
 
 ```{r gdt-cluster-resolutions}
 # Try different resolutions

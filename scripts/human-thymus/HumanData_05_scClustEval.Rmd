@@ -31,7 +31,7 @@ library(scclusteval)
 ## 2. Trying scClustEval on 5k PBMC data
 
 Take a quick look at the PBMC 5k data
-```{r}
+```{r pbmc1}
 # Import data
 pbmc <- readRDS("../../data/07_scClustEval/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
 subsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_subsample.rds")
@@ -42,8 +42,7 @@ fullsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gat
 ```
 
 Explore full dataset
-
-```{r}
+```{r pbmc2}
 ## how many PCs to include
 ElbowPlot(pbmc, ndims = 40)
 
@@ -128,74 +127,150 @@ sil_p1 / sil_p2
 
 
 
-## 3. scClustEval on thymic iNKT cells
+## 3. Define functions
 
-```{r import-data-inkt}
-# Import data
-thym.nkt <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
-subsample_idents  <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_subsample.rds")
-fullsample_idents <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_full_sample.rds")
+```{r sanity-check}
+# **********************************************************************************************************
 
-
-# Take quick peek at the data
-# thym.nkt
-# thym.nkt@meta.data
-DimPlot(thym.nkt)
+sanitycheck <- function(seuratobject, fullsample_idents, pc_nb=15, res=0.7, knn=20){
+  cat("Please provide seurat object with already UMAP \n")
+  params <- paste0("PC=", pc_nb[1], " | resolution=", res[1], " | k.param=", knn[1])
+  cat("Parameters:", params, "\n")
+  
+  # ++++++
+  # Perform clustering on computer
+  # print(colnames(seuratobject@meta.data))
+  seuratobject <- FindNeighbors(object = seuratobject, dims = 1:pc_nb, k.param=knn, nn.eps=0,
+                                #assay = "SCT",
+                                reduction = "harmony", verbose=F, force.recalc=T) %>%
+    FindClusters(resolution = res, n.start=100, verbose=F) #random.seed=42)
+  # cat("\nPost-clustering:\n")
+  # print(colnames(seuratobject@meta.data))
+  p1 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by="seurat_clusters") + ggtitle("Local computer")
+  
+  # ++++++
+  # Get clusters from scClustEval
+  ident <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb, resolution == res, k_param == knn)  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+  seuratobject <- AddMetaData(seuratobject, metadata = ident, col.name = "scclusteval_clusters")
+  p2 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by = "scclusteval_clusters", repel = TRUE) +
+    ggtitle("scClustEval")
+  
+  # ++++++
+  # Combine plots
+  title <- ggdraw() + 
+    draw_label(params, fontface = 'bold', x = 0, hjust = 0) +
+    theme(plot.margin = margin(0, 0, 0, 7)) # add margin on the left of the drawing canvas, so title is aligned with left edge of first plot
+  plot_grid(
+    title, plot_grid(p1, p2, ncol=2),
+    ncol = 1,
+    rel_heights = c(0.1, 1) # rel_heights values control vertical title margins
+  )
+}
 ```
 
 
-### 3.1. Preprocess NKT data
 
-We will need a visualization of the NKT cells preprocessed separately (and not based on all T cells).
-
-```{r nkt-preprocessing}
-# Create new seurat object with only genes expressed in >20 cells
-initseurat <- CreateSeuratObject(counts = GetAssayData(object = thym.nkt, slot = "counts", assay="RNA"),
-                                 meta.data = thym.nkt@meta.data,
-                                 min.cells=20)
-# print(initseurat) # sanity check
-
-# Normalize with SCTransform (without splitting object)
-seur.SCT <- SCTransform(initseurat,
-                        assay="RNA",
-                        new.assay.name="SCT",
-                        vars.to.regress = 'percent.mt',
-                        seed.use = 1448145,
-                        verbose=F)
+```{r seurat-preprocessing}
+#___________________________
+# FUNCTION TO PREPROCESS DATA AND GET UMAP ON SEPARATE T CELL LINEAGES
+Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Method", "Batch"), printComputation=F){
   
-# Run PCA (don't scale data when using SCTransform)
-seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=F)
-p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
-# ElbowPlot(seur.SCT)
-# print(seur.SCT) # sanity check
+  # Extract the counts data (from RNA assay) and metadata
+  counts <- GetAssayData(object = seuratobject, slot = "counts", assay="RNA")
+  metadata <- seuratobject@meta.data
+  # Create new seurat object with only the counts and the "cleaned" metadata
+  initseurat <- CreateSeuratObject(counts = counts, meta.data = metadata, min.cells=20) # keep only genes expressed in at least 20 cells
+  
+  cat("Initial seurat object:\n")
+  print(initseurat) # this is for sanity check
+  
+  if(SCTsplit==T){
+    cat("\n1-Perform SCTransform on split data\n")
+    # Normalize with SCTransform by splitting object (per batch)
+    seur.list <- SplitObject(initseurat, split.by = "orig.ident")
+    for(i in 1:length(seur.list)){
+      cat("...SCTransform on", names(seur.list)[i], "\n")
+      seur.list[[i]] <-  SCTransform(seur.list[[i]], vars.to.regress = 'percent.mt', verbose=printComputation, seed.use = 1448145)
+    }
+    # seur.list <- lapply(X = seur.list, FUN = SCTransform, vars.to.regress="percent.mt", method="glmGamPois") # not working
+    seur.SCT <- merge(seur.list[[1]], y = unlist(seur.list[-1], use.names=FALSE), merge.data = TRUE)
+    sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 3000)
+    VariableFeatures(seur.SCT) <- sct.hvg
+  }
+  
+  else if(SCTsplit==F){
+    cat("\n1-Perform SCTransform on merged data")
+    # Normalize with SCTransform (without splitting object)
+    seur.SCT <- SCTransform(initseurat,
+                            assay="RNA",
+                            new.assay.name="SCT",
+                            vars.to.regress = 'percent.mt',
+                            seed.use = 1448145,
+                            verbose=printComputation)
+  }
+  
+  # Run PCA (don't scale data when using SCTransform)
+  cat("\n2-Run PCA pre-integration")
+  seur.SCT <- RunPCA(object = seur.SCT,
+                     assay = "SCT",
+                     npcs = 50,
+                     seed.use=42,
+                     verbose=printComputation)
+  p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
+  ElbowPlot(seur.SCT)
+  cat("\nSeurat object pre-integration:\n")
+  print(seur.SCT)
   
   # Run Harmony for integration
-seur.harmony <- RunHarmony(object = seur.SCT,
-                           assay.use = "SCT",
-                           reduction = "pca",
-                           dims.use = 1:50,
-                           max.iter.harmony=30,
-                           group.by.vars = c("Sex", "Method"),
-                           plot_convergence = F)
-p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
-print(p1 | p2)
-
-# Run UMAP
-seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=F, seed.use=42)
-# seur.harmony <- FindNeighbors(object = seur.harmony, dims = 1:10, assay = "SCT", reduction = "harmony", verbose=F) %>%
-#     FindClusters(resolution = res, verbose=F, random.seed=42)
-
-DimPlot(seur.harmony)
+  cat("\n3-Run Harmony\n")
+  seur.harmony <- RunHarmony(object = seur.SCT,
+                             assay.use = "SCT",
+                             reduction = "pca",
+                             dims.use = 1:50,
+                             max.iter.harmony=30,
+                             group.by.vars = harmony_vars,
+                             plot_convergence = printComputation)
+  cat("\nSeurat object post-integration:\n")
+  print(seur.harmony)
+  cat("\n4-Run UMAP\n")
+  seur.harmony <- RunUMAP(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation, seed.use=42)
+  # seur.harmony <- FindNeighbors(object = seur.harmony, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=printComputation) %>%
+  #   FindClusters(resolution = res, verbose=printComputation, random.seed=42)
+  
+  # Show PCA after integration
+  p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
+  
+  print(p1 | p2)
+  
+  return(seur.harmony)
+}
 ```
 
-
-
-### 3.2. Explore different parameters on NKT dataset
-
-```{r nkt-full-data, width=15}
+```{r function-full-data}
 #___________________________
-# DEFINE FUNCTION
-paramUMAP <- function(seuratobject, pc_nb=c(15,15,15), res=c(0.7, 0.7, 0.7), knn=c(20,20,20)){
+# FUNCTION TO LOOK AT UMAP WITH 3 DIFFERENT PARAMETER SETS
+paramUMAP <- function(objectoplot, fullsample_idents=NULL, objectwithclusters=NULL, pc_nb=15, res=0.7, knn=20){
+  # If we have fullsample_idents provided (so coming from scClustEval)
+  if(is.null(fullsample_idents)==FALSE){
+    ident <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb, resolution == res, k_param == knn)  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+    objectoplot <- AddMetaData(objectoplot, metadata = ident, col.name = "set1")
+    return(DimPlot(objectoplot, reduction = "umap", label = TRUE, group.by = "set1", repel = TRUE) + ggtitle("scClustEval (Elzar)"))
+  }
+  # If we have the object with clusters but with no UMAP
+  else if(is.null(fullsample_idents)==TRUE & is.null(objectwithclusters)==FALSE){
+    
+  }
+}
+
+#___________________________
+# FUNCTION TO LOOK AT UMAP WITH 3 DIFFERENT PARAMETER SETS
+paramUMAP3 <- function(seuratobject, fullsample_idents, pc_nb=c(15,15,15), res=c(0.7, 0.7, 0.7), knn=c(20,20,20)){
   # Plot1
   cat("Set1:", pc_nb[1], res[1], knn[1], "\n")
   ident1 <- fullsample_idents %>%
@@ -230,17 +305,303 @@ paramUMAP <- function(seuratobject, pc_nb=c(15,15,15), res=c(0.7, 0.7, 0.7), knn
   print(p1 | p2 | p3)
 }
 #___________________________
+```
+
+```{r function-subsampled-data}
+#___________________________
+# FUNCTION TO LOOK AT JACCARD INDEX SUBSAMPLED DATA FOR ONE PARAMETER SET
+subsampling <- function(seuratobject, fullsample_idents, subsample_idents_list, pc_nb=15, res=0.7, knn=20){
+  plotitle <- paste0("cluster id w/ pc=",pc_nb,", res=", res, ", k=", knn)
+  
+  # Jaccard rainbow cloud
+  row_nb <- subsample_idents_list %>%
+    ungroup() %>%
+    mutate(id = row_number()) %>%
+    filter(pc == pc_nb, resolution == res, k_param == knn) %>%
+    pull(id)
+  p1 <- JaccardRainCloudPlot(subsample_idents_list$data[[row_nb]]$original_ident,
+                             subsample_idents_list$data[[row_nb]]$recluster_ident) + 
+    geom_hline(yintercept = c(0.6, 0.85), linetype = 2) +
+    ylim(c(0,1))+
+          #xlab(plotitle)
+    ggtitle("Jaccard index btw subsample and total data")
+  
+  # UMAP
+  ident <- fullsample_idents %>%
+    dplyr::filter(pc == pc_nb, resolution == res, k_param == knn)  %>%
+    pull(original_ident_full) %>%
+    `[[`(1)
+  seuratobject <- AddMetaData(seuratobject, metadata = ident, col.name = "set1")
+  p2 <- DimPlot(seuratobject, reduction = "umap", label = TRUE, group.by = "set1", repel = TRUE) +
+      ggtitle(plotitle)
+  
+  # Silhouette score
+  Idents(seuratobject) <- seuratobject@meta.data$set1
+  p3 <- SilhouetteRainCloudPlot(CalculateSilhouette(seuratobject, dims=1:pc_nb)) +
+    geom_hline(yintercept = 0, linetype = 2) +
+    ylim(c(-0.6,0.6))+
+    ggtitle("Cluster separation (silhouette width)")
+  
+  print(p2 | p1 | p3)
+}
+```
+
+
+
+
+## 4. scClustEval on thymic iNKT cells
+
+```{r import-data-inkt}
+# Import data
+nkt.seur <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
+nkt.subsampling  <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_subsample.rds")
+nkt.fullsample <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_full_sample.rds")
+
+# Take quick peek at the data
+# nkt.seur
+# nkt.seur@meta.data
+DimPlot(nkt.seur)
+
+# Preprocess data to have UMAP computed on nkt cells
+# nkt.sct_split <- Preprocess(seuratobject = nkt.seur, SCTsplit = T, harmony_vars = c("Sex", "Method"), printComputation = F)
+# DimPlot(nkt.sct_split, group.by="Donor") # sanity check
+nkt.sct_merged <- Preprocess(seuratobject = nkt.seur, SCTsplit = F, harmony_vars = c("Sex", "Method"), printComputation = F)
+DimPlot(nkt.sct_merged, group.by="Donor") # sanity check
+ElbowPlot(nkt.sct_merged, ndims=50)
+```
+
+
+### 4.1. Explore different parameters on NKT dataset
+
+```{r nkt-full-data, width=15}
+## nb of clusters for each different combination of parameter set
+nkt.fullsample %>%
+  mutate(cluster_num = purrr::map_dbl(original_ident_full, ~length(unique(.x)))) %>% # 4 to 15 clusters
+  arrange(cluster_num)
 
 
 # Look at some different parameter sets
-paramUMAP(seur.harmony, res=c(0.4, 0.7, 1))
-paramUMAP(seur.harmony, knn=c(10, 20, 50))
-paramUMAP(seur.harmony, res=c(0.4, 0.7, 1), knn=c(50, 20, 10))
+paramUMAP(nkt.sct_merged, fullsample_idents=nkt.fullsample, pc_nb=c(20,15,10), res=c(0.4, 0.7,1), knn=c(50, 20,10)) # lowest & highest number of clusters
+paramUMAP(nkt.seur,       fullsample_idents=nkt.fullsample, pc_nb=c(20,15,10), res=c(0.4, 0.7,1), knn=c(50, 20,10)) # lowest & highest number of clusters
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/lowest_highest_cluster_nb2.jpeg", width=15, height=5)
+```
 
 
-## nb of clusters for each different combination of parameter set
-fullsample_idents %>%
-  mutate(cluster_num = purrr::map_dbl(original_ident_full, ~length(unique(.x)))) # 5 to 15 clusters
+### 4.2. Look at stable clusters with the subsampling
+
+```{r nkt-subsampling}
+# Remodel subsample_idents
+nkt.subsampling
+nkt.subsampling_list <- nkt.subsampling %>% 
+  group_by(pc, resolution, k_param) %>% 
+  nest()
+
+# Identify NKT stable clusters
+nkt.stableClust <- nkt.subsampling_list %>%
+    mutate(stable_cluster = map(data, ~ AssignStableCluster(.x$original_ident,
+                                                          .x$recluster_ident,
+                                                          jaccard_cutoff = 0.6,
+                                                          method = "jaccard_median"))) 
+                                                          #percent_cutoff = 0.70)))
+
+# Plot total number of clusters and number of stable clusters
+ParameterSetScatterPlot(stable_clusters = nkt.stableClust,
+                        fullsample_idents = nkt.fullsample,
+                        x_var = "k_param",
+                        y_var = "number",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_stableclusters1.jpeg", width=7, height=5)
+
+# Plot percentage of cells in stable clusters
+ParameterSetScatterPlot(stable_clusters = nkt.stableClust,
+                        fullsample_idents = nkt.fullsample,
+                        x_var = "k_param",
+                        y_var = "percentage",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") +
+  ggtitle("% of cells in stable clusters")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_stableclusters2.jpeg", width=6, height=5)
+
+
+# Look at parameter set of interest
+
+# Call function
+subsampling(nkt.sct_merged, fullsample_idents=nkt.fullsample, subsample_idents_list=nkt.subsampling_list, pc_nb=15, res=0.7, knn=50)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_pc10-res07-k20.jpeg", width=15, height=5)
+
+
+# Verification scClustEval vs local
+# test <- nkt.sct_merged
+# ident <- nkt.fullsample %>%
+#     dplyr::filter(pc == 15, resolution == 0.7, k_param == 50)  %>%
+#     pull(original_ident_full) %>%
+#     `[[`(1)
+# test <- AddMetaData(test, metadata = ident, col.name = "scclusteval")
+# b <- DimPlot(test, reduction = "umap", label = TRUE, group.by = "scclusteval", repel = TRUE) +
+#       ggtitle("pc=15, res=0.7, k=50 | scClustEval")
+# 
+# test <- FindNeighbors(object = test, dims = 1:15, assay = "SCT", reduction = "harmony", verbose=F, k.param = 50) %>%
+#     FindClusters(resolution = 0.7, verbose=F, random.seed=42)
+# c <- DimPlot(test) + ggtitle ("pc=15, res=0.7, k=50 | local computer")
+# 
+# ggpubr::ggarrange(a,b,c, ncol=3, widths=c(1,0.8,0.8))
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_pc15-res07-k50.jpeg", width=17, height=5)
 
 ```
+
+
+
+
+## 5. scClustEval on thymic MAIT cells
+
+```{r import-data-mait}
+# Import data
+mait.seur <- readRDS("../../data/07_scClustEval/input/mait_object_22-11-10.rds")
+mait.subsampling  <- readRDS("../../data/07_scClustEval/thymic_mait/gather_subsample.rds")
+mait.fullsample <- readRDS("../../data/07_scClustEval/thymic_mait/gather_full_sample.rds")
+
+# Take quick peek at the data
+# mait.seur
+# mait.seur@meta.data
+DimPlot(mait.seur)
+
+# Preprocess data to have UMAP computed on nkt cells
+# mait.sct_split <- Preprocess(seuratobject = mait.seur, SCTsplit = T, harmony_vars = c("Sex", "Method"), printComputation = F)
+# DimPlot(mait.sct_split, group.by="Donor") # sanity check
+mait.sct_merged <- Preprocess(seuratobject = mait.seur, SCTsplit = F, harmony_vars = c("Sex", "Method"), printComputation = F)
+DimPlot(mait.sct_merged, group.by="Donor") # sanity check
+ElbowPlot(mait.sct_merged, ndims=50)
+```
+
+## 5.2. Look at stable clusters with the subsampling
+
+```{r mait-subsampling}
+# Remodel subsample_idents
+mait.subsampling
+mait.subsampling_list <- mait.subsampling %>% 
+  group_by(pc, resolution, k_param) %>% 
+  nest()
+
+# Identify MAIT stable clusters
+mait.stableClust <- mait.subsampling_list %>%
+    mutate(stable_cluster = map(data, ~ AssignStableCluster(.x$original_ident,
+                                                          .x$recluster_ident,
+                                                          jaccard_cutoff = 0.85,
+                                                          method = "jaccard_median"))) 
+                                                          #percent_cutoff = 0.70)))
+
+# Plot total number of clusters and number of stable clusters
+ParameterSetScatterPlot(stable_clusters = mait.stableClust,
+                        fullsample_idents = mait.fullsample,
+                        x_var = "k_param",
+                        y_var = "number",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_stableclusters1_2.jpeg", width=7, height=7)
+
+# Plot percentage of cells in stable clusters
+ParameterSetScatterPlot(stable_clusters = mait.stableClust,
+                        fullsample_idents = mait.fullsample,
+                        x_var = "k_param",
+                        y_var = "percentage",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") +
+  ggtitle("% of cells in stable clusters")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_stableclusters2_2.jpeg", width=6, height=7)
+
+
+# Look at parameter set of interest
+
+# Call function
+subsampling(mait.sct_merged, fullsample_idents=mait.fullsample, subsample_idents_list=mait.subsampling_list, pc_nb=10, res=0.2, knn=40)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_pc10-res02-k30.jpeg", width=15, height=5)
+
+# ElbowPlot(test)
+# test <- mait.sct_merged
+# test <- FindNeighbors(object = test, dims = 1:10, k.param = 20, assay = "SCT", reduction = "harmony", verbose=F) %>%
+#   FindClusters(resolution = 0.2, verbose=F, random.seed=42)
+# DimPlot(test)
+```
+
+
+
+
+## 6. scClustEval on thymic gdT cells
+
+```{r import-data-gdt}
+# Import data
+gdt.seur <- readRDS("../../data/07_scClustEval/input/gdt_object_22-11-10.rds")
+gdt.subsampling  <- readRDS("../../data/07_scClustEval/thymic_gdt/gather_subsample.rds")
+gdt.fullsample <- readRDS("../../data/07_scClustEval/thymic_gdt/gather_full_sample.rds")
+
+# Take quick peek at the data
+# gdt.seur
+# gdt.seur@meta.data
+DimPlot(gdt.seur)
+
+# Preprocess data to have UMAP computed on nkt cells
+# gdt.sct_split <- Preprocess(seuratobject = gdt.seur, SCTsplit = T, harmony_vars = c("Sex", "Method"), printComputation = F)
+# DimPlot(gdt.sct_split, group.by="Donor") # sanity check
+gdt.sct_merged <- Preprocess(seuratobject = gdt.seur, SCTsplit = F, harmony_vars = c("Sex", "Method"), printComputation = F)
+DimPlot(gdt.sct_merged, group.by="Donor") # sanity check
+ElbowPlot(gdt.sct_merged, ndims=50)
+```
+
+## 5.2. Look at stable clusters with the subsampling
+
+```{r gdt-subsampling}
+# Remodel subsample_idents
+gdt.subsampling
+gdt.subsampling_list <- gdt.subsampling %>% 
+  group_by(pc, resolution, k_param) %>% 
+  nest()
+
+# Identify gdT stable clusters
+gdt.stableClust <- gdt.subsampling_list %>%
+    mutate(stable_cluster = map(data, ~ AssignStableCluster(.x$original_ident,
+                                                          .x$recluster_ident,
+                                                          jaccard_cutoff = 0.6,
+                                                          method = "jaccard_median")))
+                                                          #percent_cutoff = 0.70)))
+
+# Plot total number of clusters and number of stable clusters
+ParameterSetScatterPlot(stable_clusters = gdt.stableClust,
+                        fullsample_idents = gdt.fullsample,
+                        x_var = "k_param",
+                        y_var = "number",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_stableclusters1.jpeg", width=7, height=5)
+
+# Plot percentage of cells in stable clusters
+ParameterSetScatterPlot(stable_clusters = gdt.stableClust,
+                        fullsample_idents = gdt.fullsample,
+                        x_var = "k_param",
+                        y_var = "percentage",
+                        facet_rows = "resolution",
+                        facet_cols = "pc") +
+  ggtitle("% of cells in stable clusters")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_stableclusters2.jpeg", width=6, height=5)
+
+
+# Look at parameter set of interest
+
+# Call function
+subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=15, res=0.4, knn=20)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc15-res04-k20.jpeg", width=15, height=5)
+subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=0.4, knn=10)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc20-res04-k10.jpeg", width=15, height=5)
+subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=1, knn=20)
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc20-res1-k20.jpeg", width=15, height=5)
+
+subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=0.7, knn=20)
+
+# ElbowPlot(test)
+# test <- gdt.sct_merged
+# test <- FindNeighbors(object = test, dims = 1:10, k.param = 20, assay = "SCT", reduction = "harmony", verbose=F) %>%
+#   FindClusters(resolution = 0.2, verbose=F, random.seed=42)
+# DimPlot(test)
+```
+
 

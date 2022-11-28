@@ -20,6 +20,7 @@ library(tidyverse)
 library(dplyr)
 library(harmony)
 library(Seurat)
+library(RColorBrewer)
 ```
 
 ```{r import-data}
@@ -31,6 +32,8 @@ print(seur.human) # 79,801 cells (it's the whole seurat object)
 
 # Quick visualization
 DimPlot(seur.human)
+
+FeatureScatter(subset(seur.human, subset= Tissue=="PBMC"), feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Method")
 ```
 
 ```{r export-seurat-human-scclusteval, include=FALSE}
@@ -90,7 +93,7 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
   # Run PCA (don't scale data when using SCTransform)
   cat("\n2-Run PCA pre-integration")
   seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=printComputation)
-  p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
+  p1 <- DimPlot(seur.SCT, reduction = "pca", group.by = "Batch") + ggtitle("PCA pre-integration")
   ElbowPlot(seur.SCT)
   cat("\nSeurat object pre-integration:\n")
   print(seur.SCT)
@@ -112,7 +115,7 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
     FindClusters(resolution = res, verbose=printComputation, random.seed=42)
   
   # Show PCA after integration
-  p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "orig.ident") + ggtitle("PCA post-integration")
+  p2 <- DimPlot(seur.harmony, reduction = "harmony", group.by = "Batch") + ggtitle("PCA post-integration")
   
   print(p1 | p2)
   
@@ -127,28 +130,7 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
 #__________________
 
 # Gene signatures from Park paper
-# DN_score <- list(c("AC002454.1", "CD7", "IGLL1", "RCBTB2", "SMIM24", "TPM4", "C1orf228", "CTHRC1", "CKLF",
-#                    "SELL", "MLLT11", "CDK6", "MZB1", "SPNS3", "IFITM1", "CD34", "CD82", "SERPINB1", "LPAR6", "ETV5")) # negative control (DNearly)
-# DN_score <- list(c("PTCRA", "MAL", "JCHAIN", "CD1E", "ADA", "UGT3A2", "LRRC28", "IL7R", "LIMS2", "RP11-404O13.5",
-#                    "TRDC", "ATP6AP1L", "ID1", "SELL", "GALNT2", "AC011893.3", "ADGRG1", "TFDP2", "MSI2", "CD7")) # negative control (DNQ)
-DPq_score <- list(c("SH3TC1", "CD8B", "RAG2", "CD1B", "ELOVL4", "RAG1", "LYST", "LTB", "SMPD3", "SIT1",
-                    "AQP3", "CD38", "PTCRA", "CD8A", "NFATC3", "CD52", "RP11-620J15.3", "ARPP21", "H1FX", "AEBP1"))
-DPp_score <- list(c("SMPD3", "CD8A", "CD1E", "UHRF1", "RP11-144L1.4", "SH3TC1", "CD8B", "CD1B", "CD1A", "ELOVL4",
-                    "TCF7", "SH2D1A", "ANAPC15", "ACOT7", "AQP3", "TTK", "SMC2", "PITPNM2", "HNRNPR", "CHRNA3"))
-Cd8aa1_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "TRAC", "PRKCH", "CD28", "LCP2", "CD2", "IKZF1", "AQP3", "CD8A",
-                      "GNG4", "SH3BGRL3", "LIMD2", "ELOVL5", "TOX", "SH2D1A", "CAPZA1", "XCL1"))
-Cd8aa2_score <- list(c("CTSW", "TRGC2", "SMC4", "CD7", "IKZF2", "ZNF683", "ACTN1", "SMIM24", "HCST", "MME", "CD8A",
-                       "TRG-AS1", "RGS2", "RTKN2", "PPP2R5C", "ID3", "TRGC1", "CLEC2D", "DCXR", "ELF1", "CPNE7"))
-NKT_score <- list(c("GZMK", "NKG7", "CST7", "GZMM", "XCL1", "SAMD3", "CCL5", "GIMAP4", "ITM2C", "CD8A",
-                    "CLEC2B", "IL32", "TRGC1", "HSPD1", "TRDC", "LITAF", "HSPA1B", "CD44", "PYHIN1", "HSPA1A"))
-SPentry_score <- list(c("SATB1", "TOX2", "CHI3L2", "CCR9", "ITM2A", "AIF1", "RPS4Y1", "TRAC", "ANKRD44", "FYB", "ODF2L",
-                   "EPHB6", "CCT2", "BANF1", "POLR2J3", "ANXA6", "NUDC", "MAD1L1", "CD1A", "CD1E"))
-Tago_score <- list(c("UBE2F", "DHRS3", "MAGEH1", "ITM2A", "C1orf228", "SMS", "BACH2", "TNFRSF1B", "COTL1",
-                     "SERPINE2", "NREP", "LCP2", "CD247", "LAT", "ITGAE", "VASP", "CREM", "CD40LG", "PHB", "CCND2"))
-gdT_score <- list(c("TRDC", "ANXA1", "LAT", "SELL", "CCR9", "SMPD3", "FCGRT", "TESPA1", "SH3BP5", "AES", "TDG",
-                    "LIMD2", "SEMA4D", "MYL6B", "CD247", "ARL4C", "ID3", "RTKN2", "MLLT11", "TRGC2"))
-NK_score <- list(c("GNLY", "TYROBP", "KLRD1", "NKG7", "KLRC1", "CMC1", "KLRB1", "XCL2", "KLRF1", "HOPX",
-                   "FCER1G", "CTSW", "PRF1", "MATK", "GZMB", "CCL3", "IL2RB", "IFITM2", "GZMH", "XCL1"))
+parksignatures <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/park_genesignatures.csv", row.names=1)
 Egress <- list(c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
                  "S100A4", "S100A6", "EMP3"))
 
@@ -170,6 +152,150 @@ signatures <- function(seuratobject=NKT_SCTmerged, scorelist=DN_score, scorename
                          reduction = "umap",
                          viridis_color_map = "inferno")
 }
+```
+
+
+
+
+
+# THYMIC CONVENTIONAL T CELLS
+
+## 1. Preprocessing
+
+```{r cd4cd8-thym-preprocessing, fig.width=10}
+# Isolate CD4 and CD8 T cells
+CD4CD8_Thymus <- subset(seur.human, ident = c("CD4_Thymus", "CD8_Thymus")) # 27351 cells
+
+# Quick QC
+FeatureScatter(CD4CD8_Thymus, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch")
+FeatureScatter(CD4CD8_Thymus, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Batch")
+
+# PREPROCESS
+CD4CD8_SCTsplit <- Preprocess(seuratobject = CD4CD8_Thymus, SCTsplit = T, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+CD4CD8_SCTmerged <- Preprocess(seuratobject = CD4CD8_Thymus, SCTsplit = F, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+```
+
+
+## 2. Visualize
+
+### 2.1. CD4/CD8 UMAP with SCTransform on split vs merged data
+
+```{r cd4cd8-thym-umap, fig.width=10}
+# Sanity checks
+# DimPlot(CD4CD8_SCTsplit, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on split data") |
+#   DimPlot(CD4CD8_SCTmerged, dims = 1:2, reduction = "umap", group.by = "Donor", label = T) + ggtitle("SCT on merged data")
+
+# Look at clusters
+DimPlot(CD4CD8_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on split data") |
+  DimPlot(CD4CD8_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged.jpeg", width = 12, height=6)
+# Look at CD4/CD8 separation
+DimPlot(CD4CD8_SCTsplit, dims = 1:2, reduction = "umap", group.by = "cell.ident", label = T) + ggtitle("SCT on split data") |
+  DimPlot(CD4CD8_SCTmerged, dims = 1:2, reduction = "umap", group.by = "cell.ident", label = T) + ggtitle("SCT on merged data")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged2.jpeg", width = 12, height=6)
+
+# Look at some features
+SCpubr::do_FeaturePlot(sample = CD4CD8_SCTsplit, 
+                       features = c("CD4", "CD8A", "CD8B", "FOXP3"),
+                       # plot.title = paste(celltype, "cells"),
+                       order=T,
+                       ncol=4,
+                       reduction = "umap",
+                       viridis_color_map = "inferno")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_featureexpression.jpeg", width = 18, height=6)
+```
+
+### 2.2. CD4/CD8 T gene signatures
+
+```{r mait-signatures}
+# Look at gene signatures
+Cd8aa1_score <- list(c("NUCB2", "CD27", "LEF1", "PTPN7", "TRAC", "PRKCH", "CD28", "LCP2", "CD2", "IKZF1", "AQP3",
+                      "GNG4", "SH3BGRL3", "LIMD2", "ELOVL5", "TOX", "SH2D1A", "CAPZA1", "XCL1"))
+Cd8aa2_score <- list(c("CTSW", "TRGC2", "SMC4", "CD7", "IKZF2", "ZNF683", "ACTN1", "SMIM24", "HCST", "MME",
+                       "TRG-AS1", "RGS2", "RTKN2", "PPP2R5C", "ID3", "TRGC1", "CLEC2D", "DCXR", "ELF1", "CPNE7"))
+
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$gdT), scorename="gdT_score") # negative control
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_1.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DPq),  scorename="DPq_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_2.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DPp),  scorename="DPp_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_3.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa1),  scorename="CD8aa1_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_4.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_5.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$NKT),     scorename="NKT_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_6.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$abT_entry), scorename="SPentry_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_7.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$T_agonist),    scorename="Tagonist_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_8.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=Egress,    scorename="Egress_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_9.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD4T),    scorename="CD4T_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_10.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Th17),    scorename="Th17_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_11.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Treg),    scorename="Treg_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_12.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Treg_diff),  scorename="Treg_diff_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_13.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8T),  scorename="CD8T_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_14.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8T_mem),  scorename="CD8Tmem_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_15.jpeg", width=9, height=7)
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DN_early),    scorename="DNearly_score") |
+  signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DNp),    scorename="DNp_score") |
+  signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DNq),    scorename="DNq_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_16.jpeg", width=18, height=7)
+
+signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score") |
+  signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score") |
+  SCpubr::do_DimPlot(sample = CD4CD8_SCTsplit, cells.highlight = WhichCells(seur.human, idents="CD4_Thymus"), reduction = "umap", plot.title="CD4 T cells", legend.position="none")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_17.jpeg", width=18, height=7)
+```
+
+```{r}
+# Isolate CD4 T cells
+CD4_Thymus <- subset(seur.human, ident = "CD4_Thymus") # 16590 cells
+
+# PREPROCESS
+CD4_SCTmerged <- Preprocess(seuratobject = CD4_Thymus, SCTsplit = F, res = 0.3, harmony_vars = c("Sex", "Method"), printComputation = F)
+
+# sanity check
+# DimPlot(CD4_SCTmerged, dims = 1:2, reduction = "umap", split.by = "Donor", label = T) + ggtitle("SCT on merged data")
+
+# Clusters
+DimPlot(CD4_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
+
+# Signature genes
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$DN_early),    scorename="DNearly_score") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$DNp),    scorename="DNp_score") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$DNq),    scorename="DNq_score")
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$DPq),  scorename="DPq_score") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$DPp),  scorename="DPp_score")
+
+DimPlot(CD4_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("Thymic CD4 T cells") |
+ SCpubr::do_FeaturePlot(sample = CD4_SCTmerged, features = "CD4", plot.title="CD4 cells", order=T, reduction = "umap",viridis_color_map = "inferno") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4_parksignatures_1.jpeg", width=23, height=7)
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "With CD8A gene | CD4", scorelist=list(parksignatures$CD8aa1),  scorename="CD8aa1_score") |
+  signatures(seuratobject=CD4_SCTmerged, celltype = "Without CD8A gene | CD4", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4_parksignatures_2.jpeg", width=14, height=7)
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$abT_entry), scorename="SPentry_score")
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$T_agonist),    scorename="Tagonist_score")
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$Treg_diff),  scorename="Treg_diff_score")
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$Treg),    scorename="Treg_score")
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$CD4T),    scorename="CD4T_score")
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$Th17),    scorename="Th17_score")
+
+signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=Egress,    scorename="Egress_score")
 ```
 
 
@@ -380,6 +506,7 @@ gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, 
 # Look at clusters
 DimPlot(gdT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on split data") |
   DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.4", label = T) + ggtitle("SCT on merged data")
+
 ```
 
 ### 2.2. gdT gene signatures

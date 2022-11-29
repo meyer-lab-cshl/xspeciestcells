@@ -14,13 +14,13 @@ output:
 
 ```{r import-librairies, message=FALSE}
 # Libraries
-library(ggplot2)
-library(cowplot)
+#library(ggplot2)
+#library(cowplot)
 library(Seurat)
-library(SeuratWrappers)
-library(harmony)
+#library(SeuratWrappers)
 library(tidyverse)
-library(scclusteval)
+library(harmony)
+#library(scclusteval)
 ```
 
 ```{r import-data}
@@ -187,6 +187,8 @@ nkt.fullsample %>%
 ```{r scclusteval-preprocess}
 PreprocessSClustEval <- function(seuratobject, variable.features.n=3000, num.pc=50, resolution=0.5, pc.use=15, k.param=20){
   
+  set.seed(123)
+  
   # Extract the counts data (from RNA assay) and metadata
   counts <- GetAssayData(object = seuratobject, slot = "counts", assay="RNA")
   metadata <- seuratobject@meta.data
@@ -209,16 +211,16 @@ PreprocessSClustEval <- function(seuratobject, variable.features.n=3000, num.pc=
                         # new.assay.name="SCT",
                         vars.to.regress=vars.to.regress,
                         variable.features.n=variable.features.n,
-                        # seed.use = 1448145,
-                        verbose=F)
+                        seed.use = 1448145,
+                        verbose=T)
   
   # Run PCA (don't scale data when using SCTransform)
   cat("\n2-Run PCA pre-integration with", num.pc, "PCs\n")
   object <- RunPCA(object = object,
                      features = VariableFeatures(object=object),
-                     # assay = "SCT",
+                     assay = "SCT",
                      npcs = num.pc,
-                     # seed.use=42,
+                     seed.use=42,
                      verbose=T)
   # p1 <- DimPlot(object, reduction = "pca", group.by = "orig.ident") + ggtitle("PCA pre-integration")
   # ElbowPlot(object)
@@ -247,11 +249,12 @@ PreprocessSClustEval <- function(seuratobject, variable.features.n=3000, num.pc=
   
   cat("\n4-Run Clustering on", pc.use, "PCs and", k.param, "neighbors with", resolution, "resolution\n")
   object <- FindNeighbors(object, dims = 1:pc.use, k.param = k.param, nn.eps = 0,
-                               verbose = FALSE, reduction = "harmony", force.recalc = TRUE)
+                               verbose = T, reduction = "harmony", force.recalc = TRUE)
   object <- FindClusters(object = object,
                         n.start = 100,
                         resolution = resolution,
-                        verbose = FALSE)
+                        verbose = T,
+                        random.seed=0)
   cat("\nNumber of clusters:", length(levels(object@meta.data$seurat_clusters)))
 
   # Show PCA after integration
@@ -296,6 +299,119 @@ comparescClustEval <- function(seuratoplot, seuratlocalscClustEval, fullsample_i
     rel_heights = c(0.1, 1) # rel_heights values control vertical title margins
   )
 }
+```
+
+
+```{r}
+troubleshoot <- function(object,
+                          variable.features.n = 3000,
+                                num.pc = 50,
+                                pc.use = NULL,
+                                #workers = 2,
+                                score.thresh = 1e-5,
+                                sig.pc.thresh = 0.05,
+                                n.start = 100,
+                                nn.eps = 0,
+                                resolution = 0.8,
+                                k.param = 30,
+                                useSCTransform = TRUE){
+  
+  set.seed(123)
+
+        if(!is.null(pc.use)){
+                if(pc.use > num.pc){
+                        stop("Specify the maximum pc.use number as less than or equal to the total num.pc")                                                           
+                }
+        }
+
+        # Extract the counts data (from RNA assay) and metadata
+        counts <- GetAssayData(object=object, slot="counts", assay="RNA")
+        metadata <- object@meta.data
+        # Create new seurat object with only the counts and the "cleaned" metadata
+        initseurat <- CreateSeuratObject(counts=counts, meta.data=metadata, min.cells=20) # keep only genes expressed in at least 20 cells                            
+
+        # sanity check
+        cat("Initial seurat object:\n")
+        print(initseurat) # this is for sanity check
+
+        ## use future for parallelization
+        ##future::plan("multiprocess", workers = workers)
+        meta.data.colnames<- initseurat@meta.data %>% colnames()
+        vars.to.regress<- c("percent.mt","nFeature_RNA")
+        # in case the seurat object does not have percent.mito in metadata
+        vars.to.regress<- vars.to.regress[vars.to.regress %in% meta.data.colnames]
+        # default is on variable features only, omit the features argument
+        # SCTransform replaces NormalizeData, ScaleData and FindVariableFeatures
+        
+        if(useSCTransform==TRUE){
+                cat("\n1-Perform SCTransform")
+                object<- SCTransform(initseurat, vars.to.regress = vars.to.regress,
+                                     variable.features.n = variable.features.n, verbose = FALSE, seed.use=1448145)  
+        }else{
+                stop("The SCTransform method for normalization is the only method supported by this function.  If you wish to use the approach that involves NormalizeData, ScaleData, and FindVariableFeatures and enables use of the Jackstraw procedure for determining which PCs to use please use the PreprocessSubsetDataV2 function from the scclusteval R package.")
+                
+        }
+        
+        cat("\n2-Run PCA pre-integration with", num.pc, "PCs\n")
+        object<- RunPCA(object = object, assay="SCT", features = VariableFeatures(object = object),
+                        npcs = num.pc, seed.use=42)
+
+        # if (is.null(pc.use)){
+        #         object<- JackStraw( object = object, num.replicate = 100, dims = num.pc)
+        # 
+        #         object <- ScoreJackStraw(object = object, dims = 1:num.pc, score.thresh = score.thresh)
+        # 
+        #         PC_pvalues<- object@reductions$pca@jackstraw@overall.p.values
+        # 
+        #         ## determin how many PCs to use.
+        #         pc.use<- min(which(PC_pvalues[,"Score"] > sig.pc.thresh)) -1
+        # 
+        # }
+        
+        if(is.null(pc.use)){
+                pc.use <- num.pc
+                message("SCTransform is being used and the Jackstraw procedure for determining which PCs to use is not compatable with this procedure. Since pc.use was not specified it is being automatically set to num.pc")
+        }
+
+        # add significant pc number to metadata, need to have names same as the cells
+        pc.use.meta<- rep(pc.use, length(colnames(object)))
+        names(pc.use.meta)<- colnames(object)
+        object<- AddMetaData(object = object, metadata = pc.use.meta, col.name = "pc.use")
+
+        cat("\nSeurat object pre-integration:\n")
+        print(object)
+        cat("\nColumns metadata Seurat object:\n")
+        print(colnames(object@meta.data))
+
+        # run integration
+        cat("\n3-Run Harmony on", pc.use, "PCs\n")
+        object <- RunHarmony(object = object, assay.use = "SCT", reduction = "pca", dims.use = 1:pc.use,
+                             max.iter.harmony=30, group.by.vars = c("Sex", "Method"), plot_convergence = FALSE)
+        cat("\nSeurat object post-integration:\n")
+        print(object)
+        
+        # run clustering
+        cat("\n4-Run Clustering on", pc.use, "PCs and", k.param, "neighbors with", resolution, "resolution\n")
+        object <- FindNeighbors(object, dims = 1:pc.use, k.param = k.param, nn.eps = nn.eps,
+                               verbose = TRUE, reduction = "harmony", force.recalc = TRUE)
+        object <- FindClusters(object = object,
+                                n.start = n.start,
+                                resolution = resolution,
+                                verbose = TRUE,
+                                random.seed=0)
+        cat("\nNumber of clusters:", length(levels(object@meta.data$seurat_clusters)), "\n\n")
+        
+        print(sessionInfo())
+
+        return(object)
+
+  
+  
+}
+
+
+nkt.seur <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
+nkt.localscClust <- troubleshoot(object=nkt.seur, pc.use = 15, k.param = 50, resolution = 0.7)
 ```
 
 

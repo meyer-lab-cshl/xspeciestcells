@@ -1,0 +1,119 @@
+---
+title: "Human T cell data - compare DEGs between CD4, CD8, MAIT, NKT, gdT lineages"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+## 1. IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(harmony)
+library(Seurat)
+library(RColorBrewer)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+
+# Sanity check
+print(seur.human) # 79,801 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human)
+```
+
+
+
+
+## 2. Compute DEGs between thymic T cell lineages
+
+### 2.1. Identify CD4, CD8, MAIT, NKT, gdT cells
+```{r identify-cell-types}
+# Get vectors of cell names
+cells.cd4thy <- rownames(seur.human@meta.data[seur.human@meta.data$group.ident=="CD4_Thymus",])
+cells.cd8thy <- rownames(seur.human@meta.data[seur.human@meta.data$group.ident=="CD8_Thymus",])
+cells.maithy <- rownames(seur.human@meta.data[seur.human@meta.data$group.ident=="MAIT_Thymus",])
+cells.nkthy <- rownames(seur.human@meta.data[seur.human@meta.data$group.ident=="NKT_Thymus",])
+cells.gdthy <- rownames(seur.human@meta.data[seur.human@meta.data$group.ident=="GD_Thymus",])
+
+# sanity check
+# table(seur.human@meta.data$group.ident)
+# length(cells.cd4thy)
+# length(cells.cd8thy)
+# length(cells.maithy)
+# length(cells.nkthy)
+# length(cells.gdthy)
+```
+
+
+### 2.2. Calculate DEGs
+```{r deg-thy-cd4vscd8}
+# DEGs on SCTransformed data
+FindMarkers(seur.human, ident.1="CD4_Thymus", ident.2="CD8_Thymus", logfc.threshold = 0.25)
+
+# SCTransform vignette
+seur.human.sctprep <- PrepSCTFindMarkers(seur.human)
+seur.human.sctprep <- subset(seur.human.sctprep, idents = c("CD4_Thymus", "CD8_Thymus"))
+degs.sct <- FindMarkers(seur.human.sctprep, assay = "SCT", ident.1 = "CD4_Thymus", ident.2 = "CD8_Thymus", recorrect_umi = FALSE)
+degs.sct %>%
+  arrange(avg_log2FC)
+
+# Try on log normalized data
+counts <- GetAssayData(object = seur.human, slot = "counts", assay="RNA")
+metadata <- seur.human@meta.data
+initseurat <- CreateSeuratObject(counts = counts, meta.data = metadata, min.cells=1) # keep only genes expressed in at least 1 cell
+seur.norm <- NormalizeData(object=initseurat, normalization.method = "LogNormalize")
+seur.norm <- ScaleData(object=seur.norm, features=rownames(seur.norm))
+Idents(seur.norm) <- "group.ident"
+levels(Idents(seur.norm))
+degs.lognorm <- FindMarkers(seur.norm, ident.1="CD4_Thymus", ident.2="CD8_Thymus", logfc.threshold = 0.4)
+degs.lognorm %>%
+  arrange(avg_log2FC)
+
+# Look at other comparisons
+FindMarkers(seur.norm, ident.1="CD4_Thymus", ident.2="NKT_Thymus", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+FindMarkers(seur.norm, ident.1="CD4_Thymus", ident.2="MAIT_Thymus", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+FindMarkers(seur.norm, ident.1="CD8_Thymus", ident.2="NKT_Thymus", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+FindMarkers(seur.norm, ident.1="CD8_Thymus", ident.2="MAIT_Thymus", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+FindMarkers(seur.norm, ident.1="NKT_Thymus", ident.2="MAIT_Thymus", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+
+# Look at DEGs across batches from the same cell type
+test <- subset(seur.norm, subset= group.ident=="CD8_Thymus")
+Idents(test) <- "Batch"
+levels(Idents(test))
+FindMarkers(test, ident.1="B", ident.2="C", logfc.threshold = 0.4) %>% arrange(avg_log2FC)
+```
+
+```{r deg-thy-cd4vsrest}
+# Thymic CD4 T cells vs rest
+seur.thymus <- subset(seur.norm, subset= Tissue=="Thymus")
+degs.lognorm.cd4 <- FindMarkers(seur.thymus, ident.1="CD4_Thymus", logfc.threshold = 0.4)
+degs.lognorm.cd4 %>%
+  arrange(avg_log2FC)
+
+
+# Thymic CD8 T cells vs rest
+degs.lognorm.cd8 <- FindMarkers(seur.thymus, ident.1="CD8_Thymus", logfc.threshold = 0.4)
+degs.lognorm.cd8 %>%
+  arrange(avg_log2FC) # 274
+
+
+# Thymic NKT T cells vs rest
+degs.lognorm.cd8 <- FindMarkers(seur.thymus, ident.1="NKT_Thymus", logfc.threshold = 0.4)
+degs.lognorm.nkt %>%
+  arrange(avg_log2FC)
+```
+
+

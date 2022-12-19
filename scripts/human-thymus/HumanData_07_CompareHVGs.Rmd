@@ -100,9 +100,9 @@ getHVG <- function(seuratobject, cells, nfeatures=2000){
 ```{r hvg-Tcelllineage}
 # Call function to get HVGs for each cell lineage
 hvg.cd4cd8 <- getHVG(seuratobject = initseurat, cells=c("CD4_Thymus", "CD8_Thymus"))
-hvg.nkt <- getHVG(seuratobject = initseurat, cells="NKT_Thymus")
-hvg.mait <- getHVG(seuratobject = initseurat, cells="MAIT_Thymus")
-hvg.gdt <- getHVG(seuratobject = initseurat, cells="GD_Thymus")
+hvg.nkt    <- getHVG(seuratobject = initseurat, cells="NKT_Thymus")
+hvg.mait   <- getHVG(seuratobject = initseurat, cells="MAIT_Thymus")
+hvg.gdt    <- getHVG(seuratobject = initseurat, cells="GD_Thymus")
 hvg.thymus <- getHVG(seuratobject = initseurat, cells=c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus"))
 ```
 
@@ -119,10 +119,12 @@ path.plots <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HV
 
 
 # Between all
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.mait, hvg.nkt, hvg.gdt, hvg.cd4cd8, hvg.all),
   category.names = c("thymMAIT" , "thymNKT", "thymGDT", "thymCD4CD8", "Integrated"),
-  filename = file.path(path.plots, 'compareall.jpeg'),
+  # filename = file.path(path.plots, 'compareall.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
@@ -133,106 +135,120 @@ venn.diagram(
   cat.pos = c(0, -20, 240, 150, 20),
   cat.dist = c(0.18, 0.2, 0.22,0.2,0.2),
   cat.cex = 1,
-  cat.fontface = "bold"
-)
+  cat.fontface = "bold",
+))
 
 
 # Between conventional T & integrated data
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.all, hvg.cd4cd8),
   category.names = c("Integrated" , "thymCD4CD8"),
-  filename = file.path(path.plots, 'integratedVScd4cd8.jpeg'),
+  # filename = file.path(path.plots, 'integratedVScd4cd8.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = c("#F4CAE4", "#FFF2AE")
-)
+))
 # length(intersect(hvg.all, hvg.cd4cd8)) # 1176 sanity check
 
 
 # Between MAIT & integrated data
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.all, hvg.mait),
   category.names = c("Integrated" , "thymMAIT"),
-  filename = file.path(path.plots, 'integratedVSmait.jpeg'),
+  # filename = file.path(path.plots, 'integratedVSmait.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = c("#F4CAE4", "#B3E2CD")
-)
+))
 
 
 # Between NKT & integrated data
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.all, hvg.nkt),
   category.names = c("Integrated" , "thymNKT"),
-  filename = file.path(path.plots, 'integratedVSnkt.jpeg'),
+  # filename = file.path(path.plots, 'integratedVSnkt.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = c("#F4CAE4", "#FDCDAC")
-)
+))
 
 
 # Between GDT & integrated data
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.all, hvg.gdt),
   category.names = c("Integrated" , "thymGDT"),
-  filename = file.path(path.plots, 'integratedVSgdt.jpeg'),
+  # filename = file.path(path.plots, 'integratedVSgdt.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = c("#F4CAE4", "#CBD5E8")
-)
+))
 
 
 # Between innate T & integrated data
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.mait, hvg.nkt, hvg.gdt, hvg.all),
   category.names = c("thymMAIT" , "thymNKT", "thymGDT", "Integrated"),
-  filename = file.path(path.plots, 'integratedVSinnate.jpeg'),
+  # filename = file.path(path.plots, 'integratedVSinnate.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = brewer.pal(4, "Pastel2")
-)
+))
 
 
 # Between all T cell lineages
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.mait, hvg.nkt, hvg.gdt, hvg.cd4cd8),
   category.names = c("thymMAIT" , "thymNKT", "thymGDT", "thymCD4CD8"),
-  filename = file.path(path.plots, 'thymicT.jpeg'),
+  # filename = file.path(path.plots, 'thymicT.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = c(brewer.pal(3, "Pastel2"), "#FFF2AE")
-)
+))
 
 
 # Between innate T cell lineages
-venn.diagram(
+grid.newpage()
+grid.draw(venn.diagram(
   x = list(hvg.mait, hvg.nkt, hvg.gdt),
   category.names = c("thymMAIT" , "thymNKT", "thymGDT"),
-  filename = file.path(path.plots, 'innateT.jpeg'),
+  # filename = file.path(path.plots, 'innateT.jpeg'),
+  filename=NULL,
   disable.logging=T,
   # Circles
   lwd = 2,
   lty = 'blank',
   fill = brewer.pal(3, "Pastel2")
-)
+))
 ```
 
 
 ### 3.2. Plot HVGs on expression x variance plot
 
-```{r highlight-hvg-on-expression-plot}
+```{r highlight-hvg-on-expression-plot, width=10}
 # MAIT vs integrated
 setdiff(hvg.mait, hvg.all)[1:10]
 setdiff(hvg.all, hvg.mait)[1:10]

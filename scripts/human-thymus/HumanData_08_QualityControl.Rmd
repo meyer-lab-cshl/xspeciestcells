@@ -1,0 +1,266 @@
+---
+title: "Human T cell data - quality control of the data"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+## 1. IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(SingleCellExperiment)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+
+# Sanity check
+print(seur.human) # 81,378 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Check if mitochondrial & ribosomal genes still in the count data
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "MT")]
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "RP")] # ribosomal genes still present
+```
+
+
+
+
+## 2. QUICK QC
+
+```{r general-qc}
+# Look at qc measures per batch & donor
+VlnPlot(seur.human, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.human, features="nFeature_RNA", group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.human, features="nCount_RNA",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+
+# Look at qc measures per cell group
+VlnPlot(seur.human, features="percent.mt",   group.by="Batch", split.by="group.ident") + labs(x="Batch")
+VlnPlot(seur.human, features="nFeature_RNA", group.by="Batch", split.by="group.ident") + labs(x="Batch")
+VlnPlot(seur.human, features="nCount_RNA",   group.by="Batch", split.by="group.ident") + labs(x="Batch")
+
+# Look at qc measures per cluster
+VlnPlot(seur.human, features="percent.mt",   group.by="new_clusters") + labs(x="Clusters") + theme(legend.position="none")
+VlnPlot(seur.human, features="nFeature_RNA", group.by="new_clusters") + labs(x="Clusters") + theme(legend.position="none")
+VlnPlot(seur.human, features="nCount_RNA",   group.by="new_clusters") + labs(x="Clusters") + theme(legend.position="none")
+
+# Save plots
+# ggsave("~/Downloads/qcplot1.jpeg", width=15, height=6)
+```
+
+```{r qc-correlation}
+# Check correlation between total count & MT content
+FeatureScatter(seur.human, feature1 = "nFeature_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
+FeatureScatter(seur.human, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
+
+# Print one batch at a time
+for(batch in LETTERS[1:9]){
+  print(FeatureScatter(subset(seur.human, subset=Batch==batch), feature1 = "nFeature_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T) |
+          FeatureScatter(subset(seur.human, subset=Batch==batch), feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T))
+}
+
+# Maybe batch G there is a small correlation?
+FeatureScatter(subset(seur.human, subset=Batch=="G"), feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
+FeatureScatter(subset(seur.human, subset=Batch=="A"), feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
+# ggsave("~/Downloads/qcplot_batchG.jpeg", width=8, height=6)
+```
+
+
+
+
+## 3. CHECK WHERE POOR QUALITY CELLS LIE
+
+```{r bad-quality-cells}
+# Tag cells that have
+# percent.mt > 25% | nFeature_RNA < 500
+seur.human@meta.data$poorqc <- case_when(
+  seur.human@meta.data$percent.mt > 25 ~ "lower",
+  seur.human@meta.data$nFeature_RNA < 500 ~ "lower",
+  TRUE ~ "higher"
+)
+
+# sanity checks
+# FeatureScatter(seur.human, feature1 = "nFeature_RNA", feature2 = "percent.mt", group.by="poorqc", pt.size=0.1, jitter=T)
+# FeatureScatter(seur.human, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="poorqc", pt.size=0.1, jitter=T)
+# table(seur.human@meta.data$poorqc)
+
+# See where they lie
+DimPlot(seur.human, reduction="UMAP_50", group.by="poorqc", order=T) +
+  scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="quality")
+# ggsave("~/Downloads/qcplot11.jpeg", width=6, height=5)
+
+
+# Tag "poor quality cells" in a batch-dependent way
+# A: percent.mt > 20
+# B: percent.mt > 20
+# C: percent.mt > 24
+# D: percent.mt > 15
+# E: percent.mt > 27
+# F: percent.mt > 20
+# G: percent.mt > 18
+# H: percent.mt > 20
+# I: percent.mt > 28
+seur.human@meta.data$poorqc <- case_when(
+  seur.human@meta.data$Batch == "A" & seur.human@meta.data$percent.mt > 20 ~ "lower",
+  seur.human@meta.data$Batch == "B" & seur.human@meta.data$percent.mt > 20 ~ "lower",
+  seur.human@meta.data$Batch == "C" & seur.human@meta.data$percent.mt > 24 ~ "lower",
+  seur.human@meta.data$Batch == "D" & seur.human@meta.data$percent.mt > 15 ~ "lower",
+  seur.human@meta.data$Batch == "E" & seur.human@meta.data$percent.mt > 27 ~ "lower",
+  seur.human@meta.data$Batch == "F" & seur.human@meta.data$percent.mt > 20 ~ "lower",
+  seur.human@meta.data$Batch == "G" & seur.human@meta.data$percent.mt > 18 ~ "lower",
+  seur.human@meta.data$Batch == "H" & seur.human@meta.data$percent.mt > 20 ~ "lower",
+  seur.human@meta.data$Batch == "I" & seur.human@meta.data$percent.mt > 28 ~ "lower",
+  TRUE ~ "higher"
+)
+
+# sanity checks
+FeatureScatter(seur.human, feature1 = "nFeature_RNA", feature2 = "percent.mt", group.by="poorqc", pt.size=0.1, jitter=T)
+FeatureScatter(seur.human, feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="poorqc", pt.size=0.1, jitter=T)
+table(seur.human@meta.data$poorqc)
+
+
+# See where they lie
+DimPlot(seur.human, reduction="UMAP_50", group.by="poorqc", order=T) +
+  scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="quality")
+
+# hist(seur.human@meta.data$nFeature_RNA, breaks=1000, xlim=c(400,1500))
+```
+
+
+
+
+## 4. QC ambiant RNA & doublets
+
+### 4.1. Decontamination of ambiant RNA with DecontX
+
+```{r decontX}
+# BiocManager::install("celda")
+# vignette("decontX")
+library(celda)
+library(scater)
+library(scales)
+
+# Make SCE object
+counts <- seur.human@assays$RNA@counts
+metadata <- seur.human@meta.data
+umap <- seur.human[["UMAP_50"]]@cell.embeddings
+sce <- SingleCellExperiment(assays = list(counts = counts), 
+                            colData = metadata,
+                            reducedDims = list(umap = umap)) # 81,378 cells
+# plotReducedDim(sce, dimred="umap", colour_by="new_clusters", point_size=0.5) # sanity check
+
+# Run decontX with new_clusters
+sce.srtclusters <- decontX(sce, z=sce$new_clusters, batch=sce$Batch)
+# plotDimReduceCluster(x = sce.srtclusters$decontX_clusters,
+#     dim1 = reducedDim(sce.srtclusters, "umap")[, 1],
+#     dim2 = reducedDim(sce.srtclusters, "umap")[, 2])
+# plotDecontXContamination(sce, batch="C")
+plotReducedDim(sce.srtclusters, dimred="umap", colour_by="decontX_contamination", point_size=0.1)+
+  scale_colour_gradient2(low=muted("blue"), mid="white", high=muted("red"), midpoint=0.25)+
+  labs(title="decontX on seurat clusters", color="Contamination")
+
+
+# Run decontX with group.ident
+sce.cellident <- decontX(sce, z=sce$cell.ident, batch=sce$Batch)
+plotReducedDim(sce.srtclusters, dimred="umap", colour_by="decontX_contamination", point_size=0.1) +
+  scale_colour_gradient2(low=muted("blue"), mid="white", high=muted("red"), midpoint=0.25)+ labs(title="decontX on seurat clusters", color="Contamination") |
+  plotReducedDim(sce.cellident, dimred="umap", colour_by="decontX_contamination", point_size=0.1) +
+  scale_colour_gradient2(low=muted("blue"), mid="white", high=muted("red"), midpoint=0.25)+ labs(title="decontX on cell identity", color="Contamination")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/QC/decontX.jpeg", width=10, height=5)
+
+
+# Look at correlation between two ways of running decontX
+df1 <- as.data.frame(colData(sce.srtclusters)) %>%
+  select(Batch, Donor, Tissue, group.ident, new_clusters, decontX_contamination) %>%
+  dplyr::rename(decontX_srtclusters = decontX_contamination)
+df2 <- as.data.frame(colData(sce.cellident)) %>%
+  select(Batch, Donor, Tissue, group.ident, new_clusters, decontX_contamination) %>%
+  dplyr::rename(decontX_cellident = decontX_contamination)
+df <- merge(df1, df2, by=c("row.names", "Batch", "Donor", "Tissue", "group.ident", "new_clusters"))
+df$Donor <- as.character(df$Donor)
+
+ggplot(df, aes(x=decontX_srtclusters, y=decontX_cellident, color=Tissue)) +
+  geom_point(size=.1)+
+  scale_color_manual(values=c("#fb6a4a", "#9ecae1"), name="Tissue")+
+  theme_cowplot()+
+  labs(x="decontX on seurat clusters", y="decontX on cell identity", title="Correlation of contamination level (decontX on clusters or cell ID)")
+
+
+# Look at contamination level per batch
+plot_decontX <- function(xvar="Batch"){
+  ggplot(df, aes_string(x=xvar, y="decontX_srtclusters")) +
+    geom_violin() +
+    geom_jitter(size=.1, width=.05) +
+    theme_cowplot()+
+    theme(legend.position="none")+
+    labs(y="decontX on seurat clusters") |
+    ggplot(df, aes_string(x=xvar, y="decontX_cellident")) +
+      geom_violin() +
+      geom_jitter(size=.1, width=.05) +
+      theme_cowplot()+
+      labs(y="decontX on cell identity")
+}
+plot_decontX(xvar="Batch")
+plot_decontX(xvar="Donor")
+plot_decontX(xvar="new_clusters")
+plot_decontX(xvar="group.ident")
+```
+
+
+### 4.2. Doublet detection with scDblFinder (should try scrublet?)
+
+```{r scDblFinder}
+# BiocManager::install("scDblFinder")
+library(scDblFinder)
+library(BiocParallel)
+
+# note: expected doublet rate is 5% (for <10k cells)
+# Run scDblFinder (with seurat clusters)
+set.seed(123)
+sce.srtclusters <- scDblFinder(sce.srtclusters, clusters="new_clusters", samples="Batch", BPPARAM=MulticoreParam(4))
+plotReducedDim(sce.srtclusters, dimred="umap", colour_by="scDblFinder.class", point_size=0.1) +
+  scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="")
+
+
+# Run scDblFinder (with seurat clusters)
+set.seed(123)
+sce.cellident <- scDblFinder(sce.cellident, clusters="cell.ident", samples="Batch", BPPARAM=MulticoreParam(4))
+
+plotReducedDim(sce.srtclusters, dimred="umap", colour_by="scDblFinder.class", point_size=0.1) + labs(title="scDblFinder on seurat clusters")+
+  scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="") |
+  plotReducedDim(sce.cellident, dimred="umap", colour_by="scDblFinder.class", point_size=0.1) + labs(title="scDblFinder on cell identity")+
+    scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/QC/scDblFinder.jpeg", width=10, height=5)
+
+
+# Check how much the two methods agree
+table(rownames(colData(sce.srtclusters)) == rownames(colData(sce.cellident))) # sanity check
+dbl <- data.frame(srtclusters=colData(sce.srtclusters)$scDblFinder.class,
+                  cellident=colData(sce.cellident)$scDblFinder.class)
+table(dbl)
+
+
+# Check correlation between contamination & doublets
+df <- cbind(df, dbl)
+
+plot_decontX(xvar="srtclusters")
+plot_decontX(xvar="cellident")
+```
+

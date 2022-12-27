@@ -32,8 +32,6 @@ print(seur.human) # 79,801 cells (it's the whole seurat object)
 
 # Quick visualization
 DimPlot(seur.human)
-
-FeatureScatter(subset(seur.human, subset= Tissue=="PBMC"), feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Method")
 ```
 
 ```{r export-seurat-human-scclusteval, include=FALSE}

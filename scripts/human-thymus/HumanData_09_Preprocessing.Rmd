@@ -346,3 +346,187 @@ DimPlot(seur.harmony, reduction = "umap", group.by="seurat_clusters", label = TR
 
 
 
+## 5. INTEGRATION HARMONY PIPELINE (sctransform)
+
+Using Seurat's latest normalization method with Harmony (based on suggestions from [this forum](https://github.com/immunogenomics/harmony/issues/41))
+
+### 5.1. Normalize with SCTransform
+
+```{r sctransform-harmony-norm}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# Normalize with SCTransform on each batch separately
+seur.list <- SplitObject(seur.filt, split.by = "Batch")
+set.seed(1448145)
+seur.list <- lapply(X = seur.list, FUN = SCTransform)
+seur.SCT  <- merge(seur.list[[1]], y = unlist(seur.list[-1], use.names=FALSE), merge.data = TRUE) # merge back together
+
+# select features that are repeatedly variable across datasets for integration
+sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 5000)
+VariableFeatures(seur.SCT) <- sct.hvg
+```
+
+### 5.2. Perform integration with Harmony
+
+```{r sctransform-harmony-integrate}
+# Run PCA (don't scale data when using SCTransform)
+seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=FALSE)
+ElbowPlot(seur.SCT, ndims=50, reduction="pca")
+DimPlot(seur.SCT, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+  
+# Run Harmony for integration
+seur.sct_harmony <- RunHarmony(object = seur.SCT,
+                               assay.use = "SCT",
+                               reduction = "pca",
+                               max.iter.harmony=30,
+                               group.by.vars = c("Method", "Batch"))
+DimPlot(seur.sct_harmony, reduction="pca", group.by="Batch") | DimPlot(seur.sct_harmony, reduction="harmony", group.by="Batch")
+DimPlot(seur.sct_harmony, reduction="pca", group.by="Method") | DimPlot(seur.sct_harmony, reduction="harmony", group.by="Method")
+```
+
+### 5.3. Clustering & Dimension reduction
+
+```{r sctransform-harmony-clustering}
+ElbowPlot(seur.sct_harmony, ndims=50, reduction="harmony")
+seur.sct_harmony <- RunUMAP(object = seur.sct_harmony, reduction = "harmony", dims = 1:20, assay = "SCT", n.neighbors=50)
+seur.sct_harmony <- FindNeighbors(object = seur.sct_harmony, reduction = "harmony", dims = 1:20, assay = "SCT")
+seur.sct_harmony <- FindClusters(seur.sct_harmony, resolution = 0.7)
+
+# Re-order clusters
+table(seur.sct_harmony@meta.data[,c("old_clusters", "SCT_snn_res.0.7")])
+seur.sct_harmony@meta.data$seurat_clusters <- case_when(
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 0 ~ 11,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 1 ~ 10,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 2 ~ 16,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 3 ~ 5,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 4 ~ 14,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 5 ~ 4,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 6 ~ 15,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 7 ~ 13,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 8 ~ 3,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 9 ~ 12,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 10 ~ 2,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 11 ~ 9,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 12 ~ 7,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 13 ~ 0,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 14 ~ 1,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 15 ~ 17,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 16 ~ 6,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 17 ~ 8
+)
+# table(seur.sct_harmony@meta.data[,c("seurat_clusters", "SCT_snn_res.0.7")]) # sanity check
+```
+
+### 5.4. Visualization
+
+```{r sctransform-harmony-visualization}
+# Visualization
+DimPlot(seur.sct_harmony, reduction = "umap", group.by = "Batch")
+DimPlot(seur.sct_harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.sct_harmony@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, sct_harmony=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, sct_harmony) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = sct_harmony)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (SCT+Harmony)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs SCTransform+Harmony", y="#cells")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/preprocessing/sct-harmony_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.sct_harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="SCTransform + Harmony", x="umap50_1", y="umap50_2")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/preprocessing/sct-harmony_comparisonUMAPs.jpeg", width=12, height=6)
+```
+
+### 5.5. Quick try to reproduce Laurent's initial seurat object
+
+```{r reproducibility-try}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# Remove ribosomal genes
+genes.to.keep <- rownames(seur.filt)[-grep(rownames(seur.filt), pattern = "^RPL|^RPS|^MT\\.")]
+initseur <- subset(seur.filt, features = genes.to.keep)
+
+# Preprocessing
+seur.rep <- SCTransform(initseur, assay="RNA", vars.to.regress = 'percent.mt', verbose=T)
+seur.rep <- RunPCA(object = seur.rep, assay = "SCT", npcs = 50, seed.use=42, verbose=FALSE)
+# ElbowPlot(seur.rep, ndims=50, reduction="pca")
+# DimPlot(seur.rep, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+seur.rep <- RunHarmony(object = seur.rep, assay.use = "SCT", reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch"))
+DimPlot(seur.rep, reduction="pca", group.by="Batch") | DimPlot(seur.rep, reduction="harmony", group.by="Batch")
+DimPlot(seur.rep, reduction="pca", group.by="Method") | DimPlot(seur.rep, reduction="harmony", group.by="Method")
+# ElbowPlot(seur.rep, ndims=50, reduction="harmony")
+seur.rep <- RunUMAP(object = seur.rep, reduction = "harmony", dims = 1:15, assay = "SCT")
+seur.rep <- FindNeighbors(object = seur.rep, reduction = "harmony", dims = 1:15, assay = "SCT")
+seur.rep <- FindClusters(seur.rep, resolution = 1)
+
+# Re-order clusters
+# table(seur.rep@meta.data[,c("old_clusters", "SCT_snn_res.1")])
+seur.rep@meta.data$seurat_clusters <- case_when(
+  seur.rep@meta.data$SCT_snn_res.1 == 0 ~ 11,
+  seur.rep@meta.data$SCT_snn_res.1 == 1 ~ 10,
+  seur.rep@meta.data$SCT_snn_res.1 == 2 ~ 14,
+  seur.rep@meta.data$SCT_snn_res.1 == 3 ~ 15,
+  seur.rep@meta.data$SCT_snn_res.1 == 4 ~ 5,
+  seur.rep@meta.data$SCT_snn_res.1 == 5 ~ 12,
+  seur.rep@meta.data$SCT_snn_res.1 == 6 ~ 8,
+  seur.rep@meta.data$SCT_snn_res.1 == 7 ~ 16,
+  seur.rep@meta.data$SCT_snn_res.1 == 8 ~ 7,
+  seur.rep@meta.data$SCT_snn_res.1 == 9 ~ 13,
+  seur.rep@meta.data$SCT_snn_res.1 == 10 ~ 9,
+  seur.rep@meta.data$SCT_snn_res.1 == 11 ~ 4,
+  seur.rep@meta.data$SCT_snn_res.1 == 12 ~ 3,
+  seur.rep@meta.data$SCT_snn_res.1 == 13 ~ 0,
+  seur.rep@meta.data$SCT_snn_res.1 == 14 ~ 6,
+  seur.rep@meta.data$SCT_snn_res.1 == 15 ~ 1,
+  seur.rep@meta.data$SCT_snn_res.1 == 16 ~ 2
+)
+# table(seur.rep@meta.data[,c("seurat_clusters", "SCT_snn_res.1")]) # sanity check
+
+
+
+# **************
+# Visualize
+DimPlot(seur.rep, reduction = "umap", group.by="Tissue", label=TRUE) + theme(legend.position="none")
+DimPlot(seur.rep, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.rep@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, sctmerg_harmony=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, sctmerg_harmony) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = sctmerg_harmony)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (SCT+Harmony)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs SCTransform(merged data)+Harmony", y="#cells")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/preprocessing/sct-merged-harmony_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.rep, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="SCTransform (merged data) + Harmony", x="umap_1", y="umap_2")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/preprocessing/sct-merged-harmony_comparisonUMAPs.jpeg", width=12, height=6)
+```

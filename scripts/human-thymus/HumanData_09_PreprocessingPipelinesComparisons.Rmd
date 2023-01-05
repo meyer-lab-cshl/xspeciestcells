@@ -1,0 +1,774 @@
+---
+title: "Human T cell data - Try different preprocessing pipelines"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+
+
+## 1. IMPORT
+
+### 1.1. Import librairies & data
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+library(ggalluvial)
+# library(SingleCellExperiment)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+
+# Sanity check
+print(seur.human) # 81,378 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Check if mitochondrial & ribosomal genes still in the count data
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "MT")]
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "RP")] # ribosomal genes still present
+```
+
+### 1.2. Compute UMAP with 3 components
+```{r umap-3D}
+# Run UMAP with 3 components
+ElbowPlot(seur.human, reduction="harmony", ndims=50)
+seur.human <- RunUMAP(seur.human, reduction = "harmony", dims = 1:15, n.neighbors=50, n.components=3, reduction.name="UMAP50_3D")
+
+
+# Plot UMAP 1:2 and 2:3
+a <- DimPlot(seur.human, dims=c(1,2), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(x="UMAP1", y="UMAP2", title="UMAP 50 neighbors") |
+DimPlot(seur.human, dims=c(3,2), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))+
+  labs(x="UMAP3", y="UMAP2", title="UMAP 50 neighbors")
+
+b <- DimPlot(seur.human, dims=c(1,2), reduction = "UMAP50_3D", group.by="new_clusters",
+        label = TRUE, repel = TRUE, cells.highlight = WhichCells(seur.human, idents = 6), sizes.highlight = 1)+
+  labs(x="UMAP1", y="UMAP2", title="cluster 6") +
+  theme(legend.position="none")|
+DimPlot(seur.human, dims=c(3,2), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE,
+        cells.highlight = WhichCells(seur.human, idents = 6), sizes.highlight = 1)+
+  labs(x="UMAP3", y="UMAP2", title="cluster 6")+
+  theme(legend.position="none")
+
+ggpubr::ggarrange(a,b,nrow=2)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_3.jpeg", width=12, height=12)
+
+
+# Plot UMAP 1:2 and 1:3, highlighting cluster 6
+c <- DimPlot(seur.human, dims=c(1,2), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(x="UMAP1", y="UMAP2", title="UMAP 50 neighbors") |
+DimPlot(seur.human, dims=c(1,3), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))+
+  labs(x="UMAP1", y="UMAP3", title="UMAP 50 neighbors")
+
+d <- DimPlot(seur.human, dims=c(1,2), reduction = "UMAP50_3D", group.by="new_clusters",
+        label = TRUE, repel = TRUE, cells.highlight = WhichCells(seur.human, idents = 6), sizes.highlight = 1)+
+  labs(x="UMAP1", y="UMAP2", title="cluster 6") +
+  theme(legend.position="none")|
+DimPlot(seur.human, dims=c(1,3), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE,
+        cells.highlight = WhichCells(seur.human, idents = 6), sizes.highlight = 1)+
+  labs(x="UMAP1", y="UMAP3", title="cluster 6")+
+  theme(legend.position="none")
+
+ggpubr::ggarrange(c,d,nrow=2)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_4.jpeg", width=12, height=12)
+```
+
+### 1.3. Check out marker genes for each cluster
+```{r marker-genes}
+# find markers for every cluster compared to all remaining cells
+markers <- FindAllMarkers(seur.human, only.pos = FALSE, min.pct = 0.5, logfc.threshold = 1)
+markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC)
+```
+
+
+
+## 2. QUALITY CONTROL
+
+```{r qc}
+# Make seurat object with raw counts only
+counts <- seur.human@assays$RNA@counts
+metadata <- seur.human@meta.data
+
+# Remove clusters in metadata
+metadata[,c("RNA_snn_res.0.7", "seurat_clusters", "RNA_snn_res.1.2")] <- NULL
+colnames(metadata)[14] <- "old_clusters" # rename Laurent's clusters to "old_clusters"
+
+# Create seurat object
+seur.raw <- CreateSeuratObject(counts=counts, meta.data=metadata, min.cells=10) # keep genes expressed in at least 10 cells
+
+
+# Look at qc measures per batch & donor
+VlnPlot(seur.raw, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.raw, features="nFeature_RNA", group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.raw, features="nCount_RNA",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+
+# Split seurat object to find percent.mt outliers per batch (& subset seurat object)
+seur.list <- SplitObject(seur.raw, split.by = "Batch")
+seur.list <- lapply(X = seur.list, FUN = function(x) {
+  threshold <- attr(scuttle::isOutlier(x@meta.data$percent.mt, type="higher"), "thresholds")["higher"]
+  print(threshold)
+  x <- subset(x, subset= percent.mt<threshold)
+})
+# Combine seurat object back together
+seur.filt <- reduce(seur.list, function(x, y){
+  merge(x = x, y = y, add.cell.ids = NULL, merge.data = T)
+})
+
+# Sanity check
+VlnPlot(seur.filt, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor", title="post-filtering")
+
+# save for running seurat integration on Elzar
+# saveRDS(seur.filt, "~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+```
+
+
+
+
+## 3. INTEGRATION SEURAT PIPELINE
+
+Following [seurat standard pipeline](https://satijalab.org/seurat/articles/integration_introduction.html) for integration.
+
+### 3.1. SEURAT INTEGRATION - LOG NORMALIZATION
+#### 3.1.1. Normalize & HVG
+
+```{r seurat-interation-norm, echo=TRUE, eval=FALSE}
+# split the dataset into a list of seurat objects per batch
+seur.list <- SplitObject(seur.filt, split.by = "Batch")
+
+# normalize and identify variable features for each dataset independently
+seur.list <- lapply(X = seur.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list=seur.list, nfeatures=2000)
+```
+
+#### 3.1.2. Perform integration
+
+```{r seurat-integration-integrate, echo=TRUE, eval=FALSE}
+# Identify anchors
+anchors <- FindIntegrationAnchors(object.list = seur.list, anchor.features = features)
+# Integrate data
+seur.int <- IntegrateData(anchorset = anchors)
+```
+
+#### 3.1.3. Clustering & Dimension reduction
+
+```{r seurat-integration-clustering}
+# Import integrated seurat object (run on Elzar)
+seur.int <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/output/seur_integrated_lognorm_2000hvg_22-12-29.rds")
+
+# Make sure we perform downstream analysis on integrated data
+DefaultAssay(seur.int) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+seur.int <- ScaleData(seur.int, verbose = TRUE)
+seur.int <- RunPCA(seur.int, npcs = 50, verbose = FALSE)
+ElbowPlot(seur.int, ndims=50, reduction="pca")
+seur.int <- RunUMAP(seur.int, reduction = "pca", dims = 1:15, n.neighbors=50)
+seur.int <- FindNeighbors(seur.int, reduction = "pca", dims = 1:15)
+seur.int <- FindClusters(seur.int, resolution = 0.6)
+
+# Re-order clusters
+table(seur.int@meta.data[,c("old_clusters", "integrated_snn_res.0.6")])
+seur.int@meta.data$seurat_clusters <- case_when(
+  seur.int@meta.data$integrated_snn_res.0.6 == 0 ~ 15,
+  seur.int@meta.data$integrated_snn_res.0.6 == 1 ~ 8,
+  seur.int@meta.data$integrated_snn_res.0.6 == 2 ~ 11,
+  seur.int@meta.data$integrated_snn_res.0.6 == 3 ~ 14,
+  seur.int@meta.data$integrated_snn_res.0.6 == 4 ~ 5,
+  seur.int@meta.data$integrated_snn_res.0.6 == 5 ~ 16,
+  seur.int@meta.data$integrated_snn_res.0.6 == 6 ~ 4,
+  seur.int@meta.data$integrated_snn_res.0.6 == 7 ~ 12,
+  seur.int@meta.data$integrated_snn_res.0.6 == 8 ~ 3,
+  seur.int@meta.data$integrated_snn_res.0.6 == 9 ~ 10,
+  seur.int@meta.data$integrated_snn_res.0.6 == 10 ~ 9,
+  seur.int@meta.data$integrated_snn_res.0.6 == 11 ~ 7,
+  seur.int@meta.data$integrated_snn_res.0.6 == 12 ~ 17,
+  seur.int@meta.data$integrated_snn_res.0.6 == 13 ~ 0,
+  seur.int@meta.data$integrated_snn_res.0.6 == 14 ~ 13,
+  seur.int@meta.data$integrated_snn_res.0.6 == 15 ~ 1,
+  seur.int@meta.data$integrated_snn_res.0.6 == 16 ~ 6,
+  seur.int@meta.data$integrated_snn_res.0.6 == 17 ~ 2,
+  seur.int@meta.data$integrated_snn_res.0.6 == 18 ~ 18
+)
+# table(seur.int@meta.data[,c("seurat_clusters", "integrated_snn_res.0.6")]) # sanity check
+```
+
+#### 3.1.4. Visualization
+
+```{r seurat-integration-visualization}
+# Visualization
+DimPlot(seur.int, reduction = "umap", group.by = "Batch")
+DimPlot(seur.int, reduction = "umap", split.by = "Tissue")
+DimPlot(seur.int, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(19))
+
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.int@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, seurat_integ=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, seurat_integ) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = seurat_integ)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (Seurat Integration)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs Seurat integration", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/seurat-integration_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.int, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(19)) +
+  labs(title="Seurat Integration", x="umap50_1", y="umap50_2") |
+DimPlot(seur.int, reduction = "umap", group.by="Tissue", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=c("#ef3b2c", "#6baed6")) +
+  labs(title="Seurat Integration", x="umap50_1", y="umap50_2")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/seurat-integration_comparisonUMAPs.jpeg", width=18, height=6)
+```
+
+
+
+### 3.2. SEURAT INTEGRATION - SCTRANSFORM
+
+#### 3.2.1. Normalize with SCTransform
+
+```{r seurat-sctransform-norm, echo=TRUE, eval=FALSE}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+seur.list2 <- SplitObject(seur.filt, split.by = "Batch")
+
+# normalize
+seur.list2 <- lapply(X = seur.list, FUN = SCTransform)
+
+# select features that are repeatedly variable across datasets for integration
+features2 <- SelectIntegrationFeatures(object.list = seur.list2, nfeatures = 2000)
+```
+
+#### 3.2.2. Perform integration
+
+```{r seurat-sctransform-integrate, echo=TRUE, eval=FALSE}
+# identify anchors
+seur.list2 <- PrepSCTIntegration(object.list = seur.list2, anchor.features = features2)
+anchors2   <- FindIntegrationAnchors(object.list = seur.list2, normalization.method = "SCT", anchor.features = features2)
+
+# integrate data
+seur.int.sct <- IntegrateData(anchorset = anchors2, normalization.method = "SCT")
+```
+
+#### 3.2.3. Clustering & Dimension reduction
+
+```{r seurat-sctransform-clustering}
+# Import integrated seurat object (run on Elzar)
+seur.int.sct <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/output/seur_integrated_sctransform_2000hvg_22-12-29.rds")
+
+# Make sure we perform downstream analysis on integrated data
+DefaultAssay(seur.int.sct) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+seur.int.sct <- RunPCA(seur.int.sct, npcs = 50, verbose = FALSE)
+ElbowPlot(seur.int.sct, ndims=50, reduction="pca")
+seur.int.sct <- RunUMAP(seur.int.sct, reduction = "pca", dims = 1:20, n.neighbors=50)
+seur.int.sct <- FindNeighbors(seur.int.sct, reduction = "pca", dims = 1:20)
+seur.int.sct <- FindClusters(seur.int.sct, resolution = 0.6)
+
+# Re-order clusters
+table(seur.int.sct@meta.data[,c("old_clusters", "integrated_snn_res.0.6")])
+seur.int.sct@meta.data$seurat_clusters <- case_when(
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 0 ~ 10,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 1 ~ 4,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 2 ~ 5,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 3 ~ 11,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 4 ~ 14,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 5 ~ 7,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 6 ~ 13,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 7 ~ 8,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 8 ~ 3,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 9 ~ 0,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 10 ~ 15,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 11 ~ 9,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 12 ~ 6,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 13 ~ 12,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 14 ~ 16,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 15 ~ 1,
+  seur.int.sct@meta.data$integrated_snn_res.0.6 == 16 ~ 2
+)
+# table(seur.int.sct@meta.data[,c("seurat_clusters", "integrated_snn_res.0.6")]) # sanity check
+```
+
+#### 3.2.4. Visualization
+
+```{r seurat-sctransform-visualization}
+# Visualization
+DimPlot(seur.int.sct, reduction = "umap", group.by = "Batch")
+DimPlot(seur.int.sct, reduction = "umap", split.by = "Tissue")
+DimPlot(seur.int.sct, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.int.sct@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, seurat_sct=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, seurat_sct) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = seurat_sct)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (Seurat Integration)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs Seurat integration (SCTransform)", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/seurat-sctransform_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.int.sct, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Seurat Integration", x="umap50_1", y="umap50_2") |
+DimPlot(seur.int.sct, reduction = "umap", group.by="Tissue", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=c("#ef3b2c", "#6baed6")) +
+  labs(title="Seurat Integration", x="umap50_1", y="umap50_2")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/seurat-sctransform_comparisonUMAPs.jpeg", width=18, height=6)
+```
+
+
+
+
+## 4. INTEGRATION HARMONY PIPELINE
+
+### 4.1. HARMONY INTEGRATION - LOG NORMALIZATION
+Following seurat standard pipeline, and then [integrating with Harmony](https://htmlpreview.github.io/?https://github.com/satijalab/seurat.wrappers/blob/master/docs/harmony.html)
+
+#### 4.1.1. Normalize & HVGs
+
+```{r harmony-integration-norm}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# Run standard workflow for PCA
+seur.norm <- NormalizeData(seur.filt)
+seur.norm <- FindVariableFeatures(seur.norm, selection.method="vst", nfeatures=2000)
+seur.norm <- ScaleData(seur.norm)
+seur.norm <- RunPCA(seur.norm, npcs=50, verbose=FALSE)
+ElbowPlot(seur.norm, ndims=50, reduction="pca")
+DimPlot(seur.norm, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+```
+
+#### 4.1.2. Perform integration with Harmony
+
+```{r harmony-integration-integrate}
+seur.harmony <- RunHarmony(seur.norm,
+                           reduction = "pca",
+                           max.iter.harmony=30,
+                           group.by.vars = c("Method", "Batch")) # converged in 2 iterations
+DimPlot(seur.harmony, reduction="pca", group.by="Batch") | DimPlot(seur.harmony, reduction="harmony", group.by="Batch")
+DimPlot(seur.harmony, reduction="pca", group.by="Method") | DimPlot(seur.harmony, reduction="harmony", group.by="Method")
+```
+
+#### 4.1.3. Clustering & Dimension reduction
+
+```{r harmony-integration-clustering}
+ElbowPlot(seur.harmony, ndims=50, reduction="harmony")
+seur.harmony <- RunUMAP(seur.harmony, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.harmony <- FindNeighbors(seur.harmony, reduction = "harmony", dims = 1:20)
+seur.harmony <- FindClusters(seur.harmony, resolution = 1)
+
+# Re-order clusters
+# table(seur.harmony@meta.data[,c("old_clusters", "RNA_snn_res.1")])
+seur.harmony@meta.data$seurat_clusters <- case_when(
+  seur.harmony@meta.data$RNA_snn_res.1 == 0 ~ 14,
+  seur.harmony@meta.data$RNA_snn_res.1 == 1 ~ 5,
+  seur.harmony@meta.data$RNA_snn_res.1 == 2 ~ 15,
+  seur.harmony@meta.data$RNA_snn_res.1 == 3 ~ 11,
+  seur.harmony@meta.data$RNA_snn_res.1 == 4 ~ 10,
+  seur.harmony@meta.data$RNA_snn_res.1 == 5 ~ 8,
+  seur.harmony@meta.data$RNA_snn_res.1 == 6 ~ 12,
+  seur.harmony@meta.data$RNA_snn_res.1 == 7 ~ 7,
+  seur.harmony@meta.data$RNA_snn_res.1 == 8 ~ 13,
+  seur.harmony@meta.data$RNA_snn_res.1 == 9 ~ 4,
+  seur.harmony@meta.data$RNA_snn_res.1 == 10 ~ 16,
+  seur.harmony@meta.data$RNA_snn_res.1 == 11 ~ 9,
+  seur.harmony@meta.data$RNA_snn_res.1 == 12 ~ 0,
+  seur.harmony@meta.data$RNA_snn_res.1 == 13 ~ 3,
+  seur.harmony@meta.data$RNA_snn_res.1 == 14 ~ 1,
+  seur.harmony@meta.data$RNA_snn_res.1 == 15 ~ 6,
+  seur.harmony@meta.data$RNA_snn_res.1 == 16 ~ 2,
+)
+# table(seur.harmony@meta.data[,c("seurat_clusters", "RNA_snn_res.1")]) # sanity check
+```
+
+#### 4.1.4. Visualization
+
+```{r harmony-integration-visualization}
+# Visualization
+DimPlot(seur.harmony, reduction = "umap", group.by = "Batch")
+DimPlot(seur.harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.harmony@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, lognorm_harmony=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, lognorm_harmony) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = lognorm_harmony)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (Harmony)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs Lognorm+Harmony", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="LogNorm + Harmony", x="umap50_1", y="umap50_2")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_comparisonUMAPs.jpeg", width=12, height=6)
+```
+
+#### 4.1.5. Regress out TCR signaling genes
+
+```{r regress-out-tcr-signaling}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# TCR signaling genes
+# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
+#   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+clus6.markers <- FindMarkers(seur.human, ident.1 = 6, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
+  arrange(-avg_log2FC)
+print(clus6.markers)
+tcrlist1 <- c("NR4A1", "EGR1", "EGR3", "NFKBID", "IRF4", "ICOS", "EGR2", "REL", "HIVEP3", "TRAT1", "NAB2",
+              "ID3", "CD5", "TRAC", "SIRPG", "ITPKB", "ZFP36L1")
+tcrlist2 <- c('ALCAM', 'JAG1', 'LTA', 'CCL3', 'CCL4', 'FOSL1', 'PIM3', 'TNFRSF4', 'TGFB1', 'FURIN', 'CD160', 'GADD45G', 'TNFSF14',
+              'ATF3', 'LCK', 'CD8B', 'NFATC2', 'NFATC1', 'CISH', 'PTGER2', 'TNFSF11', 'TNFRSF21', 'SYP', 'SLC7A1', 'NKG7', 'CRABP2',
+              'SEMA7A', 'IER3', 'SLC16A1', 'RGS16', 'NEK6', 'TNFSF8', 'ZBTB32', 'FOSL2', 'HAVCR2', 'GFI1', 'IL10', 'FOSB', 'IFNG',
+              #'SULT2B1', 'IL17A', #'IL3', 'CCL1', 'CCR8', #'IL17F', #'IL13', #'CSF2', 'IL4',  #'UTF1', #'MIR193A', 'ALPL', 'IL5', 'IL2', # not found in our genes
+              'EGR1', 'TNFRSF9', 'IL21', 'MFSD2A', 'IL24', 'IL15RA', 'NR4A3', 'CD40LG', 'RELA', 'BCAT1', 'XCL1', 'STAT5A', 'MAFF') # list from Pe'er lab
+# Sanity check
+test <- AddModuleScore(seur.human, features=list(tcrlist1), name="tcr_score")
+test <- AddModuleScore(test, features=list(tcrlist2), name="tcr_score2")
+FeaturePlot(test, features="tcr_score1", reduction="UMAP_50") + scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu")))
+FeaturePlot(test, features="tcr_score21", reduction="UMAP_50") + scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu")))
+VlnPlot(test, features = c("tcr_score1", "tcr_score21"))
+
+
+# Preprocessing while regressing out TCR signaling genes
+seur.tcr.out <- NormalizeData(seur.filt)
+seur.tcr.out <- AddModuleScore(seur.tcr.out, features=list(tcrlist1), name="tcr_score")
+seur.tcr.out <- FindVariableFeatures(seur.tcr.out, selection.method="vst", nfeatures=2000)
+seur.tcr.out <- ScaleData(seur.tcr.out, vars.to.regress="tcr_score1")
+seur.tcr.out <- RunPCA(seur.tcr.out, npcs=50, verbose=FALSE)
+seur.tcr.out <- RunHarmony(seur.tcr.out, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
+# DimPlot(seur.tcr.out, reduction="pca", group.by="Batch") | DimPlot(seur.tcr.out, reduction="harmony", group.by="Batch")
+# DimPlot(seur.tcr.out, reduction="pca", group.by="Method") | DimPlot(seur.tcr.out, reduction="harmony", group.by="Method")
+ElbowPlot(seur.tcr.out, ndims=50, reduction="harmony")
+seur.tcr.out <- RunUMAP(seur.tcr.out, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.tcr.out <- FindNeighbors(seur.tcr.out, reduction = "harmony", dims = 1:20)
+seur.tcr.out <- FindClusters(seur.tcr.out, resolution = 1.1)
+
+# Re-order clusters
+# table(seur.tcr.out@meta.data[,c("old_clusters", "RNA_snn_res.1.1")])
+seur.tcr.out@meta.data$seurat_clusters <- case_when(
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 0 ~ 14,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 1 ~ 16,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 2 ~ 13,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 3 ~ 11,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 4 ~ 10,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 5 ~ 5,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 6 ~ 8,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 7 ~ 7,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 8 ~ 12,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 9 ~ 4,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 10 ~ 15,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 11 ~ 9,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 12 ~ 3,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 13 ~ 0,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 14 ~ 1,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 15 ~ 6,
+  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 16 ~ 2
+)
+# table(seur.tcr.out@meta.data[,c("seurat_clusters", "RNA_snn_res.1.1")]) # sanity check
+
+# Visualization
+# DimPlot(seur.tcr.out, reduction = "umap", group.by = "Batch")
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.tcr.out, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Regressing out TCR signaling genes")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonUMAPs_2000HVGs.jpeg", width=12, height=6)
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.tcr.out@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, tcr_out=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, tcr_out) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = tcr_out)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance=" dzigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Regressing out TCRsig"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs Regressing out TCR signaling genes", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonClustersLaurent_2000HVGs.jpeg", width=10, height=10)
+
+# Highlight only cluster 6
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = tcr_out)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Regressing out TCRsig"), expand = c(.05, .05)) +
+  scale_fill_manual(values=c(rep("#bdbdbd", 6), "#99000d", rep("#bdbdbd", 11))) +
+  labs(title="Comparison cluster assignment - Laurent vs Regressing out TCR signaling genes", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonClustersLaurent_2000HVGs_clus6.jpeg", width=10, height=10)
+
+# Compare TCR scoring
+FeaturePlot(test, features="tcr_score1", reduction="UMAP_50") +
+  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu"))) +
+  labs(title="Laurent", color="TCRsig score") |
+FeaturePlot(seur.tcr.out, features="tcr_score1") +
+  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu"))) +
+  labs(title="Regressing out TCR signaling genes", color="TCRsig score")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonTCR_2000HVGs.jpeg", width=12, height=6)
+
+# What are the marker genes of this new cluster 6?
+Idents(seur.tcr.out) <- "seurat_clusters"
+clus6.tcrout.markers <- FindMarkers(seur.tcr.out, ident.1 = 6, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
+  arrange(-avg_log2FC)
+print(clus6.tcrout.markers)
+```
+
+
+
+### 4.2. HARMONY INTEGRATION - SCTRANSFORM
+Using Seurat's latest normalization method with Harmony (based on suggestions from [this forum](https://github.com/immunogenomics/harmony/issues/41))
+
+#### 4.2.1. Normalize with SCTransform
+
+```{r sctransform-harmony-norm}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# Normalize with SCTransform on each batch separately
+seur.list <- SplitObject(seur.filt, split.by = "Batch")
+set.seed(1448145)
+seur.list <- lapply(X = seur.list, FUN = SCTransform)
+seur.SCT  <- merge(seur.list[[1]], y = unlist(seur.list[-1], use.names=FALSE), merge.data = TRUE) # merge back together
+
+# select features that are repeatedly variable across datasets for integration
+sct.hvg  <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 2000)
+VariableFeatures(seur.SCT) <- sct.hvg
+```
+
+#### 4.2.2. Perform integration with Harmony
+
+```{r sctransform-harmony-integrate}
+# Run PCA (don't scale data when using SCTransform)
+seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, seed.use=42, verbose=FALSE)
+# ElbowPlot(seur.SCT, ndims=50, reduction="pca")
+DimPlot(seur.SCT, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+  
+# Run Harmony for integration
+seur.sct_harmony <- RunHarmony(object = seur.SCT,
+                               assay.use = "SCT",
+                               reduction = "pca",
+                               max.iter.harmony=30,
+                               group.by.vars = c("Method", "Batch")) # converged in 2 steps
+DimPlot(seur.sct_harmony, reduction="pca", group.by="Batch") | DimPlot(seur.sct_harmony, reduction="harmony", group.by="Batch")
+DimPlot(seur.sct_harmony, reduction="pca", group.by="Method") | DimPlot(seur.sct_harmony, reduction="harmony", group.by="Method")
+```
+
+#### 4.2.3. Clustering & Dimension reduction
+
+```{r sctransform-harmony-clustering}
+ElbowPlot(seur.sct_harmony, ndims=50, reduction="harmony")
+seur.sct_harmony <- RunUMAP(object = seur.sct_harmony, reduction = "harmony", dims = 1:20, assay = "SCT", n.neighbors=50)
+seur.sct_harmony <- FindNeighbors(object = seur.sct_harmony, reduction = "harmony", dims = 1:20, assay = "SCT")
+seur.sct_harmony <- FindClusters(seur.sct_harmony, resolution = 0.7)
+
+# Re-order clusters
+# table(seur.sct_harmony@meta.data[,c("old_clusters", "SCT_snn_res.0.7")])
+seur.sct_harmony@meta.data$seurat_clusters <- case_when(
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 0 ~ 11,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 1 ~ 10,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 2 ~ 14,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 3 ~ 5,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 4 ~ 15,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 5 ~ 4,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 6 ~ 16,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 7 ~ 2, 
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 8 ~ 13,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 9 ~ 9,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 10 ~ 7,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 11 ~ 3,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 12 ~ 0,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 13 ~ 12,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 14 ~ 1,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 15 ~ 6,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 16 ~ 8,
+  seur.sct_harmony@meta.data$SCT_snn_res.0.7 == 17 ~ 17
+)
+# table(seur.sct_harmony@meta.data[,c("seurat_clusters", "SCT_snn_res.0.7")]) # sanity check
+```
+
+#### 4.2.4. Visualization
+
+```{r sctransform-harmony-visualization}
+# Visualization
+DimPlot(seur.sct_harmony, reduction = "umap", group.by = c("Batch", "Tissue"))
+DimPlot(seur.sct_harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.sct_harmony@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, sct_harmony=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, sct_harmony) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = sct_harmony)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (SCT+Harmony)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs SCTransform+Harmony", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/sct-harmony_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.sct_harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="SCTransform + Harmony", x="umap50_1", y="umap50_2") |
+DimPlot(seur.sct_harmony, reduction = "umap", group.by="Tissue", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=c("#ef3b2c", "#6baed6")) +
+  labs(title="SCTransform + Harmony", x="umap50_1", y="umap50_2")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/sct-harmony_comparisonUMAPs.jpeg", width=18, height=6)
+```
+
+#### 4.2.5. Quick try to reproduce Laurent's initial seurat object
+
+```{r reproducibility-try}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+# Remove ribosomal genes
+genes.to.keep <- rownames(seur.filt)[-grep(rownames(seur.filt), pattern = "^RPL|^RPS|^MT\\.")]
+initseur <- subset(seur.filt, features = genes.to.keep)
+
+# Preprocessing
+seur.rep <- SCTransform(initseur, assay="RNA", vars.to.regress = 'percent.mt', verbose=T, variable.features.n=2000)
+seur.rep <- RunPCA(object = seur.rep, assay = "SCT", npcs = 50, seed.use=42, verbose=FALSE)
+# ElbowPlot(seur.rep, ndims=50, reduction="pca")
+# DimPlot(seur.rep, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+seur.rep <- RunHarmony(object = seur.rep, assay.use = "SCT", reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch"))
+DimPlot(seur.rep, reduction="pca", group.by="Batch") | DimPlot(seur.rep, reduction="harmony", group.by="Batch")
+DimPlot(seur.rep, reduction="pca", group.by="Method") | DimPlot(seur.rep, reduction="harmony", group.by="Method")
+# ElbowPlot(seur.rep, ndims=50, reduction="harmony")
+seur.rep <- RunUMAP(object = seur.rep, reduction = "harmony", dims = 1:15, assay = "SCT")
+seur.rep <- FindNeighbors(object = seur.rep, reduction = "harmony", dims = 1:15, assay = "SCT")
+seur.rep <- FindClusters(seur.rep, resolution = 1)
+
+# Re-order clusters
+table(seur.rep@meta.data[,c("old_clusters", "SCT_snn_res.1")])
+seur.rep@meta.data$seurat_clusters <- case_when(
+  seur.rep@meta.data$SCT_snn_res.1 == 0 ~ 14,
+  seur.rep@meta.data$SCT_snn_res.1 == 1 ~ 11,
+  seur.rep@meta.data$SCT_snn_res.1 == 2 ~ 15,
+  seur.rep@meta.data$SCT_snn_res.1 == 3 ~ 10,
+  seur.rep@meta.data$SCT_snn_res.1 == 4 ~ 9,
+  seur.rep@meta.data$SCT_snn_res.1 == 5 ~ 7,
+  seur.rep@meta.data$SCT_snn_res.1 == 6 ~ 12,
+  seur.rep@meta.data$SCT_snn_res.1 == 7 ~ 3,
+  seur.rep@meta.data$SCT_snn_res.1 == 8 ~ 4,
+  seur.rep@meta.data$SCT_snn_res.1 == 9 ~ 13,
+  seur.rep@meta.data$SCT_snn_res.1 == 10 ~ 6,
+  seur.rep@meta.data$SCT_snn_res.1 == 11 ~ 16,
+  seur.rep@meta.data$SCT_snn_res.1 == 12 ~ 2,
+  seur.rep@meta.data$SCT_snn_res.1 == 13 ~ 8,
+  seur.rep@meta.data$SCT_snn_res.1 == 14 ~ 0,
+  seur.rep@meta.data$SCT_snn_res.1 == 15 ~ 5,
+  seur.rep@meta.data$SCT_snn_res.1 == 16 ~ 1
+)
+# table(seur.rep@meta.data[,c("seurat_clusters", "SCT_snn_res.1")]) # sanity check
+
+
+
+# **************
+# Visualize
+DimPlot(seur.rep, reduction = "umap", group.by="Tissue", label=TRUE) + theme(legend.position="none")
+DimPlot(seur.rep, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Compare cluster labels with Laurent's seurat object
+df <- seur.rep@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, sctmerg_harmony=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17)) %>%
+  group_by(laurent, sctmerg_harmony) %>%
+  count()
+ggplot(df, aes(y = n, axis1 = laurent, axis2 = sctmerg_harmony)) +
+  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+  geom_stratum(width = 1/12, fill = "black", color = "grey") +
+  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Laurent", "Salomé (SCT+Harmony)"), expand = c(.05, .05)) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Comparison cluster assignment - Laurent vs SCTransform(merged data)+Harmony", y="#cells")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/sct-merged-harmony_comparisonClustersLaurent.jpeg", width=10, height=10)
+
+# UMAP comparison
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="Laurent's clusters") |
+DimPlot(seur.rep, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+  labs(title="SCTransform (merged data) + Harmony", x="umap_1", y="umap_2") |
+DimPlot(seur.rep, reduction = "umap", group.by="Tissue", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=c("#ef3b2c", "#6baed6")) +
+  labs(title="SCTransform (merged data) + Harmony", x="umap_1", y="umap_2")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/sct-merged-harmony_comparisonUMAPs.jpeg", width=18, height=6)
+```
+

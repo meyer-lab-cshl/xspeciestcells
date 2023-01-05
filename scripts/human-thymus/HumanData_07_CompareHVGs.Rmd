@@ -26,7 +26,7 @@ library(SingleCellExperiment)
 
 ```{r import-data}
 # Import seurat object (with log normalization)
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
 
 # Sanity check
 print(seur.human) # 81,378 cells instead of 79,801 ??
@@ -55,7 +55,7 @@ length(hvg.all) # 2000
 LabelPoints(plot=VariableFeaturePlot(seur.human), points=head(VariableFeatures(seur.human), 20), repel=T)
 
 # quick comparison with HVGs from integrated data with SCTransform
-# seur.human.sct <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+# seur.human.sct <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 # hvg.all.sct <- VariableFeatures(seur.human.sct)
 # length(hvg.all.sct) # 3000
 # table(hvg.all %in% hvg.all.sct) # only 944 out of 2000 genes are the same...
@@ -115,7 +115,7 @@ hvg.thymus <- getHVG(seuratobject = initseurat, cells=c("CD4_Thymus", "CD8_Thymu
 ```{r venn-diagram}
 library(VennDiagram)
 library(RColorBrewer)
-path.plots <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs"
+path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_07_CompareHVGs"
 
 
 # Between all
@@ -258,11 +258,11 @@ table("NR4A1" %in% setdiff(hvg.mait, hvg.all))
 # MAIT-specific HVG
 FeaturePlot(seur.human, reduction="UMAP_50", features="BLK", order=T) + ggtitle("BLK | integrated") |
   FeaturePlot(subset(seur.human, subset= group.ident=="MAIT_Thymus"), reduction="UMAP_50", features="BLK", order=T) + ggtitle("BLK | thymMAIT")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/mait-specific-HVG_BLKexample.jpeg", width=10, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_07_CompareHVGs/mait-specific-HVG_BLKexample.jpeg", width=10, height=5)
 
 # Integrated data-specific HVG
 FeaturePlot(seur.human, reduction="UMAP_50", features="JCHAIN", order=T) + ggtitle("JCHAIN | integrated") |
   FeaturePlot(subset(seur.human, subset= group.ident=="MAIT_Thymus"), reduction="UMAP_50", features="JCHAIN", order=T) + ggtitle("JCHAIN | thymMAIT")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/integrated-specific-HVG_JCHAINexample.jpeg", width=10, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_07_CompareHVGs/integrated-specific-HVG_JCHAINexample.jpeg", width=10, height=5)
 ```
 

@@ -1,0 +1,445 @@
+---
+title: "Human T cell data - Play with HVGs for integrated data"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+
+
+## 1. IMPORT
+
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+# library(SingleCellExperiment)
+```
+
+```{r import-data}
+# Import seurat object
+seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+
+# Sanity check
+print(seur.human) # 81,378 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Check if mitochondrial & ribosomal genes still in the count data
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "MT")]
+# rownames(seur.human)[stringr::str_detect(rownames(seur.human), "RP")] # ribosomal genes still present
+
+# Cell type composition per cluster
+ggplot(seur.human@meta.data[,c("cell.ident", "new_clusters")] %>% group_by(cell.ident, new_clusters) %>% count(),
+       aes(x=new_clusters, y=n, fill=cell.ident))+
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  labs(x="", y="", title = "2000 HVGs (total data)")
+```
+
+
+
+
+## 2. QUALITY CONTROL
+
+```{r qc}
+# Make seurat object with raw counts only
+counts <- seur.human@assays$RNA@counts
+metadata <- seur.human@meta.data
+
+# Remove clusters in metadata
+metadata[,c("RNA_snn_res.0.7", "seurat_clusters", "RNA_snn_res.1.2")] <- NULL
+colnames(metadata)[14] <- "old_clusters" # rename Laurent's clusters to "old_clusters"
+
+# Create seurat object
+seur.raw <- CreateSeuratObject(counts=counts, meta.data=metadata, min.cells=10) # keep genes expressed in at least 10 cells
+
+
+# Look at qc measures per batch & donor
+VlnPlot(seur.raw, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.raw, features="nFeature_RNA", group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+VlnPlot(seur.raw, features="nCount_RNA",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor")
+
+# Split seurat object to find percent.mt outliers per batch (& subset seurat object)
+seur.list <- SplitObject(seur.raw, split.by = "Batch")
+seur.list <- lapply(X = seur.list, FUN = function(x) {
+  threshold <- attr(scuttle::isOutlier(x@meta.data$percent.mt, type="higher"), "thresholds")["higher"]
+  print(threshold)
+  x <- subset(x, subset= percent.mt<threshold)
+})
+# Combine seurat object back together
+seur.filt <- reduce(seur.list, function(x, y){
+  merge(x = x, y = y, add.cell.ids = NULL, merge.data = T)
+})
+
+# Sanity check
+VlnPlot(seur.filt, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor", title="post-filtering")
+
+# save for running seurat integration on Elzar
+# saveRDS(seur.filt, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+```
+
+
+
+
+## 3. INTEGRATION HARMONY PIPELINE (lognorm)
+
+Following seurat standard pipeline, and then [integrating with Harmony](https://htmlpreview.github.io/?https://github.com/satijalab/seurat.wrappers/blob/master/docs/harmony.html)
+
+### 3.1. INTEGRATION WITH HVGs SELECTED ON MERGED DATA
+
+#### 3.1.1. Preprocess
+
+```{r harmony-preprocess}
+# Start on QC data
+seur.filt <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+
+
+# Run standard workflow for PCA
+seur.norm <- NormalizeData(seur.filt)
+seur.norm <- FindVariableFeatures(seur.norm, selection.method="vst", nfeatures=5000)
+seur.norm <- ScaleData(seur.norm)
+seur.norm <- RunPCA(seur.norm, npcs=50, verbose=FALSE)
+ElbowPlot(seur.norm, ndims=50, reduction="pca")
+# DimPlot(seur.norm, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+
+
+# Integrate with Harmony
+seur.harmony <- RunHarmony(seur.norm,
+                           reduction = "pca",
+                           max.iter.harmony=30,
+                           group.by.vars = c("Method", "Batch")) # converged in 2 iterations
+DimPlot(seur.harmony, reduction="pca", group.by="Batch") | DimPlot(seur.harmony, reduction="harmony", group.by="Batch")
+DimPlot(seur.harmony, reduction="pca", group.by="Method") | DimPlot(seur.harmony, reduction="harmony", group.by="Method")
+# ElbowPlot(seur.harmony, ndims=50, reduction="harmony")
+
+
+# UMAP & Clustering
+seur.harmony <- RunUMAP(seur.harmony, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.harmony <- FindNeighbors(seur.harmony, reduction = "harmony", dims = 1:20)
+seur.harmony <- FindClusters(seur.harmony, resolution = 1)
+
+# Re-order clusters
+# table(seur.harmony@meta.data[,c("old_clusters", "RNA_snn_res.1")])
+seur.harmony@meta.data$seurat_clusters <- case_when(
+  seur.harmony@meta.data$RNA_snn_res.1 == 0 ~ 14,
+  seur.harmony@meta.data$RNA_snn_res.1 == 1 ~ 15,
+  seur.harmony@meta.data$RNA_snn_res.1 == 2 ~ 13,
+  seur.harmony@meta.data$RNA_snn_res.1 == 3 ~ 10,
+  seur.harmony@meta.data$RNA_snn_res.1 == 4 ~ 5,
+  seur.harmony@meta.data$RNA_snn_res.1 == 5 ~ 11,
+  seur.harmony@meta.data$RNA_snn_res.1 == 6 ~ 8,
+  seur.harmony@meta.data$RNA_snn_res.1 == 7 ~ 12,
+  seur.harmony@meta.data$RNA_snn_res.1 == 8 ~ 16,
+  seur.harmony@meta.data$RNA_snn_res.1 == 9 ~ 4,
+  seur.harmony@meta.data$RNA_snn_res.1 == 10 ~ 7,
+  seur.harmony@meta.data$RNA_snn_res.1 == 11 ~ 6,
+  seur.harmony@meta.data$RNA_snn_res.1 == 12 ~ 3,
+  seur.harmony@meta.data$RNA_snn_res.1 == 13 ~ 9,
+  seur.harmony@meta.data$RNA_snn_res.1 == 14 ~ 0,
+  seur.harmony@meta.data$RNA_snn_res.1 == 15 ~ 1,
+  seur.harmony@meta.data$RNA_snn_res.1 == 16 ~ 2,
+)
+# table(seur.harmony@meta.data[,c("seurat_clusters", "RNA_snn_res.1")]) # sanity check
+```
+
+#### 3.1.2. Visualization
+
+```{r harmony-visualization}
+# Visualization
+DimPlot(seur.harmony, reduction = "umap", group.by = "Batch")
+DimPlot(seur.harmony, reduction = "umap", group.by = "Tissue")
+DimPlot(seur.harmony, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=brewer.pal(7,"Paired"))
+DimPlot(seur.harmony, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Cell type composition per cluster
+ggplot(seur.harmony@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
+       aes(x=seurat_clusters, y=n, fill=cell.ident))+
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  labs(x="clusters", y="", title = "5000 HVGs (total data)")
+```
+
+
+
+### 3.2. INTEGRATION WITH HVGs SELECTED ON EACH CELL TYPE
+
+#### 3.2.1. Preprocess
+
+```{r celltype-preprocess}
+# Normalize data
+seur.norm2 <- NormalizeData(seur.filt)
+
+
+# Get HVGs from each cell type in thymus
+getHVG <- function(seuratobject, cells, nfeatures=2000){
+  # Subset seurat object
+  cat("-- Subset seurat object --\n")
+  seur.subset <- subset(seuratobject, subset = group.ident %in% cells)
+  cat("Nb of cells in subset object:", dim(seur.subset)[2], "\n")
+  # Find variable features
+  seur.subset <- FindVariableFeatures(seur.subset, selection.method="vst", nfeatures=nfeatures)
+  return(VariableFeatures(seur.subset))
+}
+# Call function to get HVGs for each cell lineage
+hvg.cd4    <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="CD4_Thymus")
+hvg.cd8    <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="CD8_Thymus")
+hvg.nkt    <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="NKT_Thymus")
+hvg.mait   <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="MAIT_Thymus")
+hvg.gdt    <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="GD_Thymus")
+# hvg.thymus <- getHVG(seuratobject=seur.norm2, nfeatures=5000, cells=c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus"))
+# Compare how many genes in common
+# table(hvg.cd4  %in% hvg.thymus)
+# table(hvg.cd8  %in% hvg.thymus)
+# table(hvg.nkt  %in% hvg.thymus)
+# table(hvg.mait %in% hvg.thymus)
+# table(hvg.gdt  %in% hvg.thymus)
+
+# DEFINE VARIABLE FEATURES FOR SEURAT OBJECT
+# get 2000 global HVGs
+seur.norm2 <- FindVariableFeatures(seur.norm2, selection.method="vst", nfeatures=2000)
+# add the thymic-specific HVGs
+hvg.thymicells <- unique(c(hvg.cd4, hvg.cd8, hvg.nkt, hvg.mait, hvg.gdt))
+# length(hvg.thymicells) # 3204 HVGs (n=1000); 5862 HVGs (n=2000)
+# table(hvg.thymicells %in% VariableFeatures(seur.norm2), useNA="ifany") # 1806 (or 4147) are not in the 2000 global HVGs
+hvg.final <- unique(c(hvg.thymicells, VariableFeatures(seur.norm2)))
+# length(hvg.final) # 3806 HVGs
+VariableFeatures(seur.norm2) <- hvg.final
+
+
+# CONTINUE PREPROCESSING
+seur.norm2 <- ScaleData(seur.norm2)
+seur.norm2 <- RunPCA(seur.norm2, npcs=50, verbose=FALSE)
+ElbowPlot(seur.norm2, ndims=50, reduction="pca")
+# DimPlot(seur.norm2, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+seur.harmony2 <- RunHarmony(seur.norm2, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
+DimPlot(seur.harmony2, reduction="pca", group.by="Batch") | DimPlot(seur.harmony2, reduction="harmony", group.by="Batch")
+DimPlot(seur.harmony2, reduction="pca", group.by="Method") | DimPlot(seur.harmony2, reduction="harmony", group.by="Method")
+# ElbowPlot(seur.harmony2, ndims=50, reduction="harmony")
+seur.harmony2 <- RunUMAP(seur.harmony2, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.harmony2 <- FindNeighbors(seur.harmony2, reduction = "harmony", dims = 1:20)
+seur.harmony2 <- FindClusters(seur.harmony2, resolution = 1)
+
+# Re-order clusters
+# table(seur.harmony2@meta.data[,c("old_clusters", "RNA_snn_res.1")])
+seur.harmony2@meta.data$seurat_clusters <- case_when(
+  seur.harmony2@meta.data$RNA_snn_res.1 == 0 ~ 14,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 1 ~ 16,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 2 ~ 11,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 3 ~ 5,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 4 ~ 13,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 5 ~ 8,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 6 ~ 12,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 7 ~ 4,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 8 ~ 10,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 9 ~ 7,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 10 ~ 15,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 11 ~ 9,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 12 ~ 3,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 13 ~ 0,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 14 ~ 17,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 15 ~ 1,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 16 ~ 6,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 17 ~ 2,
+  seur.harmony2@meta.data$RNA_snn_res.1 == 18 ~ 18
+)
+# table(seur.harmony2@meta.data[,c("seurat_clusters", "RNA_snn_res.1")]) # sanity check
+```
+
+#### 3.2.2. Visualization
+
+```{r celltype-visualization}
+# Visualization
+DimPlot(seur.harmony2, reduction = "umap", group.by = "Batch")
+DimPlot(seur.harmony2, reduction = "umap", group.by = "Tissue")
+DimPlot(seur.harmony2, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=brewer.pal(7,"Paired"))
+DimPlot(seur.harmony2, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(19))
+
+# Cell type composition per cluster
+ggplot(seur.harmony2@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
+       aes(x=seurat_clusters, y=n, fill=cell.ident))+
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  labs(x="clusters", y="", title = "2000 HVGs (total data) + 4147 HVGs (thymic lineages)")
+```
+
+#### 3.2.3. Preprocess only with thymic HVGs
+
+```{r thymic-hvg-preprocess}
+# Normalize data
+seur.norm3 <- NormalizeData(seur.filt)
+length(hvg.thymicells) # sanity check: 3204 HVGs (n=1000); 5862 HVGs (n=2000)
+VariableFeatures(seur.norm3) <- hvg.thymicells
+
+
+# CONTINUE PREPROCESSING
+seur.norm3 <- ScaleData(seur.norm3)
+seur.norm3 <- RunPCA(seur.norm3, npcs=50, verbose=FALSE)
+ElbowPlot(seur.norm3, ndims=50, reduction="pca")
+# DimPlot(seur.norm3, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
+seur.harmony3 <- RunHarmony(seur.norm3, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
+DimPlot(seur.harmony3, reduction="pca", group.by="Batch") | DimPlot(seur.harmony3, reduction="harmony", group.by="Batch")
+DimPlot(seur.harmony3, reduction="pca", group.by="Method") | DimPlot(seur.harmony3, reduction="harmony", group.by="Method")
+# ElbowPlot(seur.harmony3, ndims=50, reduction="harmony")
+seur.harmony3 <- RunUMAP(seur.harmony3, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.harmony3 <- FindNeighbors(seur.harmony3, reduction = "harmony", dims = 1:20)
+seur.harmony3 <- FindClusters(seur.harmony3, resolution = 1)
+
+# table(seur.harmony3@meta.data[,c("old_clusters", "RNA_snn_res.1")])
+seur.harmony3@meta.data$seurat_clusters <- case_when(
+  seur.harmony3@meta.data$RNA_snn_res.1 == 0 ~ 14,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 1 ~ 15,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 2 ~ 8,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 3 ~ 5,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 4 ~ 10,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 5 ~ 12,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 6 ~ 11,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 7 ~ 4,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 8 ~ 13,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 9 ~ 7,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 10 ~ 6,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 11 ~ 9,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 12 ~ 0,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 13 ~ 3,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 14 ~ 17,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 15 ~ 1,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 16 ~ 2,
+  seur.harmony3@meta.data$RNA_snn_res.1 == 17 ~ 16
+)
+# table(seur.harmony3@meta.data[,c("seurat_clusters", "RNA_snn_res.1")]) # sanity check
+
+
+# Visualization
+DimPlot(seur.harmony3, reduction = "umap", group.by = "Batch")
+DimPlot(seur.harmony3, reduction = "umap", group.by = "Tissue")
+DimPlot(seur.harmony3, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=brewer.pal(7,"Paired"))
+DimPlot(seur.harmony3, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+
+# Cell type composition per cluster
+ggplot(seur.harmony3@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
+       aes(x=seurat_clusters, y=n, fill=cell.ident))+
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  labs(x="clusters", y="", title = "5862 HVGs (based on thymic lineages)")
+```
+
+#### 3.2.4. Comparison
+
+```{r comparison}
+# Comparison by UMAP
+col <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FF7F00")
+DimPlot(seur.human, reduction = "UMAP_50", group.by = "cell.ident") +
+  scale_color_manual(values=col) + labs(title="2000 HVGs (total data)") |
+DimPlot(seur.harmony, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=col) + labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") |
+DimPlot(seur.harmony2, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=col) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
+DimPlot(seur.harmony3, reduction = "umap", group.by = "cell.ident") +
+  scale_color_manual(values=col) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg.jpeg", width=24, height=6)
+
+
+# Comparison of clusters
+# table(rownames(seur.harmony@meta.data) == rownames(seur.harmony2@meta.data)) # sanity check
+# table(rownames(seur.harmony@meta.data) == rownames(seur.harmony3@meta.data)) # sanity check
+df <- seur.harmony@meta.data[,c("old_clusters", "seurat_clusters")] %>%
+  rename(laurent=old_clusters, hvg5000=seurat_clusters) %>%
+  mutate(laurent=factor(laurent, levels=0:17))
+df <- cbind(df, seur.harmony2@meta.data$seurat_clusters, seur.harmony3@meta.data$seurat_clusters) %>%
+  rename(hvg2000_thy4147="seur.harmony2@meta.data$seurat_clusters",
+         thy5862="seur.harmony3@meta.data$seurat_clusters") %>%
+  group_by(laurent, hvg5000, hvg2000_thy4147, thy5862) %>%
+  count()
+
+flowplot <- function(colorscale=colorRampPalette(brewer.pal(12,"Paired"))(18)){
+  ggplot(df, aes(y = n, axis1 = laurent, axis2 = hvg5000, axis3=hvg2000_thy4147, axis4=thy5862)) +
+    geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
+    geom_stratum(width = 1/12, fill = "black", color = "grey") +
+    geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+    scale_x_discrete(limits = c("2000 HVGs (total data)",
+                                "5000 HVGs (total data)",
+                                "2000 HVGs (total data) + 4147 HVGs (thymic lineages)",
+                                "5862 HVGs (based on thymic lineages)"), expand = c(.05, .05)) +
+    scale_fill_manual(values=colorscale) +
+    labs(title="Comparison cluster assignment", y="#cells")
+}
+flowplot()
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg3.jpeg", width=15, height=10)
+
+
+# Comparison of clusters
+col2 <- colorRampPalette(brewer.pal(12,"Paired"))(19)
+DimPlot(seur.human, reduction = "UMAP_50", group.by = "new_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(title="2000 HVGs (total data)") |
+DimPlot(seur.harmony, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") |
+DimPlot(seur.harmony2, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
+DimPlot(seur.harmony3, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg2.jpeg", width=24, height=6)
+
+
+# Cell type composition per cluster
+cellcomp <- function(seurobj, title){
+  ggplot(seurobj@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
+       aes(x=seurat_clusters, y=n, fill=cell.ident))+
+    geom_bar(position="fill", stat="identity") +
+    scale_fill_manual(values=brewer.pal(7,"Paired")) +
+    labs(x="clusters", y="", title = title)
+}
+# Plot
+ggplot(seur.human@meta.data[,c("cell.ident", "new_clusters")] %>% group_by(cell.ident, new_clusters) %>% count(),
+       aes(x=new_clusters, y=n, fill=cell.ident))+
+  geom_bar(position="fill", stat="identity") +
+  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  labs(x="", y="", title = "2000 HVGs (total data)") |
+  cellcomp(seur.harmony, title="5000 HVGs (total data)") |
+  cellcomp(seur.harmony2, title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
+  cellcomp(seur.harmony3, title="5862 HVGs (based on thymic lineages)")
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg4.jpeg", width=24, height=6)
+```
+
+
+Little deep-dive on cluster 6
+```{r comparison-clus6}
+# Highlight cluster 6 on alluvial plot
+flowplot(colorscale=c(rep("#bdbdbd", 6), "#99000d", rep("#bdbdbd", 11))) # cluster 6
+# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg_clus6.jpeg", width=15, height=10)
+
+# Highlight cluster 6 on umaps
+clus6 <- WhichCells(seur.human, idents=6)
+DimPlot(seur.human, reduction = "UMAP_50", cells.highlight=clus6) +
+  labs(title="2000 HVGs (total data)") + theme(legend.position="none") |
+DimPlot(seur.harmony, reduction = "umap", cells.highlight=clus6) +
+  labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") + theme(legend.position="none") |
+DimPlot(seur.harmony2, reduction = "umap", cells.highlight=clus6) +
+  labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") + theme(legend.position="none") |
+DimPlot(seur.harmony3, reduction = "umap", cells.highlight=clus6) +
+  labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)") + theme(legend.position="none")
+# ggsave("~/Desktop/umap_clus6.jpeg", width=24, height=6)
+
+# Check out marker genes of cluster 10 in seur.harmony
+FindMarkers(seur.harmony, ident.1 = 10, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
+  arrange(avg_log2FC)
+```
+

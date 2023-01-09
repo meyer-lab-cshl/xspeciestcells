@@ -51,8 +51,33 @@ DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
 ElbowPlot(seur.human, reduction="harmony", ndims=50)
 seur.human <- RunUMAP(seur.human, reduction = "harmony", dims = 1:15, n.neighbors=50, n.components=3, reduction.name="UMAP50_3D")
 
+# Plot UMAP
+plotUMAP3D <- function(seurobj=seur.human,
+                       a=1,
+                       b=2,
+                       c=1,
+                       d=3,
+                       group="new_clusters",
+                       colscale=colorRampPalette(brewer.pal(12,"Paired"))(18)){
+  DimPlot(seur.human, dims=c(a,b), reduction = "UMAP50_3D", group.by=group, label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colscale) +
+  labs(x=paste0("UMAP",a), y=paste0("UMAP",b), title="UMAP 50 neighbors") |
+DimPlot(seur.human, dims=c(c,d), reduction = "UMAP50_3D", group.by=group, label = TRUE, repel = TRUE)+
+  scale_color_manual(values=colscale)+
+  labs(x=paste0("UMAP",c), y=paste0("UMAP",d), title="UMAP 50 neighbors")
+}
+plotspath <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D"
+plotUMAP3D()
+# ggsave(file.path(plotspath,"umap50_3D_clusters_2.jpeg"), width=12, height=6)
+plotUMAP3D(c=3, d=2)
+# ggsave(file.path(plotspath,"umap50_3D_clusters_1.jpeg"), width=12, height=6)
+plotUMAP3D(c=3, d=2, group="cell.ident", colscale=c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FF7F00"))
+# ggsave(file.path(plotspath,"umap50_3D_celltype_1.jpeg"), width=12, height=6)
+plotUMAP3D(group="cell.ident", colscale=c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FF7F00"))
+# ggsave(file.path(plotspath,"umap50_3D_celltype_2.jpeg"), width=12, height=6)
 
-# Plot UMAP 1:2 and 2:3
+
+# Plot UMAP 1:2 and 2:3 (color by cluster), highlighting cluster 6 -------
 a <- DimPlot(seur.human, dims=c(1,2), reduction = "UMAP50_3D", group.by="new_clusters", label = TRUE, repel = TRUE)+
   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
   labs(x="UMAP1", y="UMAP2", title="UMAP 50 neighbors") |

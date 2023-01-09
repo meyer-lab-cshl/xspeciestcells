@@ -29,7 +29,7 @@ library(harmony)
 
 ```{r import-data}
 # Import seurat object
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
 
 # Sanity check
 print(seur.human) # 81,378 cells (it's the whole seurat object)
@@ -89,7 +89,7 @@ seur.filt <- reduce(seur.list, function(x, y){
 VlnPlot(seur.filt, features="percent.mt",   group.by="Batch", split.by="Donor") + labs(x="Batch", fill="Donor", title="post-filtering")
 
 # save for running seurat integration on Elzar
-# saveRDS(seur.filt, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+# saveRDS(seur.filt, "~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
 ```
 
 
@@ -105,7 +105,7 @@ Following seurat standard pipeline, and then [integrating with Harmony](https://
 
 ```{r harmony-preprocess}
 # Start on QC data
-seur.filt <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
 
 
 # Run standard workflow for PCA
@@ -179,7 +179,7 @@ ggplot(seur.harmony@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(
 
 ### 3.2. INTEGRATION WITH HVGs SELECTED ON EACH CELL TYPE
 
-#### 3.2.1. Preprocess
+#### 3.2.1. Preprocess with global HVGs + thymic HVGs
 
 ```{r celltype-preprocess}
 # Normalize data
@@ -210,13 +210,14 @@ hvg.gdt    <- getHVG(seuratobject=seur.norm2, nfeatures=2000, cells="GD_Thymus")
 # table(hvg.mait %in% hvg.thymus)
 # table(hvg.gdt  %in% hvg.thymus)
 
+
 # DEFINE VARIABLE FEATURES FOR SEURAT OBJECT
 # get 2000 global HVGs
 seur.norm2 <- FindVariableFeatures(seur.norm2, selection.method="vst", nfeatures=2000)
 # add the thymic-specific HVGs
 hvg.thymicells <- unique(c(hvg.cd4, hvg.cd8, hvg.nkt, hvg.mait, hvg.gdt))
-# length(hvg.thymicells) # 3204 HVGs (n=1000); 5862 HVGs (n=2000)
-# table(hvg.thymicells %in% VariableFeatures(seur.norm2), useNA="ifany") # 1806 (or 4147) are not in the 2000 global HVGs
+# length(hvg.thymicells) # 3204 HVGs (nfeatures=1000); 5862 HVGs (nfeatures=2000)
+# table(hvg.thymicells %in% VariableFeatures(seur.norm2), useNA="ifany") # 1806 (nfeatures=1000) or 4147 (nfeatures=2000) are not in the 2000 global HVGs
 hvg.final <- unique(c(hvg.thymicells, VariableFeatures(seur.norm2)))
 # length(hvg.final) # 3806 HVGs
 VariableFeatures(seur.norm2) <- hvg.final
@@ -225,12 +226,12 @@ VariableFeatures(seur.norm2) <- hvg.final
 # CONTINUE PREPROCESSING
 seur.norm2 <- ScaleData(seur.norm2)
 seur.norm2 <- RunPCA(seur.norm2, npcs=50, verbose=FALSE)
-ElbowPlot(seur.norm2, ndims=50, reduction="pca")
+# ElbowPlot(seur.norm2, ndims=50, reduction="pca")
 # DimPlot(seur.norm2, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
 seur.harmony2 <- RunHarmony(seur.norm2, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
 DimPlot(seur.harmony2, reduction="pca", group.by="Batch") | DimPlot(seur.harmony2, reduction="harmony", group.by="Batch")
 DimPlot(seur.harmony2, reduction="pca", group.by="Method") | DimPlot(seur.harmony2, reduction="harmony", group.by="Method")
-# ElbowPlot(seur.harmony2, ndims=50, reduction="harmony")
+ElbowPlot(seur.harmony2, ndims=50, reduction="harmony")
 seur.harmony2 <- RunUMAP(seur.harmony2, reduction = "harmony", dims = 1:20, n.neighbors=50)
 seur.harmony2 <- FindNeighbors(seur.harmony2, reduction = "harmony", dims = 1:20)
 seur.harmony2 <- FindClusters(seur.harmony2, resolution = 1)
@@ -285,19 +286,19 @@ ggplot(seur.harmony2@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by
 ```{r thymic-hvg-preprocess}
 # Normalize data
 seur.norm3 <- NormalizeData(seur.filt)
-length(hvg.thymicells) # sanity check: 3204 HVGs (n=1000); 5862 HVGs (n=2000)
+length(hvg.thymicells) # sanity check: 3204 HVGs (nfeatures=1000); 5862 HVGs (nfeatures=2000)
 VariableFeatures(seur.norm3) <- hvg.thymicells
 
 
 # CONTINUE PREPROCESSING
 seur.norm3 <- ScaleData(seur.norm3)
 seur.norm3 <- RunPCA(seur.norm3, npcs=50, verbose=FALSE)
-ElbowPlot(seur.norm3, ndims=50, reduction="pca")
+# ElbowPlot(seur.norm3, ndims=50, reduction="pca")
 # DimPlot(seur.norm3, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
 seur.harmony3 <- RunHarmony(seur.norm3, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
 DimPlot(seur.harmony3, reduction="pca", group.by="Batch") | DimPlot(seur.harmony3, reduction="harmony", group.by="Batch")
 DimPlot(seur.harmony3, reduction="pca", group.by="Method") | DimPlot(seur.harmony3, reduction="harmony", group.by="Method")
-# ElbowPlot(seur.harmony3, ndims=50, reduction="harmony")
+ElbowPlot(seur.harmony3, ndims=50, reduction="harmony")
 seur.harmony3 <- RunUMAP(seur.harmony3, reduction = "harmony", dims = 1:20, n.neighbors=50)
 seur.harmony3 <- FindNeighbors(seur.harmony3, reduction = "harmony", dims = 1:20)
 seur.harmony3 <- FindClusters(seur.harmony3, resolution = 1)
@@ -345,7 +346,7 @@ ggplot(seur.harmony3@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by
 #### 3.2.4. Comparison
 
 ```{r comparison}
-# Comparison by UMAP
+# Comparison by UMAP, color by cell lineage
 col <- c("#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FF7F00")
 DimPlot(seur.human, reduction = "UMAP_50", group.by = "cell.ident") +
   scale_color_manual(values=col) + labs(title="2000 HVGs (total data)") |
@@ -355,7 +356,33 @@ DimPlot(seur.harmony2, reduction = "umap", group.by = "cell.ident") +
   scale_color_manual(values=col) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
 DimPlot(seur.harmony3, reduction = "umap", group.by = "cell.ident") +
   scale_color_manual(values=col) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg.jpeg", width=24, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg.jpeg", width=24, height=6)
+
+
+# Comparison by UMAP, color by clusters
+col2 <- colorRampPalette(brewer.pal(12,"Paired"))(19)
+DimPlot(seur.human, reduction = "UMAP_50", group.by = "new_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(title="2000 HVGs (total data)") |
+DimPlot(seur.harmony, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") |
+DimPlot(seur.harmony2, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
+DimPlot(seur.harmony3, reduction = "umap", group.by = "seurat_clusters", label=T) +
+  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg2.jpeg", width=24, height=6)
+
+
+# Comparison by UMAP, color by tissue
+col3 <- c("#ef3b2c", "#6baed6")
+DimPlot(seur.human, reduction = "UMAP_50", group.by = "Tissue", label=T) +
+  scale_color_manual(values=col3) + labs(title="2000 HVGs (total data)") |
+DimPlot(seur.harmony, reduction = "umap", group.by = "Tissue", label=T) +
+  scale_color_manual(values=col3) + labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") |
+DimPlot(seur.harmony2, reduction = "umap", group.by = "Tissue", label=T) +
+  scale_color_manual(values=col3) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
+DimPlot(seur.harmony3, reduction = "umap", group.by = "Tissue", label=T) +
+  scale_color_manual(values=col3) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg5.jpeg", width=24, height=6)
 
 
 # Comparison of clusters
@@ -383,20 +410,7 @@ flowplot <- function(colorscale=colorRampPalette(brewer.pal(12,"Paired"))(18)){
     labs(title="Comparison cluster assignment", y="#cells")
 }
 flowplot()
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg3.jpeg", width=15, height=10)
-
-
-# Comparison of clusters
-col2 <- colorRampPalette(brewer.pal(12,"Paired"))(19)
-DimPlot(seur.human, reduction = "UMAP_50", group.by = "new_clusters", label=T) +
-  scale_color_manual(values=col2) + labs(title="2000 HVGs (total data)") |
-DimPlot(seur.harmony, reduction = "umap", group.by = "seurat_clusters", label=T) +
-  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5000 HVGs (total data)") |
-DimPlot(seur.harmony2, reduction = "umap", group.by = "seurat_clusters", label=T) +
-  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
-DimPlot(seur.harmony3, reduction = "umap", group.by = "seurat_clusters", label=T) +
-  scale_color_manual(values=col2) + labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg2.jpeg", width=24, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg3.jpeg", width=15, height=10)
 
 
 # Cell type composition per cluster
@@ -416,7 +430,7 @@ ggplot(seur.human@meta.data[,c("cell.ident", "new_clusters")] %>% group_by(cell.
   cellcomp(seur.harmony, title="5000 HVGs (total data)") |
   cellcomp(seur.harmony2, title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") |
   cellcomp(seur.harmony3, title="5862 HVGs (based on thymic lineages)")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg4.jpeg", width=24, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg4.jpeg", width=24, height=6)
 ```
 
 
@@ -424,7 +438,7 @@ Little deep-dive on cluster 6
 ```{r comparison-clus6}
 # Highlight cluster 6 on alluvial plot
 flowplot(colorscale=c(rep("#bdbdbd", 6), "#99000d", rep("#bdbdbd", 11))) # cluster 6
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/HVGs/umap_with_thymic_hvg_clus6.jpeg", width=15, height=10)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_with_thymic_hvg_clus6.jpeg", width=15, height=10)
 
 # Highlight cluster 6 on umaps
 clus6 <- WhichCells(seur.human, idents=6)
@@ -436,9 +450,9 @@ DimPlot(seur.harmony2, reduction = "umap", cells.highlight=clus6) +
   labs(x="umap50_1", y="umap50_2", title="2000 HVGs (total data) + 4147 HVGs (thymic lineages)") + theme(legend.position="none") |
 DimPlot(seur.harmony3, reduction = "umap", cells.highlight=clus6) +
   labs(x="umap50_1", y="umap50_2", title="5862 HVGs (based on thymic lineages)") + theme(legend.position="none")
-# ggsave("~/Desktop/umap_clus6.jpeg", width=24, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/umap_clus6.jpeg", width=24, height=6)
 
-# Check out marker genes of cluster 10 in seur.harmony
+# Check out marker genes of cluster 10 in seur.harmony (nfeatures=5000)
 FindMarkers(seur.harmony, ident.1 = 10, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
   arrange(avg_log2FC)
 ```

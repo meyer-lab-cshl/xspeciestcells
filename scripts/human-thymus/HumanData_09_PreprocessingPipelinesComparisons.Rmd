@@ -95,7 +95,7 @@ DimPlot(seur.human, dims=c(3,2), reduction = "UMAP50_3D", group.by="new_clusters
   theme(legend.position="none")
 
 ggpubr::ggarrange(a,b,nrow=2)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_3.jpeg", width=12, height=12)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_clus6_1.jpeg", width=12, height=12)
 
 
 # Plot UMAP 1:2 and 1:3, highlighting cluster 6
@@ -116,7 +116,7 @@ DimPlot(seur.human, dims=c(1,3), reduction = "UMAP50_3D", group.by="new_clusters
   theme(legend.position="none")
 
 ggpubr::ggarrange(c,d,nrow=2)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_4.jpeg", width=12, height=12)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_UMAP-3D/umap50_3D_clus6_2.jpeg", width=12, height=12)
 ```
 
 ### 1.3. Check out marker genes for each cluster
@@ -490,120 +490,6 @@ DimPlot(seur.harmony, reduction = "umap", group.by="seurat_clusters", label = TR
 # ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_comparisonUMAPs.jpeg", width=12, height=6)
 ```
 
-#### 4.1.5. Regress out TCR signaling genes
-
-```{r regress-out-tcr-signaling}
-# Start on QC data
-seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
-
-# TCR signaling genes
-# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")+
-#   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
-clus6.markers <- FindMarkers(seur.human, ident.1 = 6, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
-  arrange(-avg_log2FC)
-print(clus6.markers)
-tcrlist1 <- c("NR4A1", "EGR1", "EGR3", "NFKBID", "IRF4", "ICOS", "EGR2", "REL", "HIVEP3", "TRAT1", "NAB2",
-              "ID3", "CD5", "TRAC", "SIRPG", "ITPKB", "ZFP36L1")
-tcrlist2 <- c('ALCAM', 'JAG1', 'LTA', 'CCL3', 'CCL4', 'FOSL1', 'PIM3', 'TNFRSF4', 'TGFB1', 'FURIN', 'CD160', 'GADD45G', 'TNFSF14',
-              'ATF3', 'LCK', 'CD8B', 'NFATC2', 'NFATC1', 'CISH', 'PTGER2', 'TNFSF11', 'TNFRSF21', 'SYP', 'SLC7A1', 'NKG7', 'CRABP2',
-              'SEMA7A', 'IER3', 'SLC16A1', 'RGS16', 'NEK6', 'TNFSF8', 'ZBTB32', 'FOSL2', 'HAVCR2', 'GFI1', 'IL10', 'FOSB', 'IFNG',
-              #'SULT2B1', 'IL17A', #'IL3', 'CCL1', 'CCR8', #'IL17F', #'IL13', #'CSF2', 'IL4',  #'UTF1', #'MIR193A', 'ALPL', 'IL5', 'IL2', # not found in our genes
-              'EGR1', 'TNFRSF9', 'IL21', 'MFSD2A', 'IL24', 'IL15RA', 'NR4A3', 'CD40LG', 'RELA', 'BCAT1', 'XCL1', 'STAT5A', 'MAFF') # list from Pe'er lab
-# Sanity check
-test <- AddModuleScore(seur.human, features=list(tcrlist1), name="tcr_score")
-test <- AddModuleScore(test, features=list(tcrlist2), name="tcr_score2")
-FeaturePlot(test, features="tcr_score1", reduction="UMAP_50") + scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu")))
-FeaturePlot(test, features="tcr_score21", reduction="UMAP_50") + scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu")))
-VlnPlot(test, features = c("tcr_score1", "tcr_score21"))
-
-
-# Preprocessing while regressing out TCR signaling genes
-seur.tcr.out <- NormalizeData(seur.filt)
-seur.tcr.out <- AddModuleScore(seur.tcr.out, features=list(tcrlist1), name="tcr_score")
-seur.tcr.out <- FindVariableFeatures(seur.tcr.out, selection.method="vst", nfeatures=2000)
-seur.tcr.out <- ScaleData(seur.tcr.out, vars.to.regress="tcr_score1")
-seur.tcr.out <- RunPCA(seur.tcr.out, npcs=50, verbose=FALSE)
-seur.tcr.out <- RunHarmony(seur.tcr.out, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch")) # converged in 2 iterations
-# DimPlot(seur.tcr.out, reduction="pca", group.by="Batch") | DimPlot(seur.tcr.out, reduction="harmony", group.by="Batch")
-# DimPlot(seur.tcr.out, reduction="pca", group.by="Method") | DimPlot(seur.tcr.out, reduction="harmony", group.by="Method")
-ElbowPlot(seur.tcr.out, ndims=50, reduction="harmony")
-seur.tcr.out <- RunUMAP(seur.tcr.out, reduction = "harmony", dims = 1:20, n.neighbors=50)
-seur.tcr.out <- FindNeighbors(seur.tcr.out, reduction = "harmony", dims = 1:20)
-seur.tcr.out <- FindClusters(seur.tcr.out, resolution = 1.1)
-
-# Re-order clusters
-# table(seur.tcr.out@meta.data[,c("old_clusters", "RNA_snn_res.1.1")])
-seur.tcr.out@meta.data$seurat_clusters <- case_when(
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 0 ~ 14,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 1 ~ 16,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 2 ~ 13,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 3 ~ 11,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 4 ~ 10,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 5 ~ 5,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 6 ~ 8,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 7 ~ 7,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 8 ~ 12,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 9 ~ 4,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 10 ~ 15,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 11 ~ 9,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 12 ~ 3,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 13 ~ 0,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 14 ~ 1,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 15 ~ 6,
-  seur.tcr.out@meta.data$RNA_snn_res.1.1 == 16 ~ 2
-)
-# table(seur.tcr.out@meta.data[,c("seurat_clusters", "RNA_snn_res.1.1")]) # sanity check
-
-# Visualization
-# DimPlot(seur.tcr.out, reduction = "umap", group.by = "Batch")
-DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", label = TRUE, repel = TRUE)+
-  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-  labs(title="Laurent's clusters") |
-DimPlot(seur.tcr.out, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
-  scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-  labs(title="Regressing out TCR signaling genes")
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonUMAPs_2000HVGs.jpeg", width=12, height=6)
-
-# Compare cluster labels with Laurent's seurat object
-df <- seur.tcr.out@meta.data[,c("old_clusters", "seurat_clusters")] %>%
-  rename(laurent=old_clusters, tcr_out=seurat_clusters) %>%
-  mutate(laurent=factor(laurent, levels=0:17)) %>%
-  group_by(laurent, tcr_out) %>%
-  count()
-ggplot(df, aes(y = n, axis1 = laurent, axis2 = tcr_out)) +
-  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance=" dzigzag") +
-  geom_stratum(width = 1/12, fill = "black", color = "grey") +
-  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
-  scale_x_discrete(limits = c("Laurent", "Regressing out TCRsig"), expand = c(.05, .05)) +
-  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-  labs(title="Comparison cluster assignment - Laurent vs Regressing out TCR signaling genes", y="#cells")
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonClustersLaurent_2000HVGs.jpeg", width=10, height=10)
-
-# Highlight only cluster 6
-ggplot(df, aes(y = n, axis1 = laurent, axis2 = tcr_out)) +
-  geom_alluvium(aes(fill=laurent), width = 1/12, lode.guidance="zigzag") +
-  geom_stratum(width = 1/12, fill = "black", color = "grey") +
-  geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
-  scale_x_discrete(limits = c("Laurent", "Regressing out TCRsig"), expand = c(.05, .05)) +
-  scale_fill_manual(values=c(rep("#bdbdbd", 6), "#99000d", rep("#bdbdbd", 11))) +
-  labs(title="Comparison cluster assignment - Laurent vs Regressing out TCR signaling genes", y="#cells")
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonClustersLaurent_2000HVGs_clus6.jpeg", width=10, height=10)
-
-# Compare TCR scoring
-FeaturePlot(test, features="tcr_score1", reduction="UMAP_50") +
-  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu"))) +
-  labs(title="Laurent", color="TCRsig score") |
-FeaturePlot(seur.tcr.out, features="tcr_score1") +
-  scale_colour_gradientn(colours = rev(brewer.pal(n = 11, name = "RdBu"))) +
-  labs(title="Regressing out TCR signaling genes", color="TCRsig score")
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_09_PreprocessingPipelinesComparisons/lognorm-harmony_TCRsigout_comparisonTCR_2000HVGs.jpeg", width=12, height=6)
-
-# What are the marker genes of this new cluster 6?
-Idents(seur.tcr.out) <- "seurat_clusters"
-clus6.tcrout.markers <- FindMarkers(seur.tcr.out, ident.1 = 6, min.pct = 0.25, logfc.threshold = 1.0, only.pos=T) %>%
-  arrange(-avg_log2FC)
-print(clus6.tcrout.markers)
-```
 
 
 

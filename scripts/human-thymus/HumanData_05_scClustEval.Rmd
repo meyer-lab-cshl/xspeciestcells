@@ -8,7 +8,7 @@ output:
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/human-thymus/")
+knitr::opts_chunk$set(root.dir = "~/Projects/HumanThymusProject/scripts/human-thymus/")
 ```
 
 
@@ -33,9 +33,9 @@ library(scclusteval)
 Take a quick look at the PBMC 5k data
 ```{r pbmc1}
 # Import data
-pbmc <- readRDS("../../data/07_scClustEval/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
-subsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_subsample.rds")
-fullsample_idents<- readRDS("../../data/07_scClustEval/pbmc/output_snakemake/gather_full_sample.rds")
+pbmc <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/pbmc/pbmc_5k_v3_label_transfered_from_10k.rds")
+subsample_idents<- readRDS("../../data/human-thymus/HumanData_05_scClustEval/pbmc/output_snakemake/gather_subsample.rds")
+fullsample_idents<- readRDS("../../data/human-thymus/HumanData_05_scClustEval/pbmc/output_snakemake/gather_full_sample.rds")
 
 # pbmc@meta.data
 # DimPlot(pbmc)
@@ -353,9 +353,9 @@ subsampling <- function(seuratobject, fullsample_idents, subsample_idents_list, 
 
 ```{r import-data-inkt}
 # Import data
-nkt.seur <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
-nkt.subsampling  <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_subsample.rds")
-nkt.fullsample <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_full_sample.rds")
+nkt.seur <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/input/nkt_object_22-11-10.rds")
+nkt.subsampling  <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/gather_subsample.rds")
+nkt.fullsample <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/gather_full_sample.rds")
 
 # Take quick peek at the data
 # nkt.seur
@@ -383,7 +383,7 @@ nkt.fullsample %>%
 # Look at some different parameter sets
 paramUMAP(nkt.sct_merged, fullsample_idents=nkt.fullsample, pc_nb=c(20,15,10), res=c(0.4, 0.7,1), knn=c(50, 20,10)) # lowest & highest number of clusters
 paramUMAP(nkt.seur,       fullsample_idents=nkt.fullsample, pc_nb=c(20,15,10), res=c(0.4, 0.7,1), knn=c(50, 20,10)) # lowest & highest number of clusters
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/lowest_highest_cluster_nb2.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/lowest_highest_cluster_nb2.jpeg", width=15, height=5)
 ```
 
 
@@ -411,7 +411,7 @@ ParameterSetScatterPlot(stable_clusters = nkt.stableClust,
                         y_var = "number",
                         facet_rows = "resolution",
                         facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_stableclusters1.jpeg", width=7, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/nkt_subsampling_stableclusters1.jpeg", width=7, height=5)
 
 # Plot percentage of cells in stable clusters
 ParameterSetScatterPlot(stable_clusters = nkt.stableClust,
@@ -421,14 +421,14 @@ ParameterSetScatterPlot(stable_clusters = nkt.stableClust,
                         facet_rows = "resolution",
                         facet_cols = "pc") +
   ggtitle("% of cells in stable clusters")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_stableclusters2.jpeg", width=6, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/nkt_subsampling_stableclusters2.jpeg", width=6, height=5)
 
 
 # Look at parameter set of interest
 
 # Call function
 subsampling(nkt.sct_merged, fullsample_idents=nkt.fullsample, subsample_idents_list=nkt.subsampling_list, pc_nb=15, res=0.7, knn=50)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_subsampling_pc10-res07-k20.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/nkt_subsampling_pc10-res07-k20.jpeg", width=15, height=5)
 
 
 # Verification scClustEval vs local
@@ -446,7 +446,7 @@ subsampling(nkt.sct_merged, fullsample_idents=nkt.fullsample, subsample_idents_l
 # c <- DimPlot(test) + ggtitle ("pc=15, res=0.7, k=50 | local computer")
 # 
 # ggpubr::ggarrange(a,b,c, ncol=3, widths=c(1,0.8,0.8))
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_nkt/nkt_pc15-res07-k50.jpeg", width=17, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/nkt_pc15-res07-k50.jpeg", width=17, height=5)
 
 ```
 
@@ -457,9 +457,9 @@ subsampling(nkt.sct_merged, fullsample_idents=nkt.fullsample, subsample_idents_l
 
 ```{r import-data-mait}
 # Import data
-mait.seur <- readRDS("../../data/07_scClustEval/input/mait_object_22-11-10.rds")
-mait.subsampling  <- readRDS("../../data/07_scClustEval/thymic_mait/gather_subsample.rds")
-mait.fullsample <- readRDS("../../data/07_scClustEval/thymic_mait/gather_full_sample.rds")
+mait.seur <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/input/mait_object_22-11-10.rds")
+mait.subsampling  <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_mait/gather_subsample.rds")
+mait.fullsample <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_mait/gather_full_sample.rds")
 
 # Take quick peek at the data
 # mait.seur
@@ -498,7 +498,7 @@ ParameterSetScatterPlot(stable_clusters = mait.stableClust,
                         y_var = "number",
                         facet_rows = "resolution",
                         facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_stableclusters1_2.jpeg", width=7, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_mait/mait_subsampling_stableclusters1_2.jpeg", width=7, height=7)
 
 # Plot percentage of cells in stable clusters
 ParameterSetScatterPlot(stable_clusters = mait.stableClust,
@@ -508,14 +508,14 @@ ParameterSetScatterPlot(stable_clusters = mait.stableClust,
                         facet_rows = "resolution",
                         facet_cols = "pc") +
   ggtitle("% of cells in stable clusters")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_stableclusters2_2.jpeg", width=6, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_mait/mait_subsampling_stableclusters2_2.jpeg", width=6, height=7)
 
 
 # Look at parameter set of interest
 
 # Call function
 subsampling(mait.sct_merged, fullsample_idents=mait.fullsample, subsample_idents_list=mait.subsampling_list, pc_nb=10, res=0.2, knn=40)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_mait/mait_subsampling_pc10-res02-k30.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_mait/mait_subsampling_pc10-res02-k30.jpeg", width=15, height=5)
 
 # ElbowPlot(test)
 # test <- mait.sct_merged
@@ -531,9 +531,9 @@ subsampling(mait.sct_merged, fullsample_idents=mait.fullsample, subsample_idents
 
 ```{r import-data-gdt}
 # Import data
-gdt.seur <- readRDS("../../data/07_scClustEval/input/gdt_object_22-11-10.rds")
-gdt.subsampling  <- readRDS("../../data/07_scClustEval/thymic_gdt/gather_subsample.rds")
-gdt.fullsample <- readRDS("../../data/07_scClustEval/thymic_gdt/gather_full_sample.rds")
+gdt.seur <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/input/gdt_object_22-11-10.rds")
+gdt.subsampling  <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gather_subsample.rds")
+gdt.fullsample <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gather_full_sample.rds")
 
 # Take quick peek at the data
 # gdt.seur
@@ -572,7 +572,7 @@ ParameterSetScatterPlot(stable_clusters = gdt.stableClust,
                         y_var = "number",
                         facet_rows = "resolution",
                         facet_cols = "pc") + ggtitle("stable cluster if jaccard_median > 0.6")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_stableclusters1.jpeg", width=7, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gdt_subsampling_stableclusters1.jpeg", width=7, height=5)
 
 # Plot percentage of cells in stable clusters
 ParameterSetScatterPlot(stable_clusters = gdt.stableClust,
@@ -582,18 +582,18 @@ ParameterSetScatterPlot(stable_clusters = gdt.stableClust,
                         facet_rows = "resolution",
                         facet_cols = "pc") +
   ggtitle("% of cells in stable clusters")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_stableclusters2.jpeg", width=6, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gdt_subsampling_stableclusters2.jpeg", width=6, height=5)
 
 
 # Look at parameter set of interest
 
 # Call function
 subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=15, res=0.4, knn=20)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc15-res04-k20.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gdt_subsampling_pc15-res04-k20.jpeg", width=15, height=5)
 subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=0.4, knn=10)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc20-res04-k10.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gdt_subsampling_pc20-res04-k10.jpeg", width=15, height=5)
 subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=1, knn=20)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/thymic_gdt/gdt_subsampling_pc20-res1-k20.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/output/thymic_gdt/gdt_subsampling_pc20-res1-k20.jpeg", width=15, height=5)
 
 subsampling(gdt.sct_merged, fullsample_idents=gdt.fullsample, subsample_idents_list=gdt.subsampling_list, pc_nb=20, res=0.7, knn=20)
 

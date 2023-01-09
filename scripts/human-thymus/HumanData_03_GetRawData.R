@@ -9,7 +9,7 @@
 library(Seurat)
 
 # Data
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 print(seur.human) # 79,801 cells and 34,778 genes
 
 
@@ -48,4 +48,4 @@ colnames(metadata)[10] <- "clusters_alldata"
 
 # Create new seurat object
 rawseur <- CreateSeuratObject(counts=rawcounts, meta.data=metadata, assay="RNA")
-saveRDS(rawseur, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/seurat_raw_hu.rds")
+saveRDS(rawseur, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_03_GetRawData/seurat_raw_hu_221018.rds")

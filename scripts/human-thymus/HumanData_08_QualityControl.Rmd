@@ -26,7 +26,7 @@ library(SingleCellExperiment)
 
 ```{r import-data}
 # Import seurat object
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
 
 # Sanity check
 print(seur.human) # 81,378 cells (it's the whole seurat object)
@@ -62,7 +62,7 @@ VlnPlot(seur.human, features="nFeature_RNA", group.by="new_clusters") + labs(x="
 VlnPlot(seur.human, features="nCount_RNA",   group.by="new_clusters") + labs(x="Clusters") + theme(legend.position="none")
 
 # Save plots
-# ggsave("~/Downloads/qcplot1.jpeg", width=15, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_08_QualityControl/qcplot1.jpeg", width=15, height=6)
 ```
 
 ```{r qc-correlation}
@@ -79,7 +79,7 @@ for(batch in LETTERS[1:9]){
 # Maybe batch G there is a small correlation?
 FeatureScatter(subset(seur.human, subset=Batch=="G"), feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
 FeatureScatter(subset(seur.human, subset=Batch=="A"), feature1 = "nCount_RNA", feature2 = "percent.mt", group.by="Batch", pt.size=0.1, jitter=T)
-# ggsave("~/Downloads/qcplot_batchG.jpeg", width=8, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_08_QualityControl/qcplot_batchG.jpeg", width=8, height=6)
 ```
 
 
@@ -104,7 +104,7 @@ seur.human@meta.data$poorqc <- case_when(
 # See where they lie
 DimPlot(seur.human, reduction="UMAP_50", group.by="poorqc", order=T) +
   scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="quality")
-# ggsave("~/Downloads/qcplot11.jpeg", width=6, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_08_QualityControl/qcplot11.jpeg", width=6, height=5)
 
 
 # Tag "poor quality cells" in a batch-dependent way
@@ -183,7 +183,7 @@ plotReducedDim(sce.srtclusters, dimred="umap", colour_by="decontX_contamination"
   scale_colour_gradient2(low=muted("blue"), mid="white", high=muted("red"), midpoint=0.25)+ labs(title="decontX on seurat clusters", color="Contamination") |
   plotReducedDim(sce.cellident, dimred="umap", colour_by="decontX_contamination", point_size=0.1) +
   scale_colour_gradient2(low=muted("blue"), mid="white", high=muted("red"), midpoint=0.25)+ labs(title="decontX on cell identity", color="Contamination")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/QC/decontX.jpeg", width=10, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_08_QualityControl/decontX.jpeg", width=10, height=5)
 
 
 # Look at correlation between two ways of running decontX
@@ -247,7 +247,7 @@ plotReducedDim(sce.srtclusters, dimred="umap", colour_by="scDblFinder.class", po
   scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="") |
   plotReducedDim(sce.cellident, dimred="umap", colour_by="scDblFinder.class", point_size=0.1) + labs(title="scDblFinder on cell identity")+
     scale_color_manual(values=c("#bdbdbd", "#de2d26"), name="")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/QC/scDblFinder.jpeg", width=10, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_08_QualityControl/scDblFinder.jpeg", width=10, height=5)
 
 
 # Check how much the two methods agree

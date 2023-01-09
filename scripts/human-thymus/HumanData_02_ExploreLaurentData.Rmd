@@ -8,7 +8,7 @@ output:
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/human-thymus/")
+knitr::opts_chunk$set(root.dir = "~/Projects/HumanThymusProject/scripts/human-thymus/")
 ```
 
 
@@ -26,7 +26,7 @@ library(tidyverse)
 
 ```{r import-data}
 # Import data
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 
 # Take quick peek at the data
 print(seur.human) # 79,801 cells and 34,778 genes
@@ -43,22 +43,22 @@ seur.human@meta.data
 FeaturePlot(seur.human, features="nFeature_RNA", cols= c("lightgrey", "#67000D")) |
   FeaturePlot(seur.human, features="nCount_RNA", cols= c("lightgrey", "#54278f")) |
   FeaturePlot(seur.human, features="percent.mt", cols= c("lightgrey", "#045a8d"))
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_on_umap.jpeg", width=15, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/qc_on_umap.jpeg", width=15, height=5)
 
 
 # QC violin plots
 VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.001,
         group.by="group.ident")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_group.jpeg", width=12, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/qc_by_group.jpeg", width=12, height=6)
 VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
         group.by="Donor")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_donor.jpeg", width=12, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/qc_by_donor.jpeg", width=12, height=6)
 VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
         group.by="Method")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_method.jpeg", width=8, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/qc_by_method.jpeg", width=8, height=6)
 VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, pt.size=.01,
         group.by="Batch")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/qc_by_batch.jpeg", width=10, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/qc_by_batch.jpeg", width=10, height=6)
 ```
 
 
@@ -70,7 +70,7 @@ VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), nc
 DimPlot(seur.human, pt.size = 0.1, label = F, split.by="group.ident", ncol=3) +
   theme_bw() +
   theme(legend.position="none")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_cells.jpeg", width=8, height=10)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/umap_all_cells.jpeg", width=8, height=10)
 
 # CD4 Thymus
 a <- DimPlot(seur.human, pt.size = 0.1, label = F, cells.highlight=WhichCells(seur.human, idents="CD4_Thymus"), cols.highlight="#e41a1c", cols="#d9d9d9", sizes.highlight = 0.1)+
@@ -90,7 +90,7 @@ d <- DimPlot(seur.human, pt.size = 0.1, label = F, cells.highlight=WhichCells(se
   ggtitle("Thymic MAIT cells")
 
 ggpubr::ggarrange(a,b,c,d, ncol=2, nrow=2)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/00_HumanData/umap_all_SPthymocytes.jpeg", width=10, height=9)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/umap_all_SPthymocytes.jpeg", width=10, height=9)
 
 
 # Color by cluster
@@ -134,7 +134,7 @@ plot_ly(data = plot.data,
 
 ## 3. Create Shiny app
 
-```{r create-shiny-app}
+```{r create-shiny-app, echo=TRUE, eval=FALSE}
 library(ShinyCell)
 
 
@@ -174,7 +174,7 @@ colnames(seur.nkt12.new@meta.data)
 a <- DimPlot(seur.nkt12, reduction = "umap", group.by = "new_clusters") + ggtitle("iNKT cells clusters 8/12") | FeaturePlot(seur.nkt12, features="ZBTB16", order=T)
 b <- DimPlot(seur.nkt12.new, reduction = "umap", group.by = "SCT_snn_res.0.5") + ggtitle("Reclustering") | FeaturePlot(seur.nkt12.new, features="ZBTB16", order=T)
 ggpubr::ggarrange(a,b, nrow=2)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/hu_umap_iNKT_clust12_recluster.jpeg", width=10, height=9)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/hu_umap_iNKT_clust12_recluster.jpeg", width=10, height=9)
 
 # Explore PCA
 # FeaturePlot(seur.nkt12.new, features="ZBTB16", order=T, reduction="pca", dims=c(1,2))
@@ -246,7 +246,7 @@ DimPlot(seur.human, pt.size = 0.1, label = T, group.by="nkt_clusters", cells.hig
         cols="#f0f0f0", sizes.highlight = 0.1)+
   theme(legend.position="none")+
   ggtitle("Thymic iNKT cells - Clustering on NKT cells only")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_fullumap_nktclusters.jpeg", width=5, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/hu_fullumap_nktclusters.jpeg", width=5, height=5)
 
 ```
 
@@ -299,8 +299,7 @@ DimPlot(seur.human, pt.size = 0.1, label = T, group.by="nkt_clusters_harmony", c
         cols="#f0f0f0", sizes.highlight = 0.1)+
   theme(legend.position="none")+
   ggtitle("Thymic iNKT cells - Clustering on NKT cells only")
-ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/hu_fullumap_nktclusters_harmony.jpeg", width=5, height=5)
-
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_02_ExploreLaurentData/hu_fullumap_nktclusters_harmony.jpeg", width=5, height=5)
 ```
 
 

@@ -25,9 +25,9 @@ library(harmony)
 
 ```{r import-data}
 # Import data
-nkt.seur <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
-nkt.subsampling  <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_subsample.rds")
-nkt.fullsample <- readRDS("../../data/07_scClustEval/thymic_nkt/gather_full_sample.rds")
+nkt.seur <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/input/nkt_object_22-11-10.rds")
+nkt.subsampling  <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/gather_subsample.rds")
+nkt.fullsample <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/output/thymic_nkt/gather_full_sample.rds")
 
 # Take quick peek at the data
 # nkt.seur
@@ -410,7 +410,7 @@ troubleshoot <- function(object,
 }
 
 
-nkt.seur <- readRDS("../../data/07_scClustEval/input/nkt_object_22-11-10.rds")
+nkt.seur <- readRDS("../../data/human-thymus/HumanData_05_scClustEval/input/nkt_object_22-11-10.rds")
 nkt.localscClust <- troubleshoot(object=nkt.seur, pc.use = 15, k.param = 50, resolution = 0.7)
 ```
 
@@ -434,7 +434,7 @@ Even when using the same function as on Elzar, we don't obtain the same number o
 ## 5. Check the RDS object saved on Elzar
 
 ```{r import-rds-object}
-nkt.k50res07pc15 <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/troubleshooting/full_sample_k_50_resolution_0.7_PC_15.rds")
+nkt.k50res07pc15 <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_05_scClustEval/troubleshooting/full_sample_k_50_resolution_0.7_PC_15.rds")
 
 # Compare clusters
 comparescClustEval(seuratoplot = nkt.sct_merged, seuratlocalscClustEval = nkt.k50res07pc15, fullsample_idents = nkt.fullsample, pc_nb=15, res=0.7, knn=50)

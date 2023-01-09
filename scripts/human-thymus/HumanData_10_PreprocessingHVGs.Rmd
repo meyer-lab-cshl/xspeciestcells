@@ -457,3 +457,65 @@ FindMarkers(seur.harmony, ident.1 = 10, min.pct = 0.25, logfc.threshold = 1.0, o
   arrange(avg_log2FC)
 ```
 
+
+
+
+## 4. PARK GENE SIGNATURES
+
+### 4.1. Define function
+
+```{r park-gene-signatures}
+# Gene signatures from Park paper
+parksignatures <- read.csv("~/Projects/HumanThymusProject/data/park_genesignatures.csv", row.names=1)
+Egress <- list(c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
+                 "S100A4", "S100A6", "EMP3"))
+
+
+# Function to look at these gene signatures
+signatures <- function(seuratobject=seur.human, scorelist=DN_score, scorename="DN_score", celltype="NKT"){
+  # Add signatures to new seurat object
+  seurat_scored <- AddModuleScore(object = seuratobject, features = scorelist, assay = "RNA", name = scorename)
+  # Plot
+  SCpubr::do_FeaturePlot(sample = seurat_scored, 
+                         features = paste0(scorename, "1"),
+                         plot.title = scorename,
+                         reduction = "UMAP_50",
+                         viridis_color_map = "inferno")
+  ggsave(paste0("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/parksignatures_", scorename, ".jpeg"), width=10, height=10)
+}
+```
+
+
+### 4.2. Plot
+
+```{r park-gene-signatures2}
+signatures(scorelist=list(parksignatures$DNp),        scorename="DNp_score") # 1 gene absent
+signatures(scorelist=list(parksignatures$DNq),        scorename="DNq_score") # 3 genes
+signatures(scorelist=list(parksignatures$DN_early),   scorename="DNearly_score") # 2 genes
+
+signatures(scorelist=list(parksignatures$DPq),        scorename="DPq_score") # 3 genes absent
+signatures(scorelist=list(parksignatures$DPp),        scorename="DPp_score") # 5 genes
+
+signatures(scorelist=list(parksignatures$gdT),        scorename="gdT_score")
+signatures(scorelist=list(parksignatures$abT_entry),  scorename="abT_entry_score") # 3 genes absent
+
+signatures(scorelist=list(parksignatures$CD8aa1),     scorename="CD8aa1_score")
+signatures(scorelist=list(parksignatures$CD8aa2),     scorename="CD8aa2_score") # 1 gene absent
+signatures(scorelist=list(parksignatures$NKT),        scorename="NKT_score")
+
+signatures(scorelist=list(parksignatures$T_agonist),  scorename="Tagonist_score") # 1 gene absent
+signatures(scorelist=list(parksignatures$CD4T),       scorename="CD4T_score") # 1 gene
+signatures(scorelist=list(parksignatures$Th17),       scorename="Th17_score") # 1 gene
+signatures(scorelist=list(parksignatures$Treg),       scorename="Treg_score") # 2 genes
+signatures(scorelist=list(parksignatures$Treg_diff),  scorename="Treg_diff_score") # 1 gene
+
+signatures(scorelist=list(parksignatures$CD8T),       scorename="CD8T_score") # 1 gene absent
+
+# cluster 6 T agonist?...
+test <- AddModuleScore(object = seur.human, features = list(parksignatures$T_agonist),
+                       assay = "RNA", name = "Tagonist_score")
+VlnPlot(test, features="Tagonist_score1")+
+  scale_fill_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/parksignatures_Tagonist_score_vlnplot.jpeg", width=10, height=6)
+```
+

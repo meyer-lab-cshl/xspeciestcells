@@ -25,7 +25,7 @@ library(RColorBrewer)
 
 ```{r import-data}
 # Import seurat object
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 
 # Sanity check
 print(seur.human) # 79,801 cells (it's the whole seurat object)
@@ -38,7 +38,7 @@ DimPlot(seur.human)
 # Modify seurat object to be fed to scClustEval
 seur.human@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
 colnames(seur.human@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
-# saveRDS(seur.human, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/tcells_full_object_22-11-10.rds")
+# saveRDS(seur.human, "~/Projects/HumanThymusProject/data/07_scClustEval/input/tcells_full_object_22-11-10.rds")
 ```
 
 
@@ -128,7 +128,7 @@ Preprocess <- function(seuratobject, SCTsplit=T, res=0.5, harmony_vars= c("Metho
 #__________________
 
 # Gene signatures from Park paper
-parksignatures <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/park_genesignatures.csv", row.names=1)
+parksignatures <- read.csv("~/Projects/HumanThymusProject/data/park_genesignatures.csv", row.names=1)
 Egress <- list(c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
                  "S100A4", "S100A6", "EMP3"))
 
@@ -186,11 +186,11 @@ CD4CD8_SCTmerged <- Preprocess(seuratobject = CD4CD8_Thymus, SCTsplit = F, res =
 # Look at clusters
 DimPlot(CD4CD8_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on split data") |
   DimPlot(CD4CD8_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.3", label = T) + ggtitle("SCT on merged data")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged.jpeg", width = 12, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged.jpeg", width = 12, height=6)
 # Look at CD4/CD8 separation
 DimPlot(CD4CD8_SCTsplit, dims = 1:2, reduction = "umap", group.by = "cell.ident", label = T) + ggtitle("SCT on split data") |
   DimPlot(CD4CD8_SCTmerged, dims = 1:2, reduction = "umap", group.by = "cell.ident", label = T) + ggtitle("SCT on merged data")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged2.jpeg", width = 12, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_SCTransform_split-vs-merged2.jpeg", width = 12, height=6)
 
 # Look at some features
 SCpubr::do_FeaturePlot(sample = CD4CD8_SCTsplit, 
@@ -200,7 +200,7 @@ SCpubr::do_FeaturePlot(sample = CD4CD8_SCTsplit,
                        ncol=4,
                        reduction = "umap",
                        viridis_color_map = "inferno")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_featureexpression.jpeg", width = 18, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_featureexpression.jpeg", width = 18, height=6)
 ```
 
 ### 2.2. CD4/CD8 T gene signatures
@@ -213,44 +213,44 @@ Cd8aa2_score <- list(c("CTSW", "TRGC2", "SMC4", "CD7", "IKZF2", "ZNF683", "ACTN1
                        "TRG-AS1", "RGS2", "RTKN2", "PPP2R5C", "ID3", "TRGC1", "CLEC2D", "DCXR", "ELF1", "CPNE7"))
 
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$gdT), scorename="gdT_score") # negative control
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_1.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_1.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DPq),  scorename="DPq_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_2.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_2.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DPp),  scorename="DPp_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_3.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_3.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa1),  scorename="CD8aa1_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_4.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_4.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_5.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_5.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$NKT),     scorename="NKT_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_6.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_6.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$abT_entry), scorename="SPentry_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_7.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_7.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$T_agonist),    scorename="Tagonist_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_8.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_8.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=Egress,    scorename="Egress_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_9.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_9.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD4T),    scorename="CD4T_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_10.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_10.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Th17),    scorename="Th17_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_11.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_11.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Treg),    scorename="Treg_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_12.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_12.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$Treg_diff),  scorename="Treg_diff_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_13.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_13.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8T),  scorename="CD8T_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_14.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_14.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8T_mem),  scorename="CD8Tmem_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_15.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_15.jpeg", width=9, height=7)
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DN_early),    scorename="DNearly_score") |
   signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DNp),    scorename="DNp_score") |
   signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$DNq),    scorename="DNq_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_16.jpeg", width=18, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_16.jpeg", width=18, height=7)
 
 signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score") |
   signatures(seuratobject=CD4CD8_SCTsplit, celltype = "CD4 & CD8", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score") |
   SCpubr::do_DimPlot(sample = CD4CD8_SCTsplit, cells.highlight = WhichCells(seur.human, idents="CD4_Thymus"), reduction = "umap", plot.title="CD4 T cells", legend.position="none")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4cd8_parksignatures_17.jpeg", width=18, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4cd8_parksignatures_17.jpeg", width=18, height=7)
 ```
 
 ```{r}
@@ -278,11 +278,11 @@ DimPlot(CD4_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0
  SCpubr::do_FeaturePlot(sample = CD4_SCTmerged, features = "CD4", plot.title="CD4 cells", order=T, reduction = "umap",viridis_color_map = "inferno") |
   signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score") |
   signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$CD8aa2),  scorename="CD8aa2_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4_parksignatures_1.jpeg", width=23, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4_parksignatures_1.jpeg", width=23, height=7)
 
 signatures(seuratobject=CD4_SCTmerged, celltype = "With CD8A gene | CD4", scorelist=list(parksignatures$CD8aa1),  scorename="CD8aa1_score") |
   signatures(seuratobject=CD4_SCTmerged, celltype = "Without CD8A gene | CD4", scorelist=list(parksignatures$CD8aa1[-3]),  scorename="CD8aa1_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/10_HumanCD4CD8data/cd4_parksignatures_2.jpeg", width=14, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/10_HumanCD4CD8data/cd4_parksignatures_2.jpeg", width=14, height=7)
 
 signatures(seuratobject=CD4_SCTmerged, celltype = "CD4", scorelist=list(parksignatures$abT_entry), scorename="SPentry_score")
 
@@ -319,7 +319,7 @@ MAIT_SCTmerged <- Preprocess(seuratobject = MAIT_Thymus, SCTsplit = F, res = 0.3
 # SAVE OBJECT (for scClustEval)
 # MAIT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
 # colnames(MAIT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
-# saveRDS(MAIT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/mait_object_22-11-10.rds")
+# saveRDS(MAIT_Thymus, "~/Projects/HumanThymusProject/data/07_scClustEval/input/mait_object_22-11-10.rds")
 ```
 
 
@@ -353,7 +353,7 @@ signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Tago_score,
 signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=Egress,    scorename="Egress_score")
 # signatures(seuratobject=MAIT_SCTmerged, celltype = "MAIT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
 
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/08_HumanMAITdata/mait_parksignatures_9.jpeg", width=9, height=7)
 ```
 
 
@@ -369,7 +369,7 @@ DimPlot(MAIT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.
   DimPlot(MAIT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
   DimPlot(MAIT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
   DimPlot(MAIT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/mait_sctransform-merged_resolutions.jpeg", width=20, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/mait_sctransform-merged_resolutions.jpeg", width=20, height=5)
 ```
 
 
@@ -395,7 +395,7 @@ NKT_SCTmerged <- Preprocess(seuratobject = NKT_Thymus, SCTsplit = F, res = 0.4, 
 # SAVE OBJECT (for scClustEval)
 # NKT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
 # colnames(NKT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
-# saveRDS(NKT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/nkt_object_22-11-10.rds")
+# saveRDS(NKT_Thymus, "~/Projects/HumanThymusProject/data/07_scClustEval/input/nkt_object_22-11-10.rds")
 ```
 
 
@@ -419,23 +419,23 @@ DimPlot(NKT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.
 # Look at gene signatures
 # signatures(scorelist=DN_score, scorename="DN_score")  # several genes are not found
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=gdT_score, scorename="gdT_score") # negative control
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_1.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_1.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=DPq_score,  scorename="DPq_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_2.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_2.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=DPp_score,  scorename="DPp_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_3.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_3.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Cd8aa1_score,  scorename="CD8aa1_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_4.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_4.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Cd8aa2_score,  scorename="CD8aa2_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_5.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_5.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=NKT_score,     scorename="NKT_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_6.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_6.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=SPentry_score, scorename="SPentry_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_7.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_7.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Tago_score,    scorename="Tagonist_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_8.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_8.jpeg", width=9, height=7)
 signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=Egress,    scorename="Egress_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_parksignatures_9.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_parksignatures_9.jpeg", width=9, height=7)
 # signatures(seuratobject=NKT_SCTmerged, celltype = "NKT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
 
 # Signatures of c1 vs c2 cells
@@ -458,7 +458,7 @@ DimPlot(NKT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0
   DimPlot(NKT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
   DimPlot(NKT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
   DimPlot(NKT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/nkt_sctransform-merged_resolutions.jpeg", width=20, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/nkt_sctransform-merged_resolutions.jpeg", width=20, height=5)
 ```
 
 
@@ -484,7 +484,7 @@ gdT_SCTmerged <- Preprocess(seuratobject = gdT_Thymus, SCTsplit = F, res = 0.4, 
 # SAVE OBJECT (for scClustEval)
 # gdT_Thymus@meta.data[, c("nCount_SCT", "nFeature_SCT", "SCT_snn_res.0.7", "seurat_clusters", "SCT_snn_res.0.9", "SCT_snn_res.1")] <- NULL # remove some cluster columns to avoid any confusion
 # colnames(gdT_Thymus@meta.data)[14] <- "clusters_bigUMAP" # rename "new_clusters" column
-# saveRDS(gdT_Thymus, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/07_scClustEval/input/gdt_object_22-11-10.rds")
+# saveRDS(gdT_Thymus, "~/Projects/HumanThymusProject/data/07_scClustEval/input/gdt_object_22-11-10.rds")
 ```
 
 
@@ -513,23 +513,23 @@ DimPlot(gdT_SCTsplit, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.
 # Look at gene signatures
 # signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DN_score, scorename="DN_score")  # several genes are not found
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=gdT_score, scorename="gdT_score") # negative control
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_1.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_1.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DPq_score,  scorename="DPq_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_2.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_2.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=DPp_score,  scorename="DPp_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_3.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_3.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Cd8aa1_score,  scorename="CD8aa1_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_4.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_4.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Cd8aa2_score,  scorename="CD8aa2_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_5.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_5.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=NKT_score,     scorename="NKT_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_6.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_6.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=SPentry_score, scorename="SPentry_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_7.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_7.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Tago_score,    scorename="Tagonist_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_8.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_8.jpeg", width=9, height=7)
 signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=Egress,    scorename="Egress_score")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/09_HumanGDTdata/gdt_parksignatures_9.jpeg", width=9, height=7)
+# ggsave("~/Projects/HumanThymusProject/data/09_HumanGDTdata/gdt_parksignatures_9.jpeg", width=9, height=7)
 # signatures(seuratobject=gdT_SCTmerged, celltype = "gdT", scorelist=NK_score,      scorename="NK_score") # several genes are not found
 
 # rownames(seur.human)[grep("CD1", rownames(seur.human))]
@@ -548,7 +548,7 @@ DimPlot(gdT_SCTmerged, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0
   DimPlot(GDT_SCT_06, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.6", label = T) + ggtitle("res=0.6") |
   DimPlot(GDT_SCT_08, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.0.8", label = T) + ggtitle("res=0.8") |
   DimPlot(GDT_SCT_1, dims = 1:2, reduction = "umap", group.by = "SCT_snn_res.1", label = T) + ggtitle("res=1")
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/04_HumanNKTdata/gdt_sctransform-merged_resolutions.jpeg", width=20, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/04_HumanNKTdata/gdt_sctransform-merged_resolutions.jpeg", width=20, height=5)
 ```
 
 

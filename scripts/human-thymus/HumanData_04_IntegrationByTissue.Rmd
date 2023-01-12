@@ -8,7 +8,7 @@ output:
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(root.dir = "~/Projects/20220809_Thymic-iNKT-CrossSpecies/scripts/human-thymus/")
+knitr::opts_chunk$set(root.dir = "~/Projects/HumanThymusProject/scripts/human-thymus/")
 ```
 
 
@@ -26,9 +26,9 @@ library(tidyverse)
 
 ```{r import-data}
 # Data
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/seurat_raw_hu.rds")
-print(seur.human) # 79,801 cells and 17,389 genes
-print(head(seur.human@meta.data))
+seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
+print(seur.filt) # 80,614 cells and 17,212 genes
+print(head(seur.filt@meta.data))
 ```
 
 
@@ -41,18 +41,16 @@ print(head(seur.human@meta.data))
 Quality-control has probably been done already by Laurent.
 
 ```{r qc}
-# seur.human[["percent.mt"]] <- PercentageFeatureSet(seur.human, pattern = "^MT\\.")
-head(seur.human@meta.data, 5) # looks like mitochondrial genes were removed
-FeatureScatter(seur.human, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Method")
-VlnPlot(seur.human, features = c("nFeature_RNA", "nCount_RNA"), ncol = 2, pt.size=.01, group.by="Batch")
-# subset(seur.human, subset = nFeature_RNA >= 500 & nFeature_RNA < 4000 & nCount_RNA >=500)
+# Data was already quality-filtered (in HumanData_09_PreprocessingPipelinesComparison)
+FeatureScatter(seur.filt, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by="Method")
+VlnPlot(seur.filt, features = c("nFeature_RNA", "nCount_RNA"), ncol = 2, pt.size=.01, group.by="Batch")
 
 
 # Look at distribution of #cells in which each feature is expressed
-counts <- GetAssayData(object = seur.human, slot = "counts")
+counts <- GetAssayData(object = seur.filt, slot = "counts")
 nonzerocounts <- counts>0
 hist(rowSums(nonzerocounts), breaks=1000)
-hist(rowSums(nonzerocounts), breaks=1000000, xlim=c(0,100)) # features are expressed in at least 10 cells
+hist(rowSums(nonzerocounts), breaks=1000000, xlim=c(0,100)) # features are expressed in at least 18 cells
 ```
 
 
@@ -60,12 +58,12 @@ hist(rowSums(nonzerocounts), breaks=1000000, xlim=c(0,100)) # features are expre
 ### b) Separate blood and thymus data
 
 ```{r split-data}
-seur.thymus <- subset(seur.human, subset= Tissue=="Thymus")
-print(seur.thymus) # 39,906 cells
+seur.thymus <- subset(seur.filt, subset= Tissue=="Thymus")
+print(seur.thymus) # 39,623 cells
 table(seur.thymus$Batch)
 
-seur.PBMC <- subset(seur.human, subset= Tissue=="PBMC")
-print(seur.PBMC) # 39,895 cells
+seur.PBMC <- subset(seur.filt, subset= Tissue=="PBMC")
+print(seur.PBMC) # 40,991 cells
 ```
 
 
@@ -75,81 +73,74 @@ print(seur.PBMC) # 39,895 cells
 ### a) Normalize
 
 ```{r normalize-thymus}
-# Normalize with SCTransform and find variable features
-seur.list <- NULL
-seur.list <- SplitObject(seur.thymus, split.by = "Batch")
-seur.list <- lapply(X = seur.list, FUN = SCTransform) # weird, SCTransform adds features?!
-sct.hvg   <- SelectIntegrationFeatures(object.list = seur.list, nfeatures = 2000)
-
-# Merge back seurat objects to run Harmony afterwards
-seur.SCT <- merge(seur.list$A, y = c(seur.list$B, seur.list$C, seur.list$D),
-                  merge.data = TRUE) # weird, now there are 33957 genes
-VariableFeatures(seur.SCT) <- sct.hvg
-
-
-# Run PCA (don't scale data when using SCTransform)
-seur.SCT <- RunPCA(object = seur.SCT, assay = "SCT", npcs = 50, verbose=F)
-DimPlot(seur.SCT, reduction = "pca", group.by = "Batch")
-# DimPlot(seur.SCT, reduction = "pca", group.by = "Tissue")
-DimPlot(seur.SCT, reduction = "pca", group.by = "Method")
-DimPlot(seur.SCT, reduction = "pca", group.by = "group.ident")
-ElbowPlot(seur.SCT, ndims=50)
+# Run standard workflow for PCA
+seur.thymus <- NormalizeData(seur.thymus)
+seur.thymus <- FindVariableFeatures(seur.thymus, selection.method="vst", nfeatures=2000)
+seur.thymus <- ScaleData(seur.thymus)
+seur.thymus <- RunPCA(seur.thymus, npcs=50, verbose=T)
+ElbowPlot(seur.thymus, ndims=50, reduction="pca")
+DimPlot(seur.thymus, reduction="pca", group.by=c("Tissue", "Batch", "Method"))
 ```
 
 
-### b) Normalize with Harmony
+### b) Integrate with Harmony
 
-```{r Harmony-thymus}
-# Run Harmony for integration
-set.seed(123)
-seur.harmony <- RunHarmony(object = seur.SCT,
-                           assay.use = "SCT",
+```{r thymus-integration}
+seur.thymus <- RunHarmony(seur.thymus,
                            reduction = "pca",
-                           dims.use = 1:20,
-                           group.by.vars = c("Batch", "Method"),
-                           plot_convergence = T) # converged after 8 iterations
-# Check how the integration worked
-DimPlot(seur.harmony, reduction = "harmony", group.by = "Batch")
-DimPlot(seur.harmony, reduction = "harmony", group.by = "Method")
-DimPlot(seur.harmony, reduction = "harmony", group.by = "group.ident")
+                           max.iter.harmony=30,
+                           group.by.vars = c("Method", "Batch")) # converged in 13 iterations
+DimPlot(seur.thymus, reduction="pca", group.by="Batch") | DimPlot(seur.thymus, reduction="harmony", group.by="Batch")
+DimPlot(seur.thymus, reduction="pca", group.by="Method") | DimPlot(seur.thymus, reduction="harmony", group.by="Method")
+DimPlot(seur.thymus, reduction="pca", group.by="Sex") | DimPlot(seur.thymus, reduction="harmony", group.by="Sex")
 
-
-# Run UMAP and clustering
-seur.harmony <- RunUMAP(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F, seed.use = 42)
-seur.harmony <- FindNeighbors(object = seur.harmony, assay = "SCT", reduction = "harmony", dims = 1:20, verbose=F) %>%
-  FindClusters(resolution = 0.8, verbose=F, random.seed=123)
-colnames(seur.harmony@meta.data)
+ElbowPlot(seur.thymus, ndims=50, reduction="harmony")
+seur.thymus <- RunUMAP(seur.thymus, reduction = "harmony", dims = 1:20, n.neighbors=50)
+seur.thymus <- FindNeighbors(seur.thymus, reduction = "harmony", dims = 1:20, k.param=50)
+seur.thymus <- FindClusters(seur.thymus, resolution = 0.2)
 ```
 
 
 ### c) Plot
 
-```{r UMAP-2D}
-a <- DimPlot(seur.harmony, group.by = "Batch", pt.size = 0.1, repel=T) + theme(legend.position = "bottom")
-b <- DimPlot(seur.harmony, group.by = "Method", pt.size = 0.1, repel=T) + theme(legend.position = "bottom")
-c <- DimPlot(seur.harmony, group.by = "cell.ident", pt.size = 0.1)+
+```{r thymus-visualize}
+a <- DimPlot(seur.thymus, group.by = "Batch", pt.size = 0.1, repel=T) + theme(legend.position = "bottom")
+b <- DimPlot(seur.thymus, group.by = "Method", pt.size = 0.1, repel=T) + theme(legend.position = "bottom")
+c <- DimPlot(seur.thymus, group.by = "cell.ident", pt.size = 0.1)+
   scale_color_manual(values=RColorBrewer::brewer.pal(7, "Paired")) + theme(legend.position = "bottom")
-d <- DimPlot(seur.harmony, group.by = "seurat_clusters", pt.size = 0.1, label=T, repel=T) + theme(legend.position = "none")
-e <- DimPlot(seur.harmony, group.by = "cell.ident", split.by = "Batch", pt.size = 0.1, repel=T)+
+d <- DimPlot(seur.thymus, group.by = "seurat_clusters", pt.size = 0.1, label=T, repel=T) + theme(legend.position = "none")
+e <- DimPlot(seur.thymus, group.by = "cell.ident", split.by = "Batch", pt.size = 0.1, repel=T)+
   scale_color_manual(values=RColorBrewer::brewer.pal(7, "Paired"))+
   ggtitle("Donor batch")
 
 ggpubr::ggarrange(ggpubr::ggarrange(a,b,c,d, ncol=4),
                   e, nrow=2)
-# ggsave("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/06_HumanData/thymus_umap.jpeg", width=14, height=9)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_04_IntegrationByTissue/thymus_umap.jpeg", width=14, height=9)
 ```
 
 
 ### d) Cluster markers
 
-```{r}
+```{r thymus-markers}
 # Get markers
-# FindAllMarkers(seur.harmony, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, assay="SCT")
+# FindAllMarkers(seur.thymus, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, assay="SCT")
 
 # Make DotPlot
-DotPlot(seur.harmony,
+DotPlot(seur.thymus,
         features=c("PTCRA", "RAG1", "CD1C", "AQP3", "CD8A", "PDCD1", "GNG4",
                    "TRDC", "TRGC2", "EGR1", "EGR3", "NR4A1", "IKZF4", "FOXP3"))+
+  # theme(axis.text.x=element_text(angle=45, hjust=1))+
+  coord_flip()
+
+# Make DotPlot inspired from Park et al
+DotPlot(seur.thymus,
+        features=rev(c("CD8A", "CD8B", # CD8+
+                   "CD4", "CD40LG", # CD4+
+                   "IKZF4", "GNG8", "PTGIR", "PLN", "FOXP3", "CTLA4", "PRDM1", "MIR155HG", # Treg
+                   "PDCD1", "GNG4", "CREB3L3", "CD72", "ZNF683", "MME", #CD8aa
+                   "KLRB1", "ZBTB16", "NKG7", "EOMES", "IFNG", "TBX21", "RORC", "CCR6", # innate
+                   "KLF2", # exit
+                   "TNFRSF9", "CD27", "IKZF2", "IKZF3")))+ # agonist selection
   # theme(axis.text.x=element_text(angle=45, hjust=1))+
   coord_flip()
 ```

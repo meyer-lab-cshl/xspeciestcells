@@ -139,8 +139,8 @@ metadata <- seur.filt@meta.data
 
 # Identify groups for aggregation of counts (we'll group by cell lineage & batch)
 # groups <- colData(sce)[, c("cluster_id", "sample_id")]
-groups <- metadata[,c("Tissue", "Batch", "cell.ident")]
-colnames(groups) <- c("cluster_id", "sample_id", "group_id")
+groups <- metadata[,c("Tissue", "cell.ident", "Batch")]
+colnames(groups) <- c("cluster_id", "group_id", "sample_id")
 groups # sanity check
 
 
@@ -170,18 +170,20 @@ count.agg <- split.data.frame(count.agg, factor(splitf)) %>%
 metadf <- groups %>%
   distinct() %>%
   dplyr::rename(batch=sample_id) %>%
-  mutate(sample_id=paste(batch, group_id, sep="_"))
+  mutate(sample_id=paste(group_id, batch, sep="_"))
 rownames(metadf) <- metadf$sample_id
+head(metadf)
 # Subset the metadata to only the thymocytes
 metadf.deseq <- metadf %>%
   filter(cluster_id=="Thymus" & group_id %in% c("CD4", "CD8"))
 head(metadf.deseq)
 
 # Subset the counts to only the thymus cells
-counts <- count.agg[["Thymus"]]
-counts.deseq <- data.frame(counts[, which(colnames(counts) %in% rownames(metadf.deseq))])
+counts.sub <- count.agg[["Thymus"]]
+counts.deseq <- data.frame(counts.sub[, which(colnames(counts.sub) %in% rownames(metadf.deseq))])
 
 # Check that the row names of cluster_metadata are the same as the column names of cluster_counts in order to use as input to DESeq2
+metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), metadf.deseq$sample_id),]
 all(rownames(metadf.deseq) == colnames(counts.deseq))
 ```
 
@@ -197,7 +199,7 @@ Now we can create our DESeq2 object to prepare to run the DE analysis. We need t
 # Create DESeq2 object
 dds <- DESeqDataSetFromMatrix(counts.deseq, 
                               colData = metadf.deseq, 
-                              design = ~ group_id) # include the replicate to include batch as another term
+                              design = ~ group_id + batch) # include the replicate to include batch as another term
 ```
 
 
@@ -218,9 +220,9 @@ DESeq2::plotPCA(rld, intgroup = "group_id")
 
 # Correct for batch effect, and then run PCA
 counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch)
-rv <- matrixStats::rowVars(counts_corrected)
-select_rv <- order(rv, decreasing = TRUE)[seq_len(500)]
-pca <- prcomp(t(counts_corrected[select_rv,]))
+rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
+select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
+pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
 percentVar <- pca$sdev^2/sum(pca$sdev^2)
 counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
                          batch = metadf.deseq$batch,
@@ -254,7 +256,8 @@ plotDispEsts(dds)
 # dev.off()
 
 # Output results of Wald test for contrast for CD4 vs CD8
-contrast <- c("group_id", unique(metadf.deseq$group_id)[1], unique(metadf.deseq$group_id)[2])
+# contrast <- c("group_id", unique(metadf.deseq$group_id)[1], unique(metadf.deseq$group_id)[2])
+contrast <- c("group_id", "CD4", "CD8")
 res <- results(dds, 
                contrast = contrast,
                alpha = 0.05)
@@ -265,10 +268,10 @@ res <- lfcShrink(dds,
 res # condition CD4 vs CD8 (high log2FC means upregulated in CD4)
 
 # Turn the results object into a tibble for use with tidyverse functions
-res_tbl <- res %>%
-        data.frame() %>%
-        rownames_to_column(var="gene") %>%
-        as_tibble()
+result.df <- res %>%
+  data.frame() %>%
+  rownames_to_column(var="gene") %>%
+  as_tibble()
 
 
 ## KEEP ONLY SIGNIFICANT GENES ##
@@ -276,15 +279,15 @@ res_tbl <- res %>%
 padj_cutoff <- 0.05
 
 # Subset the significant results
-sig_res <- dplyr::filter(res_tbl, padj < padj_cutoff) %>%
-        dplyr::arrange(padj)
+result.sig <- dplyr::filter(result.df, padj < padj_cutoff) %>%
+  dplyr::arrange(padj)
 
 # Check significant genes output
-table(sig_res$log2FoldChange > 0) # 669 upregulated genes in CD4
-sig_res %>%
+table(result.sig$log2FoldChange > 0) # 889 upregulated genes in CD4
+result.sig %>%
   dplyr::arrange(log2FoldChange)
 # Sanity check
-sig_res %>%
+result.sig %>%
   filter(gene %in% c("RUNX3", "ZBTB7B"))
 ```
 
@@ -293,19 +296,19 @@ sig_res %>%
 
 ```{r heatmap}
 # Extract normalized counts for only the significant genes
-normalized_counts <- counts(dds, normalized = TRUE)
-sig_norm <- data.frame(normalized_counts) %>%
+counts.norm <- counts(dds, normalized = TRUE)
+counts.norm.sig <- data.frame(counts.norm) %>%
   rownames_to_column(var = "gene") %>%
-  dplyr::filter(gene %in% sig_res$gene)
-rownames(sig_norm) <- sig_norm$gene
+  dplyr::filter(gene %in% result.sig$gene)
+rownames(counts.norm.sig) <- counts.norm.sig$gene
         
 # Set a color palette
 heat_colors <- brewer.pal(6, "YlOrRd")
 
 # Run pheatmap using the metadata data frame for the annotation
 path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages"
-jpeg(file.path(path.plots, "heatmap_CD4CD8.jpeg"), height = 2000, width = 2000, res = 300)
-pheatmap(sig_norm[,-1], 
+# jpeg(file.path(path.plots, "heatmap_CD4CD8.jpeg"), height = 2000, width = 2000, res = 300)
+pheatmap(counts.norm.sig[,-1], 
     color = heat_colors,
     cluster_rows = T,
     cluster_cols = T,
@@ -319,7 +322,7 @@ pheatmap(sig_norm[,-1],
     main= "Thymic cells",
     scale = "row",
     height = 20)
-dev.off()
+# dev.off()
 ```
 
 
@@ -327,16 +330,16 @@ dev.off()
 
 ```{r volcano, fig.height=5, fig.width=5}
 ## Obtain logical vector where TRUE values denote padj values < 0.05 and fold change > 1.5 in either direction
-res_table_thres <- res_tbl %>%
+results.df.thresh <- result.df %>%
   mutate(threshold = padj < 0.05 & abs(log2FoldChange) >= 1)
 
 # Genes to highlight on the volcano plot
-interesting_genes <- res_tbl %>%
+interesting_genes <- result.df %>%
   # filter(gene %in% c("RUNX3", "ZBTB7B"))
-  filter(abs(log2FoldChange) >= 4)
+  filter(abs(log2FoldChange) >= 3)
                   
 ## Volcano plot
-ggplot(res_table_thres, aes(x = log2FoldChange, y = -log10(padj))) +
+ggplot(results.df.thresh, aes(x = log2FoldChange, y = -log10(padj))) +
   geom_point(aes(colour = threshold), alpha=0.5) +
   geom_text_repel(data = interesting_genes,
                    aes(label = gene),

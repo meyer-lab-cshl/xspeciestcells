@@ -173,6 +173,10 @@ ggplot(seur.harmony@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(
   geom_bar(position="fill", stat="identity") +
   scale_fill_manual(values=brewer.pal(7,"Paired")) +
   labs(x="clusters", y="", title = "5000 HVGs (total data)")
+
+# Is cluster 2 a Treg cluster?
+# VlnPlot(seur.harmony, features=c("FOXP3"), group.by="seurat_clusters")
+# ggsave("~/Downloads/foxp3.jpeg", width=8, height=5)
 ```
 
 
@@ -279,6 +283,19 @@ ggplot(seur.harmony2@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by
   geom_bar(position="fill", stat="identity") +
   scale_fill_manual(values=brewer.pal(7,"Paired")) +
   labs(x="clusters", y="", title = "2000 HVGs (total data) + 4147 HVGs (thymic lineages)")
+
+# Check marker genes cluster 6
+ggplot(data = seur.harmony2@meta.data %>% group_by(seurat_clusters, group.ident) %>% count(),
+       mapping=aes(x=seurat_clusters, y=n, fill=group.ident))+
+  geom_bar(stat="identity", position="fill")+
+  scale_fill_manual(values=colorRampPalette(brewer.pal(7,"Paired"))(14))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_10_PreprocessingHVGs/hvgall-and-thym_cellcomp.jpeg", width=10, height=6)
+Idents(seur.harmony2) <- "seurat_clusters"
+test <- FindMarkers(seur.harmony2, ident.1 = 6, ident.2=9, min.pct=0.25, logfc.threshold = 0.5)
+test %>%
+  filter(p_val_adj < 0.05) %>%
+  arrange(-avg_log2FC)
+# VlnPlot(seur.harmony2, features=c("IFI6", "IFIT3", "MX1"))
 ```
 
 #### 3.2.3. Preprocess only with thymic HVGs
@@ -336,11 +353,17 @@ DimPlot(seur.harmony3, reduction = "umap", group.by="seurat_clusters", label = T
   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
 
 # Cell type composition per cluster
-ggplot(seur.harmony3@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
-       aes(x=seurat_clusters, y=n, fill=cell.ident))+
+ggplot(seur.harmony3@meta.data[,c("group.ident", "seurat_clusters")] %>% group_by(group.ident, seurat_clusters) %>% count(),
+       aes(x=seurat_clusters, y=n, fill=group.ident))+
   geom_bar(position="fill", stat="identity") +
-  scale_fill_manual(values=brewer.pal(7,"Paired")) +
+  scale_fill_manual(values=colorRampPalette(brewer.pal(7,"Paired"))(14)) +
   labs(x="clusters", y="", title = "5862 HVGs (based on thymic lineages)")
+# Check out cluster 16
+Idents(seur.harmony3) <- "seurat_clusters"
+test <- FindMarkers(seur.harmony3, ident.1 = 16, ident.2=9, min.pct=0.25, logfc.threshold = 0.5)
+test %>%
+  filter(p_val_adj < 0.05) %>%
+  arrange(-avg_log2FC)
 ```
 
 #### 3.2.4. Comparison

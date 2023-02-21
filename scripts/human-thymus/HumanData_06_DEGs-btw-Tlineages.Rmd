@@ -137,53 +137,54 @@ Following the tutorial from : https://hbctraining.github.io/scRNA-seq/lessons/ps
 counts <- seur.filt@assays$RNA@counts
 metadata <- seur.filt@meta.data
 
-# Identify groups for aggregation of counts (we'll group by cell lineage & batch)
-groups <- metadata[,c("Tissue", "cell.ident", "Batch", "old_clusters")]
-colnames(groups) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
-groups # sanity check
+# Subset metadata only to information we're interested in
+metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "old_clusters")]
+colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
+print(metadata) # sanity check
 
+# Create a "groups" df that will define how we aggregate counts
+groups <- metadata %>%
+  # ---
+  # EXAMPLE 1: Compare thymic CD4 vs thymic CD8 cells (all clusters, but separate batches)
+  # filter(tissue_id =="Thymus" & cell_id %in% c("CD4", "CD8")) %>%
+  # select(cell_id, batch_id) # keep only relevant columns for grouping
+  # ---
+  # EXAMPLE 2: Compare peripheral CD4 vs peripheral CD8 cells in cluster 12 (separate batches)
+  filter(tissue_id=="PBMC" & cell_id %in% c("CD4", "CD8") & cluster_id=="12") %>%
+  select(cell_id, batch_id) # keep only relevant columns for grouping
+  # ---
+  # EXAMPLE 3: Compare thymic NKT vs peripheral NKT cells in cluster 12 (separate batches)
+  # filter(cell_id=="NKT" & cluster_id=="12") %>%
+  # select(tissue_id, batch_id) # keep only relevant columns for grouping
+print(groups) # sanity check
 
 ## ****************
 ## AGGREGATE COUNTS
-# Aggregate counts per Tissue, cell Lineage, Cluster and Batch => rownames are Tissue_Lineage_Batch_Cluster
-count.agg <- Matrix.utils::aggregate.Matrix(t(counts), groupings = groups, fun = "sum") 
+# Subset to keep only cells of interest (defined in "groups") & put cells in rows (genes as columns)
+count.agg <- t(counts[, which(colnames(counts) %in% rownames(groups))])
+nrow(groups) == nrow(count.agg) # verify nb of cells in "groups" (rows) is same nb of cells in "count.agg" (rows)
+
+# Aggregate counts based on columns in "groups"
+count.agg <- Matrix.utils::aggregate.Matrix(count.agg, groupings = groups, fun = "sum")
 # dim(count.agg)
 # count.agg[1:6, 1:6]
 # table(colSums(count.agg) == 0) # check if any gene has total count of 0
 
-# Split aggregated counts matrix into a list: each element of the list is a cell cluster, and it contains the aggregated counts per Tissue_Lineage_Batch (rows genes, columns Tissue_Lineage_Batch)
-splitf <- sapply(stringr::str_split(rownames(count.agg), pattern = "_",  n = 4), # split the rownames into "Tissue" "Lineage" "Batch" "Cluster"
-                 `[`, 4) # keep only the "Cluster"
-count.agg <- split.data.frame(count.agg, factor(splitf)) %>%
-  lapply(function(u) t(u))
-  #lapply(function(u) magrittr::set_colnames(t(u), stringr::str_extract(rownames(u), "(?<=_)[:graph:]+"))) # if you want to remove the cluster number in the conames
-# class(count.agg)
-# str(count.agg)
-# names(count.agg) # the elements of the list => should be the cluster numbers
-# head(count.agg[[1]])
+# Final counts for DESeq (groups as columns, genes as rows)
+counts.deseq <- data.frame(t(count.agg))
+counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have total count of 0
 
 
 ## ****************
-## SUBSET METADATA & COUNTS TO POPULATION OF INTEREST
-
-# Create metadata
-metadf <- groups %>%
+## PREPARE METADATA DF FOR DESEQ
+# Have metadata df where rownames are the colnames of "counts.deseq"
+metadf.deseq <- groups %>%
   distinct() %>%
-  # dplyr::rename(batch=sample_id) %>%
-  mutate(sample_id=paste(tissue_id, cell_id, batch_id, cluster_id, sep="_"))
-rownames(metadf) <- metadf$sample_id
-head(metadf)
-# Subset the metadata to only the population of interest (e.g. cluster 12, all cell lineages but only thymus)
-metadf.deseq <- metadf %>%
-  filter(cluster_id=="12" & tissue_id=="Thymus" & cell_id %in% c("CD4", "CD8"))
-print(metadf.deseq)
-
-# Subset the counts to only the thymus cells
-counts.sub <- count.agg[["12"]]
-counts.deseq <- data.frame(counts.sub[, which(colnames(counts.sub) %in% rownames(metadf.deseq))])
+  unite(sample_id, remove=FALSE)
+rownames(metadf.deseq) <- metadf.deseq$sample_id
 
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
-metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), metadf.deseq$sample_id),]
+metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),]
 all(rownames(metadf.deseq) == colnames(counts.deseq))
 ```
 
@@ -199,7 +200,7 @@ Now we can create our DESeq2 object to prepare to run the DE analysis. We need t
 # Create DESeq2 object
 dds <- DESeqDataSetFromMatrix(counts.deseq, 
                               colData = metadf.deseq, 
-                              design = ~ cell_id + batch_id) # include the replicate to include batch as another term
+                              design = ~ cell_id + batch_id) # TO MODIFY BASED ON WHAT YOU WANT TO COMPARE (keep batch_id though)
 ```
 
 
@@ -226,7 +227,7 @@ pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
 percentVar <- pca$sdev^2/sum(pca$sdev^2)
 counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
                          batch = metadf.deseq$batch_id,
-                         condition = metadf.deseq$cell_id)
+                         condition = metadf.deseq$cell_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
 # Plot
 ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
   geom_point(size = 4) +
@@ -256,8 +257,7 @@ plotDispEsts(dds)
 # dev.off()
 
 # Output results of Wald test for contrast for CD4 vs CD8
-# contrast <- c("group_id", unique(metadf.deseq$group_id)[1], unique(metadf.deseq$group_id)[2])
-contrast <- c("cell_id", "CD4", "CD8")
+contrast <- c("cell_id", "CD4", "CD8") # MODIFY BASED ON WHAT YOU ARE COMPARING
 res <- results(dds, 
                contrast = contrast,
                alpha = 0.05)
@@ -287,8 +287,8 @@ table(result.sig$log2FoldChange > 0)
 result.sig %>%
   dplyr::arrange(log2FoldChange)
 # Sanity check
-result.sig %>%
-  filter(gene %in% c("RUNX3", "ZBTB7B"))
+# result.sig %>%
+#   filter(gene %in% c("RUNX3", "ZBTB7B"))
 ```
 
 
@@ -314,9 +314,7 @@ pheatmap(counts.norm.sig[,-1],
     cluster_cols = T,
     show_rownames = T,
     fontsize_row = 2,
-    annotation = metadf.deseq[, c("batch_id", "cell_id")],
-    # annotation_colors= list(batch=c("WT" = "#999999", "KO" = "#ef8a62"),
-    #                         group_id=c("KP01"= "#91bfdb", "KP02"="#d8b365")),
+    annotation = metadf.deseq[, c("batch_id", "cell_id")], # MODIFY BASED ON WHAT YOU ARE COMPARING
     border_color = NA,
     fontsize = 10,
     main= "Thymic cells",

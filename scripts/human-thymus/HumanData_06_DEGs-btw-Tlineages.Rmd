@@ -138,28 +138,28 @@ counts <- seur.filt@assays$RNA@counts
 metadata <- seur.filt@meta.data
 
 # Identify groups for aggregation of counts (we'll group by cell lineage & batch)
-# groups <- colData(sce)[, c("cluster_id", "sample_id")]
-groups <- metadata[,c("Tissue", "cell.ident", "Batch")]
-colnames(groups) <- c("cluster_id", "group_id", "sample_id")
+groups <- metadata[,c("Tissue", "cell.ident", "Batch", "old_clusters")]
+colnames(groups) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
 groups # sanity check
 
 
 ## ****************
 ## AGGREGATE COUNTS
-# Aggregate counts per cluster and batch
+# Aggregate counts per Tissue, cell Lineage, Cluster and Batch => rownames are Tissue_Lineage_Batch_Cluster
 count.agg <- Matrix.utils::aggregate.Matrix(t(counts), groupings = groups, fun = "sum") 
 # dim(count.agg)
 # count.agg[1:6, 1:6]
 # table(colSums(count.agg) == 0) # check if any gene has total count of 0
 
-# Split aggregated counts matrix into a list: each element of the list is a cell cluster, and it contains the aggregated counts per batch (rows genes, columns batch)
-splitf <- sapply(stringr::str_split(rownames(count.agg), pattern = "_",  n = 2), 
-                 `[`, 1) # create a vector that represents how to split samples
+# Split aggregated counts matrix into a list: each element of the list is a cell cluster, and it contains the aggregated counts per Tissue_Lineage_Batch (rows genes, columns Tissue_Lineage_Batch)
+splitf <- sapply(stringr::str_split(rownames(count.agg), pattern = "_",  n = 4), # split the rownames into "Tissue" "Lineage" "Batch" "Cluster"
+                 `[`, 4) # keep only the "Cluster"
 count.agg <- split.data.frame(count.agg, factor(splitf)) %>%
-  lapply(function(u) magrittr::set_colnames(t(u), stringr::str_extract(rownames(u), "(?<=_)[:graph:]+"))) # create the list
+  lapply(function(u) t(u))
+  #lapply(function(u) magrittr::set_colnames(t(u), stringr::str_extract(rownames(u), "(?<=_)[:graph:]+"))) # if you want to remove the cluster number in the conames
 # class(count.agg)
 # str(count.agg)
-# names(count.agg) # the elements of the list
+# names(count.agg) # the elements of the list => should be the cluster numbers
 # head(count.agg[[1]])
 
 
@@ -169,20 +169,20 @@ count.agg <- split.data.frame(count.agg, factor(splitf)) %>%
 # Create metadata
 metadf <- groups %>%
   distinct() %>%
-  dplyr::rename(batch=sample_id) %>%
-  mutate(sample_id=paste(group_id, batch, sep="_"))
+  # dplyr::rename(batch=sample_id) %>%
+  mutate(sample_id=paste(tissue_id, cell_id, batch_id, cluster_id, sep="_"))
 rownames(metadf) <- metadf$sample_id
 head(metadf)
-# Subset the metadata to only the thymocytes
+# Subset the metadata to only the population of interest (e.g. cluster 12, all cell lineages but only thymus)
 metadf.deseq <- metadf %>%
-  filter(cluster_id=="Thymus" & group_id %in% c("CD4", "CD8"))
-head(metadf.deseq)
+  filter(cluster_id=="12" & tissue_id=="Thymus" & cell_id %in% c("CD4", "CD8"))
+print(metadf.deseq)
 
 # Subset the counts to only the thymus cells
-counts.sub <- count.agg[["Thymus"]]
+counts.sub <- count.agg[["12"]]
 counts.deseq <- data.frame(counts.sub[, which(colnames(counts.sub) %in% rownames(metadf.deseq))])
 
-# Check that the row names of cluster_metadata are the same as the column names of cluster_counts in order to use as input to DESeq2
+# Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
 metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), metadf.deseq$sample_id),]
 all(rownames(metadf.deseq) == colnames(counts.deseq))
 ```
@@ -199,7 +199,7 @@ Now we can create our DESeq2 object to prepare to run the DE analysis. We need t
 # Create DESeq2 object
 dds <- DESeqDataSetFromMatrix(counts.deseq, 
                               colData = metadf.deseq, 
-                              design = ~ group_id + batch) # include the replicate to include batch as another term
+                              design = ~ cell_id + batch_id) # include the replicate to include batch as another term
 ```
 
 
@@ -215,18 +215,18 @@ head(assay(rld))
 
 # Plot PCA
 DESeq2::plotPCA(rld, intgroup = "sample_id")
-DESeq2::plotPCA(rld, intgroup = "group_id")
+DESeq2::plotPCA(rld, intgroup = "cell_id")
 # PC1 separates the CD4 & CD8
 
 # Correct for batch effect, and then run PCA
-counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch)
+counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
 rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
 select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
 pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
 percentVar <- pca$sdev^2/sum(pca$sdev^2)
 counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
-                         batch = metadf.deseq$batch,
-                         condition = metadf.deseq$group_id)
+                         batch = metadf.deseq$batch_id,
+                         condition = metadf.deseq$cell_id)
 # Plot
 ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
   geom_point(size = 4) +
@@ -239,7 +239,7 @@ ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
 # Compute pairwise correlation values on the batch-effect-corrected matrix
 rld_cor <- cor(counts_corrected[select_rv,])
 # Plot heatmap
-pheatmap(rld_cor, annotation = metadf.deseq[, c("group_id"), drop=F])
+pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ```
 
 
@@ -257,7 +257,7 @@ plotDispEsts(dds)
 
 # Output results of Wald test for contrast for CD4 vs CD8
 # contrast <- c("group_id", unique(metadf.deseq$group_id)[1], unique(metadf.deseq$group_id)[2])
-contrast <- c("group_id", "CD4", "CD8")
+contrast <- c("cell_id", "CD4", "CD8")
 res <- results(dds, 
                contrast = contrast,
                alpha = 0.05)
@@ -283,7 +283,7 @@ result.sig <- dplyr::filter(result.df, padj < padj_cutoff) %>%
   dplyr::arrange(padj)
 
 # Check significant genes output
-table(result.sig$log2FoldChange > 0) # 889 upregulated genes in CD4
+table(result.sig$log2FoldChange > 0)
 result.sig %>%
   dplyr::arrange(log2FoldChange)
 # Sanity check
@@ -314,7 +314,7 @@ pheatmap(counts.norm.sig[,-1],
     cluster_cols = T,
     show_rownames = T,
     fontsize_row = 2,
-    annotation = metadf.deseq[, c("batch", "group_id")],
+    annotation = metadf.deseq[, c("batch_id", "cell_id")],
     # annotation_colors= list(batch=c("WT" = "#999999", "KO" = "#ef8a62"),
     #                         group_id=c("KP01"= "#91bfdb", "KP02"="#d8b365")),
     border_color = NA,

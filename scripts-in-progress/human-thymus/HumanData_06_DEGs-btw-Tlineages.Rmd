@@ -41,6 +41,47 @@ DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")
 ```
 
 
+XXX TO DELETE XXX
+```{r}
+seur <- readRDS("~/Desktop/seurat_filtered_harmony_02_15_23.RDS")
+
+DimPlot(seur, reduction="UMAP_50", split.by="Tissue", group.by="Batch")+
+  scale_color_manual(values=colorRampPalette(brewer.pal(9,"Paired"))(9), name="Batch")+
+  theme_cowplot()+
+  theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        axis.title=element_blank())+
+  ggtitle("")
+# ggsave("~/Downloads/umap_batch.jpeg", width=8, height=5)
+
+for(cellgroup in c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus")){
+  print(cellgroup)
+}
+SCpubr::do_FeaturePlot(sample=seur,
+                       cells.highlight=colnames(seur[, seur$group.ident == "CD4_Thymus"]), 
+                       features = c("KLRB1"), order=TRUE,
+                       reduction="UMAP_50") |
+  SCpubr::do_FeaturePlot(sample=seur,
+                       cells.highlight=colnames(seur[, seur$group.ident == "CD8_Thymus"]), 
+                       features = c("KLRB1"), order=TRUE,
+                       reduction="UMAP_50") |
+  SCpubr::do_FeaturePlot(sample=seur,
+                       cells.highlight=colnames(seur[, seur$group.ident == "NKT_Thymus"]), 
+                       features = c("KLRB1"), order=TRUE,
+                       reduction="UMAP_50") |
+  SCpubr::do_FeaturePlot(sample=seur,
+                       cells.highlight=colnames(seur[, seur$group.ident == "MAIT_Thymus"]), 
+                       features = c("KLRB1"), order=TRUE,
+                       reduction="UMAP_50") |
+  SCpubr::do_FeaturePlot(sample=seur,
+                       cells.highlight=colnames(seur[, seur$group.ident == "GD_Thymus"]), 
+                       features = c("KLRB1"), order=TRUE,
+                       reduction="UMAP_50")
+ggsave("~/Downloads/umap_ccr9_2.jpeg", width=25, height=6)
+```
+
+XXX
+
 
 
 ## 2. FINDMARKERS

@@ -14,7 +14,7 @@ library(dplyr)
 ```
 
 ```{r import-data}
-path <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion"
+path <- "~/Projects/HumanThymusProject/data/cross-species/02_CorrelationComparion"
 # Mouse data
 DEgenes_ms.df <- readRDS(file.path(path, "ms_DEG.rds"))
 ExpressionTable_ms <- readRDS(file.path(path, "ms_avgexp.rds"))
@@ -26,9 +26,11 @@ DEgenes_hu.df <- readRDS(file.path(path, "hu_DEG.rds"))
 ExpressionTable_hu <- readRDS(file.path(path, "hu_avgexp.rds"))
 
 # Import orthologs tables
-ortholog.df <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv")
-ortholog.gapin <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/Cleaned_gene_correspondance_Human_Mouse.csv")
+ortholog.df <- read.csv("~/Projects/HumanThymusProject/data/03_BiomartTable/big_ass_ortholog_table.csv")
+ortholog.gapin <- read.csv("~/Projects/HumanThymusProject/data/03_BiomartTable/Cleaned_gene_correspondance_Human_Mouse.csv")
 ```
+
+
 
 
 # COMPARE MS x HU ORTHOLOGS (biomart vs Laurent's table)

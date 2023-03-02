@@ -1,0 +1,249 @@
+# Import librairies
+library(MetaNeighbor)
+library(SummarizedExperiment)
+library(gplots)
+library(dendextend)
+library(ggplot2)
+library(tidyverse)
+
+# Import data
+seur.ms <- readRDS("~/Projects/HumanThymusProject/data/cross-species/00_Reproduce_UMAPs/ms_seurobj.rds")
+DimPlot(seur.ms)
+cols_nkt <- c("#810f7c", "#8856a7", "#8c96c6", "#b3cde3", "#edf8fb")
+names(cols_nkt) <- unique(seur.ms$cell_type)
+SCpubr::do_DimPlot(seur.ms, 
+                   group.by = "cell_type",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   plot.title = "Mouse",
+                   colors.use=cols_nkt,
+                   font.size = 24)
+ggsave("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/ms_umap.jpeg", width=6, height=6)
+
+
+seur.hu <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-NKT_2023-02-27.rds")
+Idents(seur.hu) <- seur.hu$cell_annot
+DimPlot(seur.hu)
+
+ortholog.df <- read.csv("~/Projects/HumanThymusProject/data/cross-species/03_BiomartTable/big_ass_ortholog_table.csv")
+length(unique(ortholog.df$ms_symbol_data)) # 17,085 ms genes
+length(unique(ortholog.df$hu_symbol)) # 17,152 hu genes
+
+
+
+# Get counts, HVGs and metadata
+ms.hvg <- VariableFeatures(FindVariableFeatures(seur.ms))
+ms.counts <- seur.ms[["RNA"]]@counts
+ms.metadata <- seur.ms@meta.data
+
+hu.hvg <- VariableFeatures(seur.hu)
+hu.counts <- seur.hu[["RNA"]]@counts
+hu.metadata <- seur.hu@meta.data
+
+
+# First, check whether genes can all be found in the ortholog table (many can't be found because I removed genes with orthology confidence=0)
+table(unique(rownames(ms.counts)) %in% ortholog.df$ms_symbol_data) # 13,969 not
+table(unique(rownames(hu.counts)) %in% ortholog.df$hu_symbol) # 4747 not
+
+
+# Subset the ortholog table to only genes that we can "translate"
+dictionary <- ortholog.df %>%
+  as_tibble() %>%
+  ## Intersection
+  filter(ms_symbol_data %in% unique(rownames(ms.counts)) & hu_symbol %in% unique(rownames(hu.counts))) %>%
+  ## Union
+  # filter(ms_symbol_data %in% unique(rownames(ms.counts)) | hu_symbol %in% unique(rownames(hu.counts))) %>%
+  # filter(hu_orthology_confidence == 1) %>%
+  ## Remove any symbols that are NAs
+  filter(!is.na(ms_symbol_data)) %>%
+  filter(!is.na(hu_symbol))
+  
+
+# Translate the mouse HVGs into "human gene" language
+ms.hvg.translated <- pull(dictionary %>% filter(ms_symbol_data %in% ms.hvg), # not all ms HVGs are found in ortholog.df
+                          hu_symbol)
+hu.hvg.translated <- pull(dictionary %>% filter(hu_symbol %in% hu.hvg), # not all hu HVGs are found in ortholog.df
+                          hu_symbol)
+total.hvg <- unique(union(ms.hvg.translated, hu.hvg.translated))
+total.hvg <- total.hvg[!total.hvg %in% test$hu_symbol] # remove duplicates
+
+
+# Translate the mouse genes in count table into "human gene"
+table(unique(rownames(ms.counts)) %in% dictionary$ms_symbol_data) # 12,428 genes should have a translation
+ms.counts <- ms.counts[rownames(ms.counts) %in% dictionary$ms_symbol_data,]
+ms.dict <- dictionary %>%
+  filter(ms_symbol_data %in% rownames(ms.counts)) %>%
+  select(ms_symbol_data, hu_symbol, hu_orthology_confidence) %>%
+  # distinct() %>%
+  # group_by(ms_symbol_data) %>% filter(n_distinct(hu_symbol)>1)
+  distinct(ms_symbol_data, .keep_all=T)
+ms.dict <- ms.dict[match(rownames(ms.counts), ms.dict$ms_symbol_data),]
+table(ms.dict$ms_symbol_data == rownames(ms.counts)) # all true
+table(is.na(ms.dict$hu_symbol)) # no NAs
+# Translate
+rownames(ms.counts) <- ms.dict$hu_symbol
+
+
+# Merge everything into one
+ms.metadata$study <- "Mouse"
+ms.metadata <- ms.metadata[,c("cell_type", "study")]
+colnames(ms.metadata)[1] <- "cell_annot"
+head(ms.metadata)
+
+hu.metadata$study <- "Human"
+hu.metadata <- hu.metadata[,c("cell_annot", "study")]
+head(hu.metadata)
+
+ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
+hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
+seur.total <- merge(ms.seur, hu.seur)
+
+# Sanity checks
+head(seur.total@meta.data)
+table(seur.total$cell_annot, useNA="ifany")
+table(seur.total$study, useNA="ifany")
+
+
+# Convert seurat count matrix to SummarizedExperiment object
+count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
+                              colData=seur.total$cell_annot)
+
+# _______________________
+# METANEIGHBOR
+# Run metaneighbor
+mtn <- MetaNeighborUS(var_genes=total.hvg,
+                      dat=count,
+                      study_id=seur.total$study,
+                      cell_type=seur.total$cell_annot,
+                      fast_version=TRUE)
+
+
+# Heatmap
+mtn.sub <- mtn[1:5,6:10]
+
+jpeg("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu2.jpeg",
+     width=1000, height=1000, res=200)
+heatmap.2(mtn.sub,
+                      # trace
+                      trace="none",
+                      # superimpose a density histogram on color key
+                      density.info="none",
+                      # color scale
+                      col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+                      breaks=seq(0,1,length=101),
+                      # text labels
+                      main="",
+                      cexRow=0.6,
+                      cexCol=0.6,
+                      # margins
+                      margins=c(8,6))
+dev.off()
+
+
+
+# _____________________
+# CORRELATION
+
+# Get average expression per gene df
+avgexp.sub <- averageGE(seuratobj=seur.total, geneslist=total.hvg)
+head(avgexp.sub)
+colnames(avgexp.sub)[1:5] <- paste0("Mouse|", colnames(avgexp.sub)[1:5])
+colnames(avgexp.sub)[6:10] <- paste0("Human|", colnames(avgexp.sub)[6:10])
+
+#7a:  Correlation
+Corr.Coeff.Table = cor(avgexp.sub, method="spearman")
+
+#7b:  Shuffle data
+shuffled.cor.list = list()
+pb   <- txtProgressBar(1, 100, style=3)
+nPermutations <- 1000
+
+# Calculate correlations on shuffled expression table
+for (i in 1:nPermutations){
+  # # Shuffle gene exp across all columns
+  # shuffled = apply(avgexp.sub,1,sample)
+  # shuffled = t(shuffled)
+  # Shuffle gene exp by dataset
+  shuffled_ms  = apply(avgexp.sub[,str_detect(colnames(avgexp.sub),"Mouse")],1,sample)
+  shuffled_hu  = apply(avgexp.sub[,str_detect(colnames(avgexp.sub),"Human")],1,sample)
+  # Bind back together avg exp table (shuffled)
+  shuffled = cbind(t(shuffled_ms),t(shuffled_hu))
+  if(ncol(shuffled)!=ncol(avgexp.sub)){ print("PROBLEM") }
+  # Correlation on shuffled table
+  shuffled.cor = cor(shuffled, method="spearman")
+  shuffled.cor.list[[i]] = shuffled.cor
+  # rm(list=c('shuffled', 'shuffled.cor'))
+  rm(list=c('shuffled_ms','shuffled_hu', 'shuffled', 'shuffled.cor'))
+  if ((i %% 10) ==0){
+    setTxtProgressBar(pb, (i*100)/nPermutations)
+  }
+}
+
+# Make empty p.value and corr mean matrixes
+p.value.table = matrix(ncol=ncol(avgexp.sub), nrow = ncol(avgexp.sub))
+rownames(p.value.table) = colnames(avgexp.sub)
+colnames(p.value.table) = colnames(avgexp.sub)
+shuffled.mean.table = p.value.table
+
+# Get the mean "random" correlation from all permutations, and pvalue comparing the "observed" correlation with the "random" one
+a = combn(1:ncol(avgexp.sub),2)
+for (i in 1:ncol(a)){
+  cor.scores = sapply(shuffled.cor.list,"[",a[1,i],a[2,i])
+  # mean correlation score on random data
+  shuffled.mean.table[a[1,i],a[2,i]] = mean(cor.scores)
+  shuffled.mean.table[a[2,i],a[1,i]] = mean(cor.scores)
+  # empirical p.val
+  p.value = mean(abs(cor.scores)>=abs(Corr.Coeff.Table[a[1,i],a[2,i]]))
+  p.value.table[a[1,i],a[2,i]] = p.value
+  p.value.table[a[2,i],a[1,i]] = p.value
+  rm(list=c('cor.scores','p.value'))
+  setTxtProgressBar(pb, (i*100)/ncol(a))
+}
+
+
+# Plot
+# Get the correlation and ptable with only 2 species (mouse x other)
+comp_table <- Corr.Coeff.Table[1:5,6:10]
+p_table <- p.value.table[1:5,6:10]
+
+# Prepare colors
+col1 <- colorRampPalette(c("darkblue", "white","darkred"))
+
+
+heatmap.2(comp_table,
+          # trace
+          trace="none",
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=colorRampPalette(c("darkblue", "white","darkred")),
+          breaks=seq(0.4,0.6,length=101),
+          # text labels
+          main="",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(8,6))
+
+# Plot
+jpeg("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/02_CorrelationComparion/ms_hu_corrplot_laurent-orthologs.jpeg", width=1500, height=1500, res=300)
+corrplot(comp_table,
+         # 2 species
+         order="hclust",
+         hclust.method="average",
+         tl.col="black",
+         
+         # other parameters
+         tl.pos="lt", method="color",
+         col=col1(200),
+         # cl.lim=c(min(comp_table.intersect),max(comp_table.intersect)),
+         is.corr=F, tl.cex=0.7, sig.level=0.05,
+         p.mat=p_table, # significance
+         insig="pch", pch=19, pch.cex=0.25, pch.col="black",
+         # addrect = 3,
+         main= "",mar=c(3,1,5,1),cl.align.text="l") #%>%
+# corrRect(c(1,6,13, 20))
+# corrRect(namesMat=c("ms_Stage0", "hu_iNKT_4", "ms_iNKT1", "hu_iNKT_3"))
+dev.off()

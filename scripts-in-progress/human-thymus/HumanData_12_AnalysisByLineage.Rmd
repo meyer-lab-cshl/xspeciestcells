@@ -1,0 +1,383 @@
+---
+title: "Human T cell data - Correlation gene expression btw clusters of each T cell lineage"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+
+
+## 1. IMPORT
+
+### 1.1. Import librairies & data
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+library(corrplot)
+library(pals)
+library(VennDiagram)
+# library(ggalluvial)
+# library(SingleCellExperiment)
+```
+
+```{r import-data}
+# Import seurat object
+seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+
+# Sanity check
+print(seur) # 80,614 cells
+
+# Get raw object?
+counts <- seur@assays$RNA@counts
+metadata <- seur@meta.data
+seur.filt <- CreateSeuratObject(counts=counts, meta.data = metadata)
+
+# Quick visualization
+# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters") +
+#   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+```
+
+
+
+
+## 2. PREPROCESSING
+
+### 2.1. Functions
+
+```{r preprocessing1}
+# Preprocessing
+preprocess <- function(seurobj, ndim=20, res=0.8, celltype, approxPCA=FALSE){
+  print(seurobj)
+  cat("Cells:", unique(seurobj$group.ident), "\n")
+  
+  print("Normalize")
+  seurobj <- NormalizeData(seurobj)
+  print("HVG")
+  if(length(VariableFeatures(seurobj))==0){
+      print("-> Compute 2000 HVGs")
+      seurobj <- FindVariableFeatures(seurobj, selection.method="vst", nfeatures=2000)
+  } else if(length(VariableFeatures(seurobj))>0){
+    print(paste0("-> ", length(VariableFeatures(seurobj)), " HVGs already set in object"))
+  }
+  print("Scale")
+  seurobj <- ScaleData(seurobj)
+  print("PCA")
+  seurobj <- RunPCA(seurobj, npcs=50, verbose=FALSE, approx=approxPCA)
+  print("Harmony")
+  seurobj <- RunHarmony(seurobj, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch"))
+  # DimPlot(seurobj, reduction="pca", group.by="Batch") | DimPlot(seurobj, reduction="harmony", group.by="Batch")
+  # DimPlot(seurobj, reduction="pca", group.by="Method") | DimPlot(seurobj, reduction="harmony", group.by="Method")
+  print(ElbowPlot(seurobj, ndims=50, reduction="harmony"))
+  print("UMAP")
+  seurobj <- RunUMAP(seurobj, reduction = "harmony", dims = 1:ndim, n.neighbors=50, reduction.key = "UMAP50_")
+  print("Cluster")
+  seurobj <- FindNeighbors(seurobj, reduction = "harmony", dims = 1:ndim)
+  seurobj <- FindClusters(seurobj, resolution = res, random.seed = 0)
+  
+  # Visualization sanity check
+  print(DimPlot(seurobj, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
+    scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
+    labs(title=celltype))
+  
+  return(seurobj)
+}
+
+# Sanity check
+# test <- preprocess(seur.filt, res=1, celltype="all") # verified on 01.24
+```
+
+
+### 2.2. CD4 T cells
+```{r preprocessing-cd4}
+# Run preprocessing
+# unique(seur.filt$group.ident)
+seur.cd4 <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="CD4_Thymus"),  celltype = "CD4thy", ndim=10, res=0.2)
+
+# Annotate
+# Idents(seur.cd4) <- "cell_annot"
+# markers <- FindAllMarkers(seur.cd4, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=5, order_by=avg_log2FC)
+
+seur.cd4@meta.data$cell_annot <- case_when(
+  seur.cd4@meta.data$seurat_clusters == 0 ~ "thyCD4_ccr9",
+  seur.cd4@meta.data$seurat_clusters == 1 ~ "thyCD4_ccr7",
+  seur.cd4@meta.data$seurat_clusters == 2 ~ "thyCD4_ISP",
+  seur.cd4@meta.data$seurat_clusters == 3 ~ "thyCD4_Treg",
+  seur.cd4@meta.data$seurat_clusters == 4 ~ "thyCD4_DPp",
+  seur.cd4@meta.data$seurat_clusters == 5 ~ "thyCD4_Tagonist",
+  seur.cd4@meta.data$seurat_clusters == 6 ~ "thyCD4_DPq"
+)
+# saveRDS(seur.cd4, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-CD4_2023-02-27.rds")
+
+ggpubr::ggarrange(DimPlot(seur.cd4, group.by="cell_annot", label=T, repel=T) +
+                    theme(legend.position="none") + labs(title="Thymic CD4"),
+                  DotPlot(seur.cd4, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
+                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
+                  ncol=2, widths = c(1.2,2))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyCD4.jpeg", width=12, height=5)
+
+# SCpubr
+cols_cd4 <- c("#c7e9c0", "#238b45", "#edf8e9", "#41ab5d", "#74c476","#005a32", "#a1d99b")
+names(cols_cd4) <- unique(seur.cd4$cell_annot)
+SCpubr::do_DimPlot(seur.cd4, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_cd4,
+                   font.size = 24)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/scpubr_cd4.jpeg", width=6, height=6)
+```
+
+
+### 2.3. CD8 T cells
+```{r preprocessing-cd8}
+seur.cd8 <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="CD8_Thymus"),  celltype = "CD8thy", ndim=10, res=0.2)
+
+# Annotate
+# Idents(seur.cd8) <- "cell_annot"
+# markers <- FindAllMarkers(seur.cd8, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=10, order_by=avg_log2FC)
+
+seur.cd8@meta.data$cell_annot <- case_when(
+  seur.cd8@meta.data$seurat_clusters == 0 ~ "thyCD8_ccr7",
+  seur.cd8@meta.data$seurat_clusters == 1 ~ "thyCD8_ccr9", # ccr9?
+  seur.cd8@meta.data$seurat_clusters == 2 ~ "thyCD8_cd8aa1",
+  seur.cd8@meta.data$seurat_clusters == 3 ~ "thyCD8_idk",
+  seur.cd8@meta.data$seurat_clusters == 4 ~ "thyCD8_cd8aa2",
+  seur.cd8@meta.data$seurat_clusters == 5 ~ "thyCD8_DP"
+)
+# saveRDS(seur.cd8, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-CD8_2023-02-27.rds")
+
+ggpubr::ggarrange(DimPlot(seur.cd8, group.by="cell_annot", label=T, repel=T) +
+                    theme(legend.position="none") + labs(title="Thymic CD8"),
+                  DotPlot(seur.cd8, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
+                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
+                  ncol=2, widths = c(1,2))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyCD8.jpeg", width=15, height=5)
+
+# SCpubr
+cols_cd8 <- c("#f768a1", "#f1eef6", "#c994c7", "#fa9fb5", "#df65b0","#d4b9da")
+names(cols_cd8) <- unique(seur.cd8$cell_annot)
+SCpubr::do_DimPlot(seur.cd8, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_cd8,
+                   font.size = 24)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/scpubr_cd8.jpeg", width=6, height=6)
+
+# Park gene signature
+seur.cd8 <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-CD8_2023-02-27.rds")
+park.markers <- read.csv("~/Projects/HumanThymusProject/data/park_genesignatures.csv")
+seur.cd8 <- AddModuleScore(seur.cd8, features=list("cd8aa1"=park.markers$CD8aa1, "cd8aa2"=park.markers$CD8aa2), name="cd8aa")
+SCpubr::do_DimPlot(seur.cd8, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_cd8,
+                   font.size = 24) |
+SCpubr::do_FeaturePlot(seur.cd8, 
+                   features = "cd8aa1",
+                   viridis_color_map = "A",
+                   order=T,
+                   font.size = 24) |
+SCpubr::do_FeaturePlot(seur.cd8, 
+                   features = "cd8aa2",
+                   viridis_color_map = "A",
+                   order=T,
+                   font.size = 24)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/cd8aa_signatures.jpeg", width=18, height=6)
+```
+
+
+### 2.4. MAIT cells
+```{r preprocessing-mait}
+# Preprocess
+seur.mait <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="MAIT_Thymus"), celltype = "MAITthy", ndim=10, res=0.2)
+
+# Annotate
+# Idents(seur.mait) <- "cell_annot"
+# markers <- FindAllMarkers(seur.mait, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=5, order_by=avg_log2FC)
+
+seur.mait@meta.data$cell_annot <- case_when(
+  seur.mait@meta.data$seurat_clusters == 0 ~ "thyMAIT_ccr9",
+  seur.mait@meta.data$seurat_clusters == 1 ~ "thyMAIT_ccr7",
+  seur.mait@meta.data$seurat_clusters == 2 ~ "thyMAIT_effector",
+  seur.mait@meta.data$seurat_clusters == 3 ~ "thyMAIT_idk",
+  seur.mait@meta.data$seurat_clusters == 4 ~ "thyMAIT_cd8aa",
+  seur.mait@meta.data$seurat_clusters == 5 ~ "thyMAIT_DP",
+  seur.mait@meta.data$seurat_clusters == 6 ~ "thyMAIT_IFNsig"
+)
+# saveRDS(seur.mait, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-MAIT_2023-02-27.rds")
+
+ggpubr::ggarrange(DimPlot(seur.mait, group.by="cell_annot", label=T, repel=T) +
+                    theme(legend.position="none") + labs(title="Thymic MAIT"),
+                  DotPlot(seur.mait, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
+                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
+                  ncol=2, widths = c(1.2,2))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyMAIT.jpeg", width=12, height=5)
+
+
+# SCpubr
+cols_mait <- c("#2171b5", "#6baed6", "#9ecae1", "#deebf7", "#c6dbef", "#f7fbff", "#4292c6")
+names(cols_mait) <- unique(seur.mait$cell_annot)
+SCpubr::do_DimPlot(seur.mait, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_mait,
+                   font.size = 24)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/scpubr_mait.jpeg", width=6, height=6)
+
+
+# Markers MAIT
+# markers.mait <- FindAllMarkers(seur.mait, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=20, order_by=avg_log2FC)
+# markers.mait <- markers.mait %>%
+#   select(avg_log2FC, p_val_adj, cluster, gene) %>%
+#   left_join(seur.mait@meta.data %>%
+#               select(cell_annot, RNA_snn_res.0.2) %>%
+#               rename(cluster=RNA_snn_res.0.2) %>%
+#               distinct(),
+#             by="cluster") %>%
+#   relocate(gene, cell_annot)
+```
+
+
+### 2.5. NKT cells
+```{r preprocessing-nkt}
+seur.nkt <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="NKT_Thymus"),  celltype = "NKTthy", ndim=10, res=0.3)
+
+# Annotate
+# Idents(seur.nkt) <- "cell_annot"
+# markers <- FindAllMarkers(seur.nkt, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=5, order_by=avg_log2FC)
+
+seur.nkt@meta.data$cell_annot <- case_when(
+  seur.nkt@meta.data$seurat_clusters == 0 ~ "thyNKT_ccr7",
+  seur.nkt@meta.data$seurat_clusters == 1 ~ "thyNKT_effFOSJUN",
+  seur.nkt@meta.data$seurat_clusters == 2 ~ "thyNKT_ccr9",
+  seur.nkt@meta.data$seurat_clusters == 3 ~ "thyNKT_cd8aa",
+  seur.nkt@meta.data$seurat_clusters == 4 ~ "thyNKT_effector"
+  # seur.nkt@meta.data$seurat_clusters == 5 ~ "thyNKT_IFNsig"
+)
+# saveRDS(seur.nkt, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-NKT_2023-02-27.rds")
+
+
+ggpubr::ggarrange(DimPlot(seur.nkt, group.by="cell_annot", label=T, repel=T) +
+                    theme(legend.position="none") + labs(title="Thymic NKT"),
+                  DotPlot(seur.nkt, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
+                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
+                  ncol=2, widths = c(1.2,2))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyNKT.jpeg", width=12, height=5)
+
+
+# SCpubr
+cols_nkt <- c("#9e9ac8", "#f2f0f7", "#cbc9e2", "#54278f", "#756bb1")
+names(cols_nkt) <- unique(seur.nkt$cell_annot)
+SCpubr::do_DimPlot(seur.nkt, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_nkt,
+                   font.size = 24)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/scpubr_nkt.jpeg", width=6, height=6)
+
+
+# # Markers NKT
+# markers.nkt <- FindAllMarkers(seur.nkt, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=20, order_by=avg_log2FC)
+# markers.nkt <- markers.nkt %>%
+#   select(avg_log2FC, p_val_adj, cluster, gene) %>%
+#   left_join(seur.nkt@meta.data %>%
+#               select(cell_annot, RNA_snn_res.0.3) %>%
+#               rename(cluster=RNA_snn_res.0.3) %>%
+#               distinct(),
+#             by="cluster") %>%
+#   relocate(gene, cell_annot)
+# 
+# # Combine MAIT and NKT markers and export as .csv file
+# markers.to.export <- rbind(markers.nkt, markers.mait) %>%
+#   ungroup() %>%
+#   select(-cluster)
+# table(markers.to.export$cell_annot)
+# write_csv(markers.to.export, "~/Desktop/top20markers_mait_nkt.csv")
+```
+
+
+### 2.6. GDT cells
+```{r preprocessing-gdt}
+seur.gd <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="GD_Thymus"), celltype = "GDthy", ndim=10, res=0.2)
+
+# Annotate
+# Idents(seur.gd) <- "cell_annot"
+# markers <- FindAllMarkers(seur.gd, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
+#   group_by(cluster) %>%
+#   slice_max(n=10, order_by=avg_log2FC)
+
+seur.gd@meta.data$cell_annot <- case_when(
+  seur.gd@meta.data$seurat_clusters == 0 ~ "thyGDT_IFNsig",
+  seur.gd@meta.data$seurat_clusters == 1 ~ "thyGDT_immat",
+  seur.gd@meta.data$seurat_clusters == 2 ~ "thyGDT_ccr9",
+  seur.gd@meta.data$seurat_clusters == 3 ~ "thyGDT_effector",
+  seur.gd@meta.data$seurat_clusters == 4 ~ "thyGDT_immat_cycl",
+  seur.gd@meta.data$seurat_clusters == 5 ~ "thyGDT_DP"
+)
+# saveRDS(seur.gd, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-GDT_2023-02-27.rds")
+
+ggpubr::ggarrange(DimPlot(seur.gd, group.by="cell_annot", label=T, repel=T) +
+                    theme(legend.position="none") + labs(title="Thymic GDT"),
+                  DotPlot(seur.gd, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
+                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
+                  ncol=2, widths = c(1,2))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyGDT.jpeg", width=15, height=5)
+
+
+
+# SCpubr
+cols_gdt <- c("#74a9cf", "#3690c0", "#045a8d", "#023858", "#0570b0", "#a6bddb")
+names(cols_gdt) <- unique(seur.gd$cell_annot)
+SCpubr::do_DimPlot(seur.gd, 
+                   group.by = "cell_annot",
+                   label=T,
+                   label.color="white",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_gdt,
+                   font.size = 24)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/scpubr_gdt.jpeg", width=6, height=6)
+```
+
+
+
+
+

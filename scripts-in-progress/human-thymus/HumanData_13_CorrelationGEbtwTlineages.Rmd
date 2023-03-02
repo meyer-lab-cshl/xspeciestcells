@@ -32,263 +32,37 @@ library(VennDiagram)
 # library(SingleCellExperiment)
 ```
 
+
 ```{r import-data}
-# Import seurat object
-# seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
-# seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds") # removed low-quality cells
-seur <- readRDS("~/Desktop/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+# Import individual seurat objects
+path <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage"
+# seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+seur.cd4  <- readRDS(file.path(path, "seurat_thymus-CD4_2023-02-27.rds"))
+seur.cd8  <- readRDS(file.path(path, "seurat_thymus-CD8_2023-02-27.rds"))
+seur.nkt  <- readRDS(file.path(path, "seurat_thymus-NKT_2023-02-27.rds"))
+seur.mait <- readRDS(file.path(path, "seurat_thymus-MAIT_2023-02-27.rds"))
+seur.gdt  <- readRDS(file.path(path, "seurat_thymus-GDT_2023-02-27.rds"))
+
+
 
 # Sanity check
-print(seur) # 80,614 cells
-
-# Get raw object?
-counts <- seur.filt@assays$RNA@counts
-metadata <- seur.filt@meta.data
-seur.filt <- CreateSeuratObject(counts=counts, meta.data = metadata)
-
-# Quick visualization
-# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters") +
-#   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
+DimPlot(seur.cd4)
+DimPlot(seur.cd8)
+DimPlot(seur.nkt)
+DimPlot(seur.mait)
+DimPlot(seur.gdt)
 ```
 
 
-
-
-## 2. PREPROCESSING
-
-### 2.1. Functions
-
-```{r preprocessing1}
-# Preprocessing
-preprocess <- function(seurobj, ndim=20, res=0.8, celltype, approxPCA=FALSE){
-  print(seurobj)
-  cat("Cells:", unique(seurobj$group.ident), "\n")
-  
-  print("Normalize")
-  seurobj <- NormalizeData(seurobj)
-  print("HVG")
-  if(length(VariableFeatures(seurobj))==0){
-      print("-> Compute 2000 HVGs")
-      seurobj <- FindVariableFeatures(seurobj, selection.method="vst", nfeatures=2000)
-  } else if(length(VariableFeatures(seurobj))>0){
-    print(paste0("-> ", length(VariableFeatures(seurobj)), " HVGs already set in object"))
-  }
-  print("Scale")
-  seurobj <- ScaleData(seurobj)
-  print("PCA")
-  seurobj <- RunPCA(seurobj, npcs=50, verbose=FALSE, approx=approxPCA)
-  print("Harmony")
-  seurobj <- RunHarmony(seurobj, reduction = "pca", max.iter.harmony=30, group.by.vars = c("Method", "Batch"))
-  # DimPlot(seurobj, reduction="pca", group.by="Batch") | DimPlot(seurobj, reduction="harmony", group.by="Batch")
-  # DimPlot(seurobj, reduction="pca", group.by="Method") | DimPlot(seurobj, reduction="harmony", group.by="Method")
-  print(ElbowPlot(seurobj, ndims=50, reduction="harmony"))
-  print("UMAP")
-  seurobj <- RunUMAP(seurobj, reduction = "harmony", dims = 1:ndim, n.neighbors=50, reduction.key = "UMAP50_")
-  print("Cluster")
-  seurobj <- FindNeighbors(seurobj, reduction = "harmony", dims = 1:ndim)
-  seurobj <- FindClusters(seurobj, resolution = res, random.seed = 0)
-  
-  # Visualization sanity check
-  print(DimPlot(seurobj, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)+
-    scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-    labs(title=celltype))
-  
-  return(seurobj)
-}
-
-# Sanity check
-# test <- preprocess(seur.filt, res=1, celltype="all") # verified on 01.24
-```
-
-
-### 2.2. CD4 T cells
-```{r preprocessing-cd4}
-# Run preprocessing
-# unique(seur.filt$group.ident)
-seur.cd4 <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="CD4_Thymus"),  celltype = "CD4thy", ndim=10, res=0.2)
-
-# Annotate
-# Idents(seur.cd4) <- "cell_annot"
-# markers <- FindAllMarkers(seur.cd4, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=5, order_by=avg_log2FC)
-
-seur.cd4@meta.data$cell_annot <- case_when(
-  seur.cd4@meta.data$seurat_clusters == 0 ~ "thyCD4_ccr9",
-  seur.cd4@meta.data$seurat_clusters == 1 ~ "thyCD4_ccr7",
-  seur.cd4@meta.data$seurat_clusters == 2 ~ "thyCD4_ISP",
-  seur.cd4@meta.data$seurat_clusters == 3 ~ "thyCD4_Treg",
-  seur.cd4@meta.data$seurat_clusters == 4 ~ "thyCD4_DPp",
-  seur.cd4@meta.data$seurat_clusters == 5 ~ "thyCD4_Tagonist",
-  seur.cd4@meta.data$seurat_clusters == 6 ~ "thyCD4_DPq"
-)
-
-ggpubr::ggarrange(DimPlot(seur.cd4, group.by="cell_annot", label=T, repel=T) +
-                    theme(legend.position="none") + labs(title="Thymic CD4"),
-                  DotPlot(seur.cd4, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
-                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
-                  ncol=2, widths = c(1.2,2))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyCD4.jpeg", width=12, height=5)
-```
-
-
-### 2.3. CD8 T cells
-```{r preprocessing-cd8}
-seur.cd8 <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="CD8_Thymus"),  celltype = "CD8thy", ndim=10, res=0.2)
-
-# Annotate
-# Idents(seur.cd8) <- "cell_annot"
-# markers <- FindAllMarkers(seur.cd8, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=10, order_by=avg_log2FC)
-
-seur.cd8@meta.data$cell_annot <- case_when(
-  seur.cd8@meta.data$seurat_clusters == 0 ~ "thyCD8_ccr7",
-  seur.cd8@meta.data$seurat_clusters == 1 ~ "thyCD8_ccr9", # ccr9?
-  seur.cd8@meta.data$seurat_clusters == 2 ~ "thyCD8_cd8aa1",
-  seur.cd8@meta.data$seurat_clusters == 3 ~ "thyCD8_idk",
-  seur.cd8@meta.data$seurat_clusters == 4 ~ "thyCD8_cd8aa2",
-  seur.cd8@meta.data$seurat_clusters == 5 ~ "thyCD8_DP"
-)
-
-ggpubr::ggarrange(DimPlot(seur.cd8, group.by="cell_annot", label=T, repel=T) +
-                    theme(legend.position="none") + labs(title="Thymic CD8"),
-                  DotPlot(seur.cd8, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
-                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
-                  ncol=2, widths = c(1,2))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyCD8.jpeg", width=15, height=5)
-```
-
-
-### 2.4. MAIT cells
-```{r preprocessing-mait}
-# Preprocess
-seur.mait <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="MAIT_Thymus"), celltype = "MAITthy", ndim=10, res=0.2)
-
-# Annotate
-# Idents(seur.mait) <- "cell_annot"
-# markers <- FindAllMarkers(seur.mait, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=5, order_by=avg_log2FC)
-
-seur.mait@meta.data$cell_annot <- case_when(
-  seur.mait@meta.data$seurat_clusters == 0 ~ "thyMAIT_ccr9",
-  seur.mait@meta.data$seurat_clusters == 1 ~ "thyMAIT_ccr7",
-  seur.mait@meta.data$seurat_clusters == 2 ~ "thyMAIT_effector",
-  seur.mait@meta.data$seurat_clusters == 3 ~ "thyMAIT_idk",
-  seur.mait@meta.data$seurat_clusters == 4 ~ "thyMAIT_cd8aa",
-  seur.mait@meta.data$seurat_clusters == 5 ~ "thyMAIT_DP",
-  seur.mait@meta.data$seurat_clusters == 6 ~ "thyMAIT_IFNsig"
-)
-
-ggpubr::ggarrange(DimPlot(seur.mait, group.by="cell_annot", label=T, repel=T) +
-                    theme(legend.position="none") + labs(title="Thymic MAIT"),
-                  DotPlot(seur.mait, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
-                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
-                  ncol=2, widths = c(1.2,2))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyMAIT.jpeg", width=12, height=5)
-
-# Markers MAIT
-# markers.mait <- FindAllMarkers(seur.mait, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=20, order_by=avg_log2FC)
-# markers.mait <- markers.mait %>%
-#   select(avg_log2FC, p_val_adj, cluster, gene) %>%
-#   left_join(seur.mait@meta.data %>%
-#               select(cell_annot, RNA_snn_res.0.2) %>%
-#               rename(cluster=RNA_snn_res.0.2) %>%
-#               distinct(),
-#             by="cluster") %>%
-#   relocate(gene, cell_annot)
-```
-
-
-### 2.5. NKT cells
-```{r preprocessing-nkt}
-seur.nkt <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="NKT_Thymus"),  celltype = "NKTthy", ndim=10, res=0.3)
-
-# Annotate
-# Idents(seur.nkt) <- "cell_annot"
-# markers <- FindAllMarkers(seur.nkt, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=5, order_by=avg_log2FC)
-
-seur.nkt@meta.data$cell_annot <- case_when(
-  seur.nkt@meta.data$seurat_clusters == 0 ~ "thyNKT_ccr7",
-  seur.nkt@meta.data$seurat_clusters == 1 ~ "thyNKT_effFOSJUN",
-  seur.nkt@meta.data$seurat_clusters == 2 ~ "thyNKT_ccr9",
-  seur.nkt@meta.data$seurat_clusters == 3 ~ "thyNKT_cd8aa",
-  seur.nkt@meta.data$seurat_clusters == 4 ~ "thyNKT_effector"
-  # seur.nkt@meta.data$seurat_clusters == 5 ~ "thyNKT_IFNsig"
-)
-
-ggpubr::ggarrange(DimPlot(seur.nkt, group.by="cell_annot", label=T, repel=T) +
-                    theme(legend.position="none") + labs(title="Thymic NKT"),
-                  DotPlot(seur.nkt, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
-                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
-                  ncol=2, widths = c(1.2,2))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyNKT.jpeg", width=12, height=5)
-
-# # Markers NKT
-# markers.nkt <- FindAllMarkers(seur.nkt, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=20, order_by=avg_log2FC)
-# markers.nkt <- markers.nkt %>%
-#   select(avg_log2FC, p_val_adj, cluster, gene) %>%
-#   left_join(seur.nkt@meta.data %>%
-#               select(cell_annot, RNA_snn_res.0.3) %>%
-#               rename(cluster=RNA_snn_res.0.3) %>%
-#               distinct(),
-#             by="cluster") %>%
-#   relocate(gene, cell_annot)
-# 
-# # Combine MAIT and NKT markers and export as .csv file
-# markers.to.export <- rbind(markers.nkt, markers.mait) %>%
-#   ungroup() %>%
-#   select(-cluster)
-# table(markers.to.export$cell_annot)
-# write_csv(markers.to.export, "~/Desktop/top20markers_mait_nkt.csv")
-```
-
-
-### 2.6. GDT cells
-```{r preprocessing-gdt}
-seur.gd <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="GD_Thymus"), celltype = "GDthy", ndim=10, res=0.2)
-
-# Annotate
-# Idents(seur.gd) <- "cell_annot"
-# markers <- FindAllMarkers(seur.gd, only.pos=TRUE, min.pct=0.25, logfc.threshold=0.5) %>%
-#   group_by(cluster) %>%
-#   slice_max(n=10, order_by=avg_log2FC)
-
-seur.gd@meta.data$cell_annot <- case_when(
-  seur.gd@meta.data$seurat_clusters == 0 ~ "thyGDT_IFNsig",
-  seur.gd@meta.data$seurat_clusters == 1 ~ "thyGDT_immat",
-  seur.gd@meta.data$seurat_clusters == 2 ~ "thyGDT_ccr9",
-  seur.gd@meta.data$seurat_clusters == 3 ~ "thyGDT_effector",
-  seur.gd@meta.data$seurat_clusters == 4 ~ "thyGDT_immat_cycl",
-  seur.gd@meta.data$seurat_clusters == 5 ~ "thyGDT_DP"
-)
-
-ggpubr::ggarrange(DimPlot(seur.gd, group.by="cell_annot", label=T, repel=T) +
-                    theme(legend.position="none") + labs(title="Thymic GDT"),
-                  DotPlot(seur.gd, features=unique(c("CD4", "CD8A", "CD8B", "RAG1", markers$gene))) +
-                    labs(x="", y="") + theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=7)),
-                  ncol=2, widths = c(1,2))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/umap_thyGDT.jpeg", width=15, height=5)
-```
-
-
-### 2.7. Merge back together
-
+### 1.2. Merge seurat objects together
 ```{r preprocessing-all}
 # Merge all cells back into one object
-seur.thym <- merge(seur.cd4, y = c(seur.cd8, seur.mait, seur.nkt, seur.gd))
+seur.thym <- merge(seur.cd4, y = c(seur.cd8, seur.mait, seur.nkt, seur.gdt))
 hvg.all <- unique(c(VariableFeatures(seur.cd4),
                   VariableFeatures(seur.cd8),
                   VariableFeatures(seur.mait),
                   VariableFeatures(seur.nkt),
-                  VariableFeatures(seur.gd)))
+                  VariableFeatures(seur.gdt)))
 length(hvg.all)
 VariableFeatures(seur.thym) <- hvg.all
 
@@ -298,7 +72,7 @@ hvg.list <- list(VariableFeatures(seur.cd4),
                  VariableFeatures(seur.cd8),
                  VariableFeatures(seur.mait),
                  VariableFeatures(seur.nkt),
-                 VariableFeatures(seur.gd))
+                 VariableFeatures(seur.gdt))
 hvg.unique <- c()
 hvg.common <- intersect(hvg.list[[1]], hvg.list[[2]])
 for(i in 1:length(hvg.list)){
@@ -330,7 +104,8 @@ table(seur.thym@meta.data[,c("cell_annot", "group.ident")], useNA="ifany")
 
 
 
-## 3. GENE CORRELATION
+
+## 2. GENE CORRELATION FUNCTIONS
 
 ```{r check-method-impact, eval=FALSE, include=FALSE}
 # Sanity check cells sequenced by WTA or WTA_VDJ per cluster
@@ -344,7 +119,7 @@ ggplot(test, aes(x=cell_annot, y=n, fill=Method))+
 ```
 
 
-### 3.1. Average expression per gene & per cluster
+### 2.1. Average expression per gene & per cluster
 ```{r avgexp}
 averageGE <- function(seuratobj, geneslist){
   # Get average expression of each gene per cluster
@@ -366,7 +141,7 @@ averageGE <- function(seuratobj, geneslist){
 ```
 
 
-### 3.2. Compute correlation
+### 2.2. Compute correlation
 ```{r correlation-calc}
 runCorrelation <- function(seuratobj, geneslist, nPermutations=1000, corr.method="spearman"){
   # Get average expression per gene df
@@ -439,104 +214,74 @@ runCorrelation <- function(seuratobj, geneslist, nPermutations=1000, corr.method
 ```
 
 
-### 3.3. Plot correlation matrix
+### 2.3. Plot correlation matrix
 ```{r plot-correlation, fig.height=10, fig.width=10}
 plotHeatmap <- function(values, clust=F, pval=T, colscalerange=c(0.5,1), plottitle, hclust.method="ward.D", diag=F){
   
   # Prepare text colors
-  col_text <- c(rep("#e41a1c", 7), # CD4
-                rep("#377eb8", 6), # CD8
-                rep("#4daf4a", 7), # MAIT
-                rep("#984ea3", 6), # NKT
-                rep("#ff7f00", 6)) # GDT
+  col_text <- c(rep("#74c476", sum(str_count(colnames(values$corr), "CD4_"))), # CD4
+                rep("#f768a1", sum(str_count(colnames(values$corr), "CD8_"))), # CD8
+                rep("#9ecae1", sum(str_count(colnames(values$corr), "MAIT_"))), # MAIT
+                rep("#9e9ac8", sum(str_count(colnames(values$corr), "NKT_"))), # NKT
+                rep("#084594", sum(str_count(colnames(values$corr), "GDT_")))) # GDT
   names(col_text) <- colnames(values$corr)
+
+  # Hclust or not?
+  if(clust==T){
+    print("+ Hclust +")
+    col_text <- col_text[corrMatOrder(values$corr, order="hclust", hclust.method=hclust.method)]
+    # reorder columns in "values" list (contains correlation matrix, pval matrix, random background correlation matrix)
+    values$corr <- values$corr[names(col_text),names(col_text)]
+    values$pval <- values$pval[names(col_text),names(col_text)]
+    values$randomcorr <- values$randomcorr[names(col_text),names(col_text)]
+  }
   
   # Include pval or not?
-  if(pval==F){ values$pval <- NULL }
+  if(pval==T){ values$corr[values$pval >= 0.05] <- NA }
   
-  if(clust==F){
-      corrplot(values$corr,
-         is.corr=F, # is input matrix a corr matrix?
+  corrplot(values$corr,
+     is.corr=F, # is input matrix a corr matrix?
          
-         # Order as original
-         order="original",
-         # Order with HClustering 
-         # order="hclust",
-         # hclust.method = "ward.D",
+     # Order as original
+     order="original",
+     # Order with HClustering 
+     # order="hclust",
+     # hclust.method = "ward.D",
 
-         # Color scale
-         method="color", # visualize corr as color
-         colors=colorRampPalette(c("#ffffcc", "#fd8d3c","#800026"))(200),
-         # col=kovesi.rainbow_bgyr_35_85_c73(200),
-         col.lim=colscalerange,
-         cl.align.text="l", # alignment text color legend
-         diag=diag, # no color in the diagonal
+     # Color scale
+     method="color", # visualize corr as color
+     colors=colorRampPalette(c("#ffffcc", "#fd8d3c","#fc4e2a", "#e31a1c", "#bd0026","#800026"))(200),
+     # col=kovesi.rainbow_bgyr_35_85_c73(200),
+     col.lim=colscalerange,
+     cl.align.text="l", # alignment text color legend
+     diag=diag, # no color in the diagonal
          
-         # Significance
-         p.mat=values$pval,
-         sig.level=0.05, # if pval>sig.level => corr coeff is insig
-         # insig="pch", pch=19, pch.cex=0.25, pch.col="black", # add points to insig squares
-         # insig="blank", # make insignificant squares blank
-         insig="pch",
-         pch.cex=0.7,
+     # Significance
+     # p.mat=values$pval,
+     # sig.level=0.05, # if pval>sig.level => corr coeff is insig
+     # # insig="pch", pch=19, pch.cex=0.25, pch.col="black", # add points to insig squares
+     # # insig="blank", # make insignificant squares blank
+     # insig="pch",
+     # pch.cex=0.7,
+     na.label="square",
+     na.label.col="#d9d9d9",
+        
+     # Text & title
+     main=plottitle,
+     tl.col=col_text, # text color
+     tl.pos="lt", # position labels on left & top
+     tl.cex=1, # size text label
          
-         # Text & title
-         main=plottitle,
-         tl.col=col_text, # text color
-         tl.pos="lt", # position labels on left & top
-         tl.cex=0.7, # size text label
-         
-         # Margins
-         # mar=c(3,1,5,1))
-         mar=c(0,1,1,0),
-         addgrid.col=NA)
-    recordPlot()
-  }
-  
-  else if(clust==T){
-    col_text <- col_text[corrMatOrder(values$corr, order="hclust", hclust.method=hclust.method)]
-    corrplot(values$corr,
-           is.corr=F, # is input matrix a corr matrix?
-           
-           # Order as original
-           # order="original",
-           # Order with HClustering 
-           order="hclust",
-           hclust.method = hclust.method,
-  
-           # Color scale
-           method="color", # visualize corr as color
-           col=colorRampPalette(c("#ffffcc", "#fd8d3c","#800026"))(200),
-           # col=kovesi.rainbow_bgyr_35_85_c73(200),
-           col.lim=colscalerange,
-           cl.align.text="l", # alignment text color legend
-           diag=diag, # no color in the diagonal
-           
-           # Significance
-           p.mat=values$pval,
-           sig.level=0.05, # if pval>sig.level => corr coeff is insig
-           # insig="pch", pch=19, pch.cex=0.25, pch.col="black", # add points to insig squares
-           # insig="blank", # make insignificant squares blank
-           insig="pch",
-           pch.cex=0.7,
-           
-           # Text & title
-           main=plottitle,
-           tl.col=col_text, # text color
-           tl.pos="lt", # position labels on left & top
-           tl.cex=0.7, # size text label
-           
-           # Margins
-           mar=c(0,1,1,0),
-           addgrid.col=NA)
-    recordPlot()
-  }
+     # Margins
+     # mar=c(3,1,5,1))
+     mar=c(0,1,1,0),
+     addgrid.col=NA)
+  recordPlot()
 }
 ```
 
 
-### 3.4. Look at correlation of gene expression between two clusters
-
+### 2.4. Look at correlation of gene expression between two clusters
 ```{r fig.height=6, fig.width=10}
 # Dataframe
 df <- avgexp %>%
@@ -578,7 +323,7 @@ ggplot(df %>% arrange(hvg_unique),
 
 
 
-## 4. RUN GENE CORRELATION ON DIFFERENT LIST OF HVGs
+## 3. RUN GENE CORRELATION ON DIFFERENT LIST OF HVGs
 
 Venn diagram:
 ```{r venn-diagram}
@@ -587,7 +332,7 @@ Venn diagram:
 #            VariableFeatures(seur.cd8),
 #            VariableFeatures(seur.mait),
 #            VariableFeatures(seur.nkt),
-#            VariableFeatures(seur.gd)),
+#            VariableFeatures(seur.gdt)),
 #   category.names = c("thymCD4" , "thymCD8", "thymMAIT", "thymNKT", "thymGDT"),
 #   # filename = file.path(path.plots, 'compareall.jpeg'),
 #   filename=NULL,
@@ -610,20 +355,20 @@ Venn diagram:
 
 # ggVennDiagram
 library(ggVennDiagram)
-path.plot <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/hvg"
+path.plot <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/hvg"
 
 venn.plt <- ggVennDiagram(
   x=list(VariableFeatures(seur.cd4),
          VariableFeatures(seur.cd8),
          VariableFeatures(seur.mait),
          VariableFeatures(seur.nkt),
-         VariableFeatures(seur.gd)),
+         VariableFeatures(seur.gdt)),
   category.names = c("thymCD4" , "thymCD8", "thymMAIT", "thymNKT", "thymGDT"),
   label_alpha=0,
   label="count"
   )+
   ggplot2::scale_fill_gradient(low="white",high = "blue")
-ggsave(file.path(path.plot, "thymHVG_venndiagram.jpeg"), width=6, height=6)
+# ggsave(file.path(path.plot, "thymHVG_venndiagram.jpeg"), width=6, height=6)
 ```
 
 UMAP preprocessing:
@@ -663,14 +408,14 @@ getUMAP <- function(seurobj, hvg, approxPCA=TRUE, ndim=20, res=1){
 
 
 
-### 4.1. All HVGs (union of thymic lineages)
+### 3.1. All HVGs (union of thymic lineages)
 ```{r hvg-all, fig.height=10, fig.width=10}
 # Get list of all HVGs
 hvg.all <- unique(c(VariableFeatures(seur.cd4),
                   VariableFeatures(seur.cd8),
                   VariableFeatures(seur.nkt),
                   VariableFeatures(seur.mait),
-                  VariableFeatures(seur.gd)))
+                  VariableFeatures(seur.gdt)))
 length(hvg.all) # 5862
 
 
@@ -729,7 +474,7 @@ plot_grid(
 ```
 
 
-### 4.2. Lineage-specific HVGs
+### 3.2. Lineage-specific HVGs
 ```{r hvg-unique, fig.height=10, fig.width=10}
 # Get list of all HVGs
 length(hvg.unique) # 3538
@@ -789,7 +534,7 @@ plot_grid(
 ```
 
 
-### 4.3. Common thymic HVGs
+### 3.3. Common thymic HVGs
 ```{r hvg-common, fig.height=10, fig.width=10}
 # Get list of common HVGs
 length(hvg.common) # 230
@@ -848,7 +593,7 @@ plot_grid(
 ```
 
 
-### 4.4. 2000 HVGs from integrated seurat object
+### 3.4. 2000 HVGs from integrated seurat object
 ```{r hvg-2000-integrated}
 # Get list of common HVGs
 length(VariableFeatures(seur)) # 2000
@@ -856,59 +601,15 @@ length(VariableFeatures(seur)) # 2000
 # Correlation
 corr.hvg2000 <- runCorrelation(seuratobj=seur.thym, geneslist=VariableFeatures(seur))
 corr.hvg2000$corr[corr.hvg2000$corr==1] <- NA
-# jpeg(file.path(path.plot, "int2000hvgs-thym-hvg_corrheatmap.jpeg"), width=2200, height=2200, res=300)
+# jpeg(file.path(path.plot, "int2000hvgs-thym-hvg_corrheatmap2.jpeg"), width=2200, height=2200, res=300)
 plotHeatmap(values=corr.hvg2000, clust=T, pval = T, plottitle = "Correlation on 2000 HVGs (HVGs from integrated object)", colscalerange = c(0.5, 0.92))
 # dev.off()
-
-
-# integrated UMAP
-umap.hvgcommon <- getUMAP(seur.filt, hvg=hvg.common)
-plot_grid(
-  # UMAP by clusters
-  DimPlot(umap.hvgcommon, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE) +
-    scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-    ggtitle("UMAP on 230 HVGs (HVGs common to all lineages)"),
-  # barplot by cell.ident
-  ggplot(umap.hvgcommon@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
-       aes(x=seurat_clusters, y=n, fill=cell.ident))+
-  geom_bar(position="fill", stat="identity") +
-  scale_fill_manual(values=brewer.pal(7,"Paired")) +
-  labs(x="clusters", y="", title = ""),
-  # UMAP by cell.ident
-  DimPlot(umap.hvgcommon, reduction = "umap", group.by = "cell.ident") +
-    scale_color_manual(values=brewer.pal(7,"Paired"))+
-    ggtitle(""),
-  ncol=3
-)
-# ggsave(file.path(path.plot, "common-thym-hvg_umap.jpeg"), width=18, height=6)
-
-
-# Thymic UMAP
-umap.thym.hvgcommon <- getUMAP(seur.thym, hvg=hvg.common, res=0.2)
-plot_grid(
-  # UMAP by clusters
-  DimPlot(umap.thym.hvgcommon, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE) +
-    scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18)) +
-    ggtitle("Thymic UMAP on 230 HVGs (HVGs common to all lineages)"),
-  # barplot by cell.ident
-  ggplot(umap.thym.hvgcommon@meta.data[,c("cell.ident", "seurat_clusters")] %>% group_by(cell.ident, seurat_clusters) %>% count(),
-       aes(x=seurat_clusters, y=n, fill=cell.ident))+
-  geom_bar(position="fill", stat="identity") +
-  scale_fill_manual(values=brewer.pal(5,"Paired")) +
-  labs(x="clusters", y="", title = ""),
-  # UMAP by cell.ident
-  DimPlot(umap.thym.hvgcommon, reduction = "umap", group.by = "cell_annot", label=TRUE, repel=TRUE) +
-    scale_color_manual(values=colorRampPalette(brewer.pal(5,"Paired"))(32)) +
-    ggtitle(""),
-  ncol=3,
-  rel_widths = c(1,1,2)
-)
-# ggsave(file.path(path.plot, "common-thym-hvg_umapthymus.jpeg"), width=18, height=6)
 ```
 
 
 
-## 5. METANEIGHBOR
+
+## 4. METANEIGHBOR
 
 ```{r metaneighbor-functions}
 library(MetaNeighbor)
@@ -937,7 +638,7 @@ runMetaNeighbor <- function(seurobj=seur.thym, geneslist, plotitle, filename){
   colnames(mtn) <- gsub(".*\\|", "", colnames(mtn))
   
   # Heatmap
-  jpeg(file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/metaneighbor", filename),
+  jpeg(file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/metaneighbor", filename),
        width=1000, height=1000, res=150)
   htmp.mtn <- heatmap.2(mtn,
             # trace
@@ -961,9 +662,9 @@ runMetaNeighbor <- function(seurobj=seur.thym, geneslist, plotitle, filename){
 
 compare_MetaNeighbor_Correlation <- function(htmp.mtn, cor.matrix, cor.colrange=seq(0.5,1,length=201), cor.plotitle, filename){
   # plot filenames
-  filename.corr <- file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/metaneighbor",
+  filename.corr <- file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/metaneighbor",
                              paste0(filename, "_correlation.jpeg"))
-  filename.dend <- file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_CorrelationGEbtwTlineages/metaneighbor",
+  filename.dend <- file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/metaneighbor",
                              paste0(filename, "_comparedend.jpeg"))
   
   # Correlation
@@ -1001,7 +702,7 @@ compare_MetaNeighbor_Correlation <- function(htmp.mtn, cor.matrix, cor.colrange=
 ```
 
 
-### 5.1. MetaNeighbor on all HVGs (union of thymic HVGs)
+### 4.1. MetaNeighbor on all HVGs (union of thymic HVGs)
 ```{r metaneighbor-allHVG}
 # Run metaneighbor
 htmp.mtn.hvgall <- runMetaNeighbor(geneslist=hvg.all, plotitle = "5862 HVGs", filename="allHVG_metaneighbor.jpeg")
@@ -1013,7 +714,7 @@ compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvgall, cor.matrix = corr.h
 ```
 
 
-### 5.2. MetaNeighbor on lineage-specific HVGs
+### 4.2. MetaNeighbor on lineage-specific HVGs
 ```{r metaneighbor-lineage-specific-HVG}
 # Run metaneighbor
 htmp.mtn.hvgunique <- runMetaNeighbor(geneslist=hvg.unique, plotitle = "3538 HVGs (lineage-specific)", filename="lineagespecificHVG_metaneighbor.jpeg")
@@ -1025,7 +726,7 @@ compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvgunique, cor.matrix = cor
 ```
 
 
-### 5.3. MetaNeighbor on common thymic HVGs
+### 4.3. MetaNeighbor on common thymic HVGs
 ```{r metaneighbor-commonHVG}
 # Run metaneighbor
 htmp.mtn.hvgcommon <- runMetaNeighbor(geneslist=hvg.common, plotitle = "230 HVGs (common)", filename="commonHVG_metaneighbor.jpeg")
@@ -1033,5 +734,17 @@ htmp.mtn.hvgcommon <- runMetaNeighbor(geneslist=hvg.common, plotitle = "230 HVGs
 # Compare with correlation
 corr.hvgcommon <- runCorrelation(seuratobj=seur.thym, geneslist=hvg.common)
 compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvgcommon, cor.matrix = corr.hvgcommon,
-                                 cor.plotitle = "3538 HVGs", cor.colrange = seq(0.15,0.96,length=201), filename="commonHVG")
+                                 cor.plotitle = "230 HVGs", cor.colrange = seq(0.15,0.96,length=201), filename="commonHVG")
+```
+
+
+### 4.4. MetaNeighbor on 2000 HVGs from integrated seurat object
+```{r metaneighbor-commonHVG}
+# Run metaneighbor
+htmp.mtn.hvg2000 <- runMetaNeighbor(geneslist=VariableFeatures(seur), plotitle = "2000 HVGs (integrated data)", filename="int2000hvgs_metaneighbor.jpeg")
+
+# Compare with correlation
+corr.hvg2000 <- runCorrelation(seuratobj=seur.thym, geneslist=VariableFeatures(seur))
+compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvg2000, cor.matrix = corr.hvg2000,
+                                 cor.plotitle = "2000 HVGs (integrated data)", cor.colrange = seq(0.5,0.92,length=201), filename="int2000hvgs")
 ```

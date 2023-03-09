@@ -1,0 +1,347 @@
+---
+title: "Human T cell data - Integrate with Park data"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+
+
+## 1. IMPORT
+
+### 1.1. Import librairies
+```{r import-librairies, message=FALSE}
+library(ggplot2)
+library(gplots)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+# library(corrplot)
+# library(pals)
+# library(VennDiagram)
+library(MetaNeighbor)
+library(SummarizedExperiment)
+# library(ggalluvial)
+# library(SingleCellExperiment)
+```
+
+
+### 1.2. Import data
+```{r import-data, fig.height=8, fig.width=8}
+# Import seurat object
+seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+
+# Sanity check
+print(seur) # 78,607 cells
+cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#e09351", "4" = "#2b9b81", 
+                     "5" = "#421401", "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f", "9" = "#74c8c3", 
+                     "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "#bdbdbd")
+SCpubr::do_DimPlot(seur, 
+                   group.by = "new_clusters",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_integrated,
+                   font.size = 24)
+DimPlot(seur, group.by="new_clusters", cols=cols_integrated, reduction="UMAP_50", label=T)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/gapin_umap.jpeg", width=10, height=8)
+```
+
+
+### 1.3. Import Park data
+```{r import-park, fig.height=8, fig.width=8}
+# seur.park <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_full_seurat.rds")
+seur.park <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_full_seu_gene_names.rds")
+
+# Sanity check
+SCpubr::do_DimPlot(seur.park,
+                   group.by = "cell_type",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   font.size = 24)
+
+# check out gene names
+rownames(seur.park)[1:5]
+
+# check out overlap gene names between Park data and our data
+library(ggVennDiagram)
+ggVennDiagram(
+  x=list(rownames(seur), rownames(seur.park)),
+  category.names = c("Gapin" , "Park"),
+  label_alpha=0,
+  label="count"
+  )+
+  ggplot2::scale_fill_gradient(low="white",high = "blue")
+```
+
+
+### 1.4. Import Park data (thymocytes only)
+Downloading the seurat object from [here](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910).
+```{r import-park-thymocytes}
+seur.park.thymocytes <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seu_gene_names.rds")
+
+# Sanity check
+DimPlot(seur.park.thymocytes, group.by="cell_type", label=T)
+
+seur.park.thymocytes@meta.data
+```
+
+Some cell type annotation is clearly missing. I thus downloaded the AnnData object from the [developmental cell atlas](https://developmental.cellatlas.io/thymus-development). Here we are converting the AnnData object to seurat object.
+
+```{r import-park-thymocytes2}
+# Install SeuratDisk
+# if (!requireNamespace("remotes", quietly = TRUE)) {
+#   install.packages("remotes")
+# }
+# remotes::install_github("mojaveazure/seurat-disk")
+library(SeuratDisk)
+
+# Convert anndata object to seurat
+# Convert("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/HTA08_v01_A06_Science_human_tcells.gzip.h5ad",
+#         dest = "h5seurat",
+#         overwrite = TRUE)
+# seur.park.thymocytes2 <- LoadH5Seurat("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/HTA08_v01_A06_Science_human_tcells.gzip.h5seurat")
+
+
+# Try with anndata for R
+# reticulate::install_miniconda()
+# anndata::install_anndata()
+# library(anndata)
+# library(reticulate)
+# import_from_path("anndata", path="/Users/scarcy/opt/anaconda3/lib/python3.8/site-packages/")
+# data <- read_h5ad("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/HTA08_v01_A06_Science_human_tcells.h5ad", backed="r+")
+# data <- CreateSeuratObject(counts = t(data$X), meta.data = data$obs)
+# print(str(data))
+# 
+# # Visualize
+# DimPlot(test, group.by="cell_type", label=T)
+```
+
+Okay it's complicated to convert the AnnData, so let's get the metadata lol
+
+```{r park-thymocyte-add-celltype}
+park_metadata <- read.csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_metadata.csv")
+
+# Check that the row names are the same
+table(park_metadata$index == rownames((seur.park.thymocytes@meta.data))) # yessss nice
+
+# Get the cell types eheheh
+seur.park.thymocytes@meta.data$cell_type <- park_metadata$cell.types
+
+# Visualize
+DimPlot(seur.park.thymocytes, group.by="cell_type", label=T)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_umap.jpeg", width=10, height=8)
+
+# Check gene names
+rownames(seur.park.thymocytes)[1:5]
+```
+
+
+
+
+## 2. INTEGRATION WITH PARK DATA
+
+### 2.1. Cleanup data
+Keep only cells of interest in each dataset
+```{r cleanup-gapin-data}
+# Keep only thymus
+Idents(seur) <- "Tissue"
+seur.thymus <- subset(seur, ident="Thymus")
+DimPlot(seur.thymus, group.by="new_clusters", cols=cols_integrated, reduction="UMAP_50", label=T)
+
+# Call the clusters "c0", "c1", etc.
+colnames(seur.thymus@meta.data)[17] <- "cell_type"
+seur.thymus@meta.data[,"cell_type"] <- paste0("c",seur.thymus@meta.data[,"cell_type"])
+seur.thymus@meta.data$study <- "gapin_data"
+
+DimPlot(seur.thymus, group.by="cell_type", reduction="UMAP_50", label=T)
+```
+
+```{r cleanup-park, fig.height=8, fig.width=20}
+# Sanity check
+DimPlot(seur.park, group.by="cell_type", label=T)
+
+# Keep only thymocytes
+seur.park@meta.data
+table(seur.park$development_stage)
+table(seur.park$cell_type)
+Idents(seur.park) <- "cell_type"
+seur.parkT <- subset(seur.park, idents=c("fibroblast", "mast cell", "endothelial cell", "erythrocyte", "macrophage", "vascular associated smooth muscle cell",
+                                   "dendritic cell", "lymphocyte", "megakaryocyte", "monocyte", "plasmacytoid dendritic cell", "plasma cell", "memory B cell",
+                                   "naive B cell", "precursor B cell", "epithelial cell of thymus", "cortical thymic epithelial cell",
+                                   "medullary thymic epithelial cell", "progenitor cell"), invert=TRUE)
+DimPlot(seur.parkT, group.by="cell_type", label=T)
+
+# Rename the cell_types
+seur.parkT@meta.data$cell_type <- case_when(
+  seur.parkT@meta.data$cell_type == "CD4-positive, alpha-beta T cell" ~ "CD4+ T",
+  seur.parkT@meta.data$cell_type == "CD8-positive, alpha-beta T cell" ~ "CD8+ T",
+  seur.parkT@meta.data$cell_type == "alpha-beta T cell" ~ "abT",
+  seur.parkT@meta.data$cell_type == "gamma-delta T cell" ~ "gdT",
+  seur.parkT@meta.data$cell_type == "double-positive, alpha-beta thymocyte" ~ "DP",
+  seur.parkT@meta.data$cell_type == "regulatory T cell" ~ "Treg",
+  seur.parkT@meta.data$cell_type == "CD4-positive, alpha-beta memory T cell" ~ "CD4+ Tmem",
+  seur.parkT@meta.data$cell_type == "CD8-positive, alpha-beta memory T cell" ~ "CD8+ Tmem",
+  seur.parkT@meta.data$cell_type == "CD8-alpha-alpha-positive, alpha-beta intraepithelial T cell" ~ "CD8aa, ab IEL",
+  seur.parkT@meta.data$cell_type == "group 3 innate lymphoid cell" ~ "ILC3",
+  seur.parkT@meta.data$cell_type == "double negative thymocyte" ~ "DN",
+  seur.parkT@meta.data$cell_type == "T cell" ~ "T cell",
+  seur.parkT@meta.data$cell_type == "natural killer cell" ~ "natural killer cell",
+  seur.parkT@meta.data$cell_type == "early T lineage precursor" ~ "ETP"
+)
+
+DimPlot(seur.parkT, group.by="cell_type", label=T)
+
+# Add information of dataset
+seur.parkT@meta.data$study <- "park_data"
+```
+
+
+### 2.2. Metaneighbor on whole Park data
+```{r park-metaneighbor}
+# Get union of HVGs from our data & park data
+length(VariableFeatures(seur.thymus))
+seur.parkT <- FindVariableFeatures(seur.parkT, nfeatures = 2000)
+length(VariableFeatures(seur.parkT))
+
+ggVennDiagram(
+  x=list(VariableFeatures(seur.thymus), VariableFeatures(seur.parkT)),
+  category.names = c("Gapin HVGs" , "Park HVGs"),
+  label_alpha=0,
+  label="count"
+  )+
+  ggplot2::scale_fill_gradient(low="white",high = "blue")
+
+hvg.union <- unique(c(VariableFeatures(seur.thymus), VariableFeatures(seur.parkT)))
+length(hvg.union)
+
+
+# Merge seurat objects
+seur.merged <- merge(seur.thymus, y=seur.parkT)
+# sanity checks
+ncol(seur.thymus) + ncol(seur.parkT) # total nb of samples
+length(union(rownames(seur.thymus), rownames(seur.parkT))) # total nb of genes
+print(seur.merged)
+
+
+# Convert seurat count matrix to SummarizedExperiment object
+table(seur.merged$cell_type, useNA="ifany")
+table(seur.merged$study, useNA="ifany")
+count <- SummarizedExperiment(assays=seur.merged@assays[["RNA"]]@counts,
+                              colData=seur.merged@meta.data[,c("cell_type", "study")])
+
+# sanity check
+# table(colnames(seur.merged@assays[["RNA"]]@counts) == rownames(seur.merged@meta.data))
+
+
+# Run metaneighbor
+mtn <- MetaNeighborUS(var_genes=hvg.union,
+                      dat=count,
+                      study_id=seur.merged$study,
+                      cell_type=seur.merged$cell_type,
+                      fast_version=TRUE)
+
+# Rename rows & cols
+# rownames(mtn) <- gsub(".*\\|", "", rownames(mtn))
+# colnames(mtn) <- gsub(".*\\|", "", colnames(mtn))
+  
+# Heatmap
+jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytes.jpeg",
+       width=1000, height=1000, res=150)
+heatmap.2(mtn,
+            # trace
+            trace="none",
+            # superimpose a density histogram on color key
+            density.info="none",
+            # color scale
+            col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+            breaks=seq(0,1,length=101),
+            # text labels
+            main="Integration on whole data",
+            cexRow=0.6,
+            cexCol=0.6,
+            # margins
+            margins=c(7,7))
+dev.off()
+```
+
+
+
+### 2.3. Metaneighbor on T cell Park data
+```{r park-metaneighbor}
+# Get union of HVGs from our data & park data
+length(VariableFeatures(seur.thymus))
+seur.park.thymocytes <- FindVariableFeatures(seur.park.thymocytes, nfeatures = 2000)
+length(VariableFeatures(seur.park.thymocytes))
+
+ggVennDiagram(
+  x=list(VariableFeatures(seur.thymus), VariableFeatures(seur.park.thymocytes)),
+  category.names = c("Gapin HVGs" , "Park HVGs"),
+  label_alpha=0,
+  label="count"
+  )+
+  ggplot2::scale_fill_gradient(low="white",high = "blue")
+
+hvg.union2 <- unique(c(VariableFeatures(seur.thymus), VariableFeatures(seur.park.thymocytes)))
+length(hvg.union2)
+
+
+# Merge seurat objects
+seur.park.thymocytes$study <- "park_data"
+seur.merged2 <- merge(seur.thymus, y=seur.park.thymocytes)
+# sanity checks
+ncol(seur.thymus) + ncol(seur.park.thymocytes) # total nb of samples
+length(union(rownames(seur.thymus), rownames(seur.park.thymocytes))) # total nb of genes
+print(seur.merged2)
+
+
+# Convert seurat count matrix to SummarizedExperiment object
+table(seur.merged2$cell_type, useNA="ifany")
+table(seur.merged2$study, useNA="ifany")
+count2 <- SummarizedExperiment(assays=seur.merged2@assays[["RNA"]]@counts,
+                              colData=seur.merged2@meta.data[,c("cell_type", "study")])
+
+# sanity check
+# table(colnames(seur.merged2@assays[["RNA"]]@counts) == rownames(seur.merged2@meta.data))
+
+
+# Run metaneighbor
+mtn2 <- MetaNeighborUS(var_genes=hvg.union2,
+                      dat=count2,
+                      study_id=seur.merged2$study,
+                      cell_type=seur.merged2$cell_type,
+                      fast_version=TRUE)
+  
+# Heatmap
+jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly.jpeg",
+       width=1000, height=1000, res=150)
+heatmap.2(mtn2,
+            # trace
+            trace="none",
+            # superimpose a density histogram on color key
+            density.info="none",
+            # color scale
+            col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+            breaks=seq(0,1,length=101),
+            # text labels
+            main="Comparison with Park thymocytes",
+            cexRow=0.6,
+            cexCol=0.6,
+            # margins
+            margins=c(7,7))
+dev.off()
+```

@@ -39,7 +39,7 @@ seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/se
 
 # Create Shiny app
 scConf = createConfig(seur.human)
-makeShinyApp(seur.human, scConf,
+makeShinyApp(seur, createConfig(seur),
              gex.assay="RNA", gex.slot="data",
              default.gene1="CD4",
              default.gene2="CD8A",

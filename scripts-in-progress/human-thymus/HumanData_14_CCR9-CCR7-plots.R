@@ -78,3 +78,83 @@ SCpubr::do_DimPlot(seur,
                    # legend.position = "none",
                    font.size = 24)
 ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/thymocytes_highlighted.jpeg", width=25, height=7)
+
+
+# Plot clusters 3 and 11 CD4/NKT
+seur@meta.data$new_group <- paste(seur@meta.data$group.ident, seur@meta.data$new_clusters, sep="_")
+Idents(seur) <- "new_group"
+
+DimPlot(seur, #label=T,
+        reduction = "UMAP_50", #group.by = "new_clusters",
+        cells.highlight= list("3"=WhichCells(seur, idents="CD4_Thymus_3"),
+                              "11"=WhichCells(seur, idents="CD4_Thymus_11")),
+        cols.highlight = c("3"="#e09351", "11"="gold"),
+        pt.size=0.2,
+        sizes.highlight = 1,
+        cols= "#bdbdbd" )+
+  labs(x="UMAP 1", y="UMAP 2", title="CD4+ cells")+
+  theme_cowplot()+
+  theme(axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_text(hjust=0, size=30),
+        plot.title = element_text(hjust=0.5, size=40),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+        legend.position="none") |
+DimPlot(seur, #label=T,
+          reduction = "UMAP_50", #group.by = "new_clusters",
+          cells.highlight= list("3"=WhichCells(seur, idents="NKT_Thymus_3"),
+                                "11"=WhichCells(seur, idents="NKT_Thymus_11")),
+          cols.highlight = c("3"="#e09351", "11"="gold"),
+          pt.size=0.2,
+          sizes.highlight = 1,
+          cols= "#bdbdbd" )+
+  labs(x="UMAP 1", y="UMAP 2", title="iNKT cells")+
+  theme_cowplot()+
+  theme(axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_text(hjust=0, size=30),
+        plot.title = element_text(hjust=0.5, size=40),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+        legend.position="none")
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/cd4_nkt_comparison.jpeg", width=13, height=7)
+
+
+# Plot clusters 9 and 10 CD8/MAIT
+DimPlot(seur, #label=T,
+        reduction = "UMAP_50", #group.by = "new_clusters",
+        cells.highlight= list("9"=WhichCells(seur, idents="CD8_Thymus_9"),
+                              "10"=WhichCells(seur, idents="CD8_Thymus_10")),
+        cols.highlight = c("9"="#74c8c3", "10"="#5a97c1"),
+        pt.size=0.2,
+        sizes.highlight = 1,
+        cols= "#bdbdbd" )+
+  labs(x="UMAP 1", y="UMAP 2", title="CD8+ cells")+
+  theme_cowplot()+
+  theme(axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_text(hjust=0, size=30),
+        plot.title = element_text(hjust=0.5, size=40),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+        legend.position="none") |
+  DimPlot(seur, #label=T,
+          reduction = "UMAP_50", #group.by = "new_clusters",
+          cells.highlight= list("9"=WhichCells(seur, idents="MAIT_Thymus_9"),
+                                "10"=WhichCells(seur, idents="MAIT_Thymus_10")),
+          cols.highlight = c("9"="#74c8c3", "10"="#5a97c1"),
+          pt.size=0.2,
+          sizes.highlight = 1,
+          cols= "#bdbdbd" )+
+  labs(x="UMAP 1", y="UMAP 2", title="MAIT cells")+
+  theme_cowplot()+
+  theme(axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_text(hjust=0, size=30),
+        plot.title = element_text(hjust=0.5, size=40),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+        legend.position="none")
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/cd8_mait_comparison.jpeg", width=13, height=7)
+

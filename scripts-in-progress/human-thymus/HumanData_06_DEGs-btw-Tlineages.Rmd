@@ -41,47 +41,6 @@ DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")
 ```
 
 
-XXX TO DELETE XXX
-```{r}
-seur <- readRDS("~/Desktop/seurat_filtered_harmony_02_15_23.RDS")
-
-DimPlot(seur, reduction="UMAP_50", split.by="Tissue", group.by="Batch")+
-  scale_color_manual(values=colorRampPalette(brewer.pal(9,"Paired"))(9), name="Batch")+
-  theme_cowplot()+
-  theme(axis.ticks = element_blank(),
-        axis.text = element_blank(),
-        axis.title=element_blank())+
-  ggtitle("")
-# ggsave("~/Downloads/umap_batch.jpeg", width=8, height=5)
-
-for(cellgroup in c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus")){
-  print(cellgroup)
-}
-SCpubr::do_FeaturePlot(sample=seur,
-                       cells.highlight=colnames(seur[, seur$group.ident == "CD4_Thymus"]), 
-                       features = c("KLRB1"), order=TRUE,
-                       reduction="UMAP_50") |
-  SCpubr::do_FeaturePlot(sample=seur,
-                       cells.highlight=colnames(seur[, seur$group.ident == "CD8_Thymus"]), 
-                       features = c("KLRB1"), order=TRUE,
-                       reduction="UMAP_50") |
-  SCpubr::do_FeaturePlot(sample=seur,
-                       cells.highlight=colnames(seur[, seur$group.ident == "NKT_Thymus"]), 
-                       features = c("KLRB1"), order=TRUE,
-                       reduction="UMAP_50") |
-  SCpubr::do_FeaturePlot(sample=seur,
-                       cells.highlight=colnames(seur[, seur$group.ident == "MAIT_Thymus"]), 
-                       features = c("KLRB1"), order=TRUE,
-                       reduction="UMAP_50") |
-  SCpubr::do_FeaturePlot(sample=seur,
-                       cells.highlight=colnames(seur[, seur$group.ident == "GD_Thymus"]), 
-                       features = c("KLRB1"), order=TRUE,
-                       reduction="UMAP_50")
-ggsave("~/Downloads/umap_ccr9_2.jpeg", width=25, height=6)
-```
-
-XXX
-
 
 
 ## 2. FINDMARKERS
@@ -175,15 +134,15 @@ Following the tutorial from : https://hbctraining.github.io/scRNA-seq/lessons/ps
 ## ****************
 ## IDENTIFY GROUPS FOR DE ANALYSIS
 # Create SingleCellExperiment object
-counts <- seur.filt@assays$RNA@counts
-metadata <- seur.filt@meta.data
+counts <- seur@assays$RNA@counts
+metadata <- seur@meta.data
 
-# Subset metadata only to information we're interested in
-metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "old_clusters")]
+# Subset metadata only to information we're interested in (in this example, tissue, cell identity, batch, and clusters)
+metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters")]
 colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
 print(metadata) # sanity check
 
-# Create a "groups" df that will define how we aggregate counts
+# Create a "groups" df that will (1) keep only cells of interest; (2) keep the columns of interest (that will define how we group counts)
 groups <- metadata %>%
   # ---
   # EXAMPLE 1: Compare thymic CD4 vs thymic CD8 cells (all clusters, but separate batches)
@@ -191,12 +150,20 @@ groups <- metadata %>%
   # select(cell_id, batch_id) # keep only relevant columns for grouping
   # ---
   # EXAMPLE 2: Compare peripheral CD4 vs peripheral CD8 cells in cluster 12 (separate batches)
-  filter(tissue_id=="PBMC" & cell_id %in% c("CD4", "CD8") & cluster_id=="12") %>%
-  select(cell_id, batch_id) # keep only relevant columns for grouping
+  # filter(tissue_id=="PBMC" & cell_id %in% c("CD4", "CD8") & cluster_id=="12") %>%
+  # select(cell_id, batch_id) # keep only relevant columns for grouping
   # ---
   # EXAMPLE 3: Compare thymic NKT vs peripheral NKT cells in cluster 12 (separate batches)
   # filter(cell_id=="NKT" & cluster_id=="12") %>%
   # select(tissue_id, batch_id) # keep only relevant columns for grouping
+  # ---
+  # EXAMPLE 4: Compare thymic iNKT cells and CD4 cells in clusters 3 & 11
+  # filter(tissue_id == "Thymus" & cell_id %in% c("CD4", "NKT") & cluster_id %in% c("3", "11")) %>%
+  # select(cell_id, batch_id) # I want to group cells by batch_id and cell_id
+  # ---
+  # EXAMPLE 5: Compare thymic MAIT cells and CD8 cells in clusters 9 & 10
+  filter(tissue_id == "Thymus" & cell_id %in% c("CD8", "MAIT") & cluster_id %in% c("9", "10")) %>%
+  select(cell_id, batch_id) # I want to group cells by batch_id and cell_id
 print(groups) # sanity check
 
 ## ****************
@@ -207,9 +174,11 @@ nrow(groups) == nrow(count.agg) # verify nb of cells in "groups" (rows) is same 
 
 # Aggregate counts based on columns in "groups"
 count.agg <- Matrix.utils::aggregate.Matrix(count.agg, groupings = groups, fun = "sum")
-# dim(count.agg)
-# count.agg[1:6, 1:6]
-# table(colSums(count.agg) == 0) # check if any gene has total count of 0
+
+# Sanity checks
+dim(count.agg)
+count.agg[1:6, 1:6]
+table(colSums(count.agg) == 0) # check if any gene has total count of 0
 
 # Final counts for DESeq (groups as columns, genes as rows)
 counts.deseq <- data.frame(t(count.agg))
@@ -218,14 +187,14 @@ counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have
 
 ## ****************
 ## PREPARE METADATA DF FOR DESEQ
-# Have metadata df where rownames are the colnames of "counts.deseq"
+# Have metadata df where rownames are the colnames of "counts.deseq" (the groups)
 metadf.deseq <- groups %>%
   distinct() %>%
   unite(sample_id, remove=FALSE)
 rownames(metadf.deseq) <- metadf.deseq$sample_id
 
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
-metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),]
+metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),] # reorder rows in metadf.deseq to match order of columns in counts.deseq
 all(rownames(metadf.deseq) == colnames(counts.deseq))
 ```
 
@@ -253,35 +222,40 @@ When using these unsupervised clustering methods, normalization and log2-transfo
 ```{r deseq2-qc}
 # Transform counts for data visualization
 rld <- rlog(dds, blind=TRUE)
+# Sanity check
 head(assay(rld))
 
 # Plot PCA
 DESeq2::plotPCA(rld, intgroup = "sample_id")
+DESeq2::plotPCA(rld, intgroup = "batch_id")
 DESeq2::plotPCA(rld, intgroup = "cell_id")
-# PC1 separates the CD4 & CD8
-
-# Correct for batch effect, and then run PCA
-counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
-rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
-select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
-pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
-percentVar <- pca$sdev^2/sum(pca$sdev^2)
-counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
-                         batch = metadf.deseq$batch_id,
-                         condition = metadf.deseq$cell_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
-# Plot
-ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
-  geom_point(size = 4) +
-  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
-  coord_fixed(expand=TRUE) +
-  scale_y_continuous(expand = c(0.1,0.1))
 
 
-# Compute pairwise correlation values on the batch-effect-corrected matrix
-rld_cor <- cor(counts_corrected[select_rv,])
-# Plot heatmap
-pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
+## ****************
+## IF THERE IS REALLY STRONG BATCH EFFECT IN THE PCA, RUN CODE BELOW
+
+# # Correct for batch effect, and then run PCA
+# counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
+# rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
+# select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
+# pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
+# percentVar <- pca$sdev^2/sum(pca$sdev^2)
+# counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
+#                          batch = metadf.deseq$batch_id,
+#                          condition = metadf.deseq$cell_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
+# # Plot
+# ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
+#   geom_point(size = 4) +
+#   xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+#   ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+#   coord_fixed(expand=TRUE) +
+#   scale_y_continuous(expand = c(0.1,0.1))
+# 
+# 
+# # Compute pairwise correlation values on the batch-effect-corrected matrix
+# rld_cor <- cor(counts_corrected[select_rv,])
+# # Plot heatmap
+# pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ```
 
 
@@ -293,12 +267,10 @@ All of these steps are performed by running the single DESeq() function on our D
 dds <- DESeq(dds)
 
 # Plot dispersion estimates
-# jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages/dispersion_estimate.jpeg", width=1500, height=1500, res=200)
 plotDispEsts(dds)
-# dev.off()
 
 # Output results of Wald test for contrast for CD4 vs CD8
-contrast <- c("cell_id", "CD4", "CD8") # MODIFY BASED ON WHAT YOU ARE COMPARING
+contrast <- c("cell_id", "CD8", "MAIT") # MODIFY BASED ON WHAT YOU ARE COMPARING
 res <- results(dds, 
                contrast = contrast,
                alpha = 0.05)
@@ -314,54 +286,60 @@ result.df <- res %>%
   rownames_to_column(var="gene") %>%
   as_tibble()
 
+# Sanity check (if you want to look at your favorite genes)
+# result.df %>%
+#   filter(gene %in% c("ZBTB16", "RUNX3"))
 
+
+## ****************
 ## KEEP ONLY SIGNIFICANT GENES ##
 # Set threshold
 padj_cutoff <- 0.05
 
 # Subset the significant results
-result.sig <- dplyr::filter(result.df, padj < padj_cutoff) %>%
-  dplyr::arrange(padj)
+result.sig <- result.df %>%
+  filter(padj < padj_cutoff) %>%
+  arrange(padj)
 
 # Check significant genes output
 table(result.sig$log2FoldChange > 0)
 result.sig %>%
   dplyr::arrange(log2FoldChange)
-# Sanity check
-# result.sig %>%
-#   filter(gene %in% c("RUNX3", "ZBTB7B"))
 ```
 
 
 ### 3.3. Heatmap
-
 ```{r heatmap}
-# Extract normalized counts for only the significant genes
+# Extract normalized counts (from DESeq2 object) of the significant genes
 counts.norm <- counts(dds, normalized = TRUE)
 counts.norm.sig <- data.frame(counts.norm) %>%
   rownames_to_column(var = "gene") %>%
-  dplyr::filter(gene %in% result.sig$gene)
-rownames(counts.norm.sig) <- counts.norm.sig$gene
+  filter(gene %in% result.sig$gene) %>%
+  column_to_rownames("gene") %>%
+  t()
         
 # Set a color palette
-heat_colors <- brewer.pal(6, "YlOrRd")
+heat_colors <- rev(brewer.pal(20, "RdBu"))
 
 # Run pheatmap using the metadata data frame for the annotation
 path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages"
-# jpeg(file.path(path.plots, "heatmap_CD4CD8.jpeg"), height = 2000, width = 2000, res = 300)
-pheatmap(counts.norm.sig[,-1], 
+jpeg(file.path(path.plots, "heatmap_c9c10_CD8vsMAIT.jpeg"), height = 1000, width = 3000, res = 300)
+pheatmap(counts.norm.sig,
     color = heat_colors,
-    cluster_rows = T,
+    scale = "column", # z-score
+    cluster_rows = F,
     cluster_cols = T,
-    show_rownames = T,
-    fontsize_row = 2,
-    annotation = metadf.deseq[, c("batch_id", "cell_id")], # MODIFY BASED ON WHAT YOU ARE COMPARING
     border_color = NA,
-    fontsize = 10,
-    main= "Thymic cells",
-    scale = "row",
-    height = 20)
-# dev.off()
+    # Create gaps to separate CD4/NKT
+    gaps_row=4,
+    cutree_cols = 2,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    # Change columns
+    angle_col=45,
+    fontsize_col = 5)
+dev.off()
 ```
 
 

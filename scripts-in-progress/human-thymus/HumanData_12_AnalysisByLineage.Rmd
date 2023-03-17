@@ -61,6 +61,100 @@ seur.filt <- CreateSeuratObject(counts=counts, meta.data = metadata)
 #   scale_color_manual(values=colorRampPalette(brewer.pal(12,"Paired"))(18))
 ```
 
+```{r import-data2, eval=FALSE, include=FALSE, fig.width=20, fig.height=10}
+seur.thycd4  <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-CD4_2023-02-27.rds")
+seur.cd8  <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-CD8_2023-02-27.rds")
+seur.nkt  <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-NKT_2023-02-27.rds")
+seur.mait <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-MAIT_2023-02-27.rds")
+seur.gd   <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-GDT_2023-02-27.rds")
+
+effectorness_genes <- c("HOPX", "GZMB", "GZMK", "ZEB2", "NKG7", "GNLY", "TBX21", "EOMES", "TYROBP", "PRF1", 
+                        "CCL4", "CCL5", "KLRB1", "GZMH", "GZMA", "KLRD1", "CST7", "KLF6", "CXCR4")
+naive_genes <- c("SATB1", "TCF7", "LEF1", "CCR7", "SELL", "MYC", "EIF3E", "SOX4", "ID3", "BACH2",
+                 "PTPRC", "IL7R", "IL2RG")
+egress_genes <- c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4", "S100A4", "S100A6", "EMP3")
+
+# Calculate the module scores and add them to the Seurat object
+seur.thycd4 <- AddModuleScore(object = seur.thycd4, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+seur.cd8 <- AddModuleScore(object = seur.cd8, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+seur.nkt <- AddModuleScore(object = seur.nkt, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+seur.mait <- AddModuleScore(object = seur.mait, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+seur.gd <- AddModuleScore(object = seur.gd, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+
+# VlnPlot(seur.thycd4, features=c("effector1", "naive2"), group.by="cell_annot")
+# VlnPlot(seur.cd8, features=c("effector1", "naive2"), group.by="cell_annot")
+# VlnPlot(seur.nkt, features=c("effector1", "naive2"), group.by="cell_annot")
+# VlnPlot(seur.mait, features=c("effector1", "naive2"), group.by="cell_annot")
+# VlnPlot(seur.gd, features=c("effector1", "naive2"), group.by="cell_annot")
+
+# Put together into DF
+df <- data.frame(rbind(seur.thycd4@meta.data[,c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")],
+                       seur.cd8@meta.data[,   c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")],
+                       seur.nkt@meta.data[,   c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")],
+                       seur.thycd4@meta.data[,c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")],
+                       seur.mait@meta.data[,  c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")],
+                       seur.gd@meta.data[,    c("cell.ident", "cell_annot", "effector1", "naive2", "egress3")])) %>%
+  rename(effector=effector1, naive=naive2, egress=egress3)
+
+# colors
+cols_cd4 <- c("#c7e9c0", "#238b45", "#edf8e9", "#41ab5d", "#74c476","#005a32", "#a1d99b")
+names(cols_cd4) <- unique(seur.thycd4$cell_annot)
+cols_cd8 <- c("#f768a1", "#f1eef6", "#c994c7", "#fa9fb5", "#df65b0","#d4b9da")
+names(cols_cd8) <- unique(seur.cd8$cell_annot)
+cols_mait <- c("#2171b5", "#6baed6", "#9ecae1", "#deebf7", "#c6dbef", "#f7fbff", "#4292c6")
+names(cols_mait) <- unique(seur.mait$cell_annot)
+cols_nkt <- c("#9e9ac8", "#f2f0f7", "#cbc9e2", "#54278f", "#756bb1")
+names(cols_nkt) <- unique(seur.nkt$cell_annot)
+cols_gdt <- c("#74a9cf", "#3690c0", "#045a8d", "#023858", "#0570b0", "#a6bddb")
+names(cols_gdt) <- unique(seur.gd$cell_annot)
+
+cols <- c(cols_cd4, cols_cd8, cols_mait, cols_nkt, cols_gdt)
+
+clusters_levels=c("thyCD4_ISP", "thyCD4_DPp", "thyCD4_DPq", "thyCD4_ccr9", "thyCD4_ccr7", "thyCD4_Tagonist", "thyCD4_Treg",
+                  "thyCD8_DP", "thyCD8_ccr9", "thyCD8_idk", "thyCD8_ccr7", "thyCD8_cd8aa1", "thyCD8_cd8aa2",
+                  "thyMAIT_DP", "thyMAIT_cd8aa", "thyMAIT_ccr9", "thyMAIT_idk", "thyMAIT_ccr7", "thyMAIT_IFNsig", "thyMAIT_effector",
+                  "thyNKT_cd8aa", "thyNKT_ccr9", "thyNKT_ccr7", "thyNKT_effFOSJUN", "thyNKT_effector",
+                  "thyGDT_DP", "thyGDT_immat_cycl", "thyGDT_immat", "thyGDT_ccr9", "thyGDT_IFNsig", "thyGDT_effector")
+
+# VlnPlot
+ggplot(df, aes(x=factor(cell_annot, level=clusters_levels), y=effector, fill=cell_annot)) +
+  geom_violin(color="black", scale="width")+
+  geom_jitter(size=0.2, width=0.1)+
+  scale_fill_manual(values=cols)+
+  labs(x="", y="Effector gene score", title="Effectorness score")+
+  geom_vline(xintercept=c(7.5, 13.5,20.5,25.5), linetype="dashed", color="darkgrey")+
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        plot.title = element_text(hjust=0.5),
+        legend.position="none")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/score_effector.jpeg", width=15, height=7)
+
+ggplot(df, aes(x=factor(cell_annot, level=clusters_levels), y=naive, fill=cell_annot)) +
+  geom_violin(color="black", scale="width")+
+  geom_jitter(size=0.2, width=0.1)+
+  scale_fill_manual(values=cols)+
+  labs(x="", y="Naive gene score", title="Naiveness score")+
+  geom_vline(xintercept=c(7.5, 13.5,20.5,25.5), linetype="dashed", color="darkgrey")+
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        plot.title = element_text(hjust=0.5),
+        legend.position="none")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/score_naive.jpeg", width=15, height=7)
+
+ggplot(df, aes(x=factor(cell_annot, level=clusters_levels), y=egress, fill=cell_annot)) +
+  geom_violin(color="black", scale="width")+
+  geom_jitter(size=0.2, width=0.1)+
+  scale_fill_manual(values=cols)+
+  # scale_color_manual(values=cols)+
+  labs(x="", y="Egress gene score", title="Egress score")+
+  geom_vline(xintercept=c(7.5, 13.5,20.5,25.5), linetype="dashed", color="darkgrey")+
+  theme_cowplot() +
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        plot.title = element_text(hjust=0.5),
+        legend.position="none")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/score_egress.jpeg", width=15, height=7)
+```
+
 
 
 

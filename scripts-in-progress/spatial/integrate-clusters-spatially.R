@@ -252,18 +252,13 @@ res.decon <- parallel::mclapply(slices, analyzeSPOTS, spe.list=tspe.slices,
                                 variable_features = unique(subset_hvgs$Features),
                                 mc.cores=8)
 names(res.decon) <- slices
-#saveRDS(res.decon, 'results/NMF.modls.thymus.batchC.allslices.rds')
+saveRDS(res.decon, 'results/NMF.modls.thymus.batchC.allslices.rds')
 
 
 ## Visualise learned topic profiles ####
 res.topics <- parallel::mclapply(slices, visualiseTopics, res.slices=res.decon,
                               mc.cores=8)
 
-
-## sanity check learned topics
-#sign <- basis(modls)
-#colnames(sign) <- paste0("Topic", seq_len(ncol(sign)))
-#head(sign)
 
 ## Visualise spatial distribution ####
 slices_tmp <- slices[-4]

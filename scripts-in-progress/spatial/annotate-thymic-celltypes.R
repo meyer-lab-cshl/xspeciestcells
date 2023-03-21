@@ -81,8 +81,7 @@ print(thymus.filt) # 37,369 cells
 ## NKT CELLS ####
 thymus.nkt <- preprocess(seurobj = subset(thymus.filt,
                                           subset=group.ident=="NKT_Thymus"),
-                         celltype = "NKTthy", colvalues=colvalues, ndim=10,
-                         res=0.3)
+                         celltype = "NKTthy", colvalues=colvalues, ndim=10, res=0.4)
 
 # Annotate
 thymus.nkt@meta.data$cell_annot <- case_when(

@@ -2,8 +2,7 @@ data/
 .Rproj.user
 *.Rproj
 .DS_Store
-scripts/cross-species/*.nb.html
-scripts/human-thymus/*.nb.html
-scripts/.DS_Store
-scripts/human-thymus/shinyApp*
+scripts-in-progress/cross-species/*.nb.html
+scripts-in-progress/human-thymus/*.nb.html
+scripts-in-progress/.DS_Store
 shinyApp*

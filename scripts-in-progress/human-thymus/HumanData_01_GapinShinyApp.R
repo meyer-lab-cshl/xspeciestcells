@@ -31,18 +31,19 @@ library(Seurat)
 library(ShinyCell)
 
 # Import data
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
 
 # Take quick peek at the data
-# print(seur.human) # 79,801 cells and 34,778 genes
+# print(seur.human) # 78,607 cells and 17,204 genes
 # seur.human@meta.data
 
 # Create Shiny app
 scConf = createConfig(seur.human)
-makeShinyApp(seur.human, scConf,
-             gex.assay="SCT", gex.slot="data",
+makeShinyApp(seur, createConfig(seur),
+             gex.assay="RNA", gex.slot="data",
              default.gene1="CD4",
              default.gene2="CD8A",
+             default.dimred="UMAP_50",
              shiny.title = "ShinyCell Gapin Human data",
              shiny.dir="shinyAppHumanGapinData/")
 

@@ -1,5 +1,5 @@
 ---
-title: "04_CorrelationComparison"
+title: "05_CorrelationNKT_MouseHuman"
 output: html_notebook
 ---
 
@@ -11,24 +11,107 @@ library(tidyverse)
 library(corrplot)
 library(magrittr)
 library(dplyr)
+library(harmony)
 ```
 
 ```{r import-data}
-path <- "~/Projects/HumanThymusProject/data/cross-species/02_CorrelationComparion"
-# Mouse data
-DEgenes_ms.df <- readRDS(file.path(path, "ms_DEG.rds"))
-ExpressionTable_ms <- readRDS(file.path(path, "ms_avgexp.rds"))
-# Pig data
-DEgenes_pig.df <- readRDS(file.path(path, "pig_DEG.rds"))
-ExpressionTable_pig <- readRDS(file.path(path, "pig_avgexp.rds"))
-# Pig data
-DEgenes_hu.df <- readRDS(file.path(path, "hu_DEG.rds"))
-ExpressionTable_hu <- readRDS(file.path(path, "hu_avgexp.rds"))
+# Import seurat objects
+seur.mouse <- readRDS("~/Projects/HumanThymusProject/data/00_Reproduce_UMAPs/ms_seurobj.rds")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 
-# Import orthologs tables
-ortholog.df <- read.csv("~/Projects/HumanThymusProject/data/03_BiomartTable/big_ass_ortholog_table.csv")
-ortholog.gapin <- read.csv("~/Projects/HumanThymusProject/data/03_BiomartTable/Cleaned_gene_correspondance_Human_Mouse.csv")
+# Sanity check
+print(seur.mouse) # 10817 cells
+print(seur.human) # 79,801 cells (it's the whole seurat object)
+
+# Quick visualization
+DimPlot(seur.mouse)
+DimPlot(seur.human)
+
+# path <- "~/Projects/HumanThymusProject/data/cross-species/02_CorrelationComparion"
+# # Mouse data
+# DEgenes_ms.df <- readRDS(file.path(path, "ms_DEG.rds"))
+# ExpressionTable_ms <- readRDS(file.path(path, "ms_avgexp.rds"))
+# # Pig data
+# DEgenes_pig.df <- readRDS(file.path(path, "pig_DEG.rds"))
+# ExpressionTable_pig <- readRDS(file.path(path, "pig_avgexp.rds"))
+# # Pig data
+# DEgenes_hu.df <- readRDS(file.path(path, "hu_DEG.rds"))
+# ExpressionTable_hu <- readRDS(file.path(path, "hu_avgexp.rds"))
+# 
+# # Import orthologs tables
+# ortholog.df <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv")
+# ortholog.gapin <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/Cleaned_gene_correspondance_Human_Mouse.csv")
 ```
+
+
+
+
+# DATA PREPROCESSING
+
+## 1. Get human thymic iNKT object
+
+```{r}
+# Subset seurat object
+NKT_Thymus_samples <- subset(seur.human, ident = "NKT_Thymus") # 2551 cells
+
+# Normalize & integrate with Harmony
+NKT_Thymus_samples <- SCTransform(NKT_Thymus_samples,
+                                  assay="RNA",
+                                  new.assay.name="SCT",
+                                  vars.to.regress = c('percent.mt'), 
+                                  verbose=TRUE,
+                                  method = "glmGamPoi")
+NKT_Thymus_samples <- RunHarmony(NKT_Thymus_samples,
+                                 group.by.vars = c("Method", "Batch"),
+                                 assay.use = "SCT",
+                                 max.iter.harmony = 20)
+# NKT_Thymus_samples <- RunPCA(NKT_Thymus_samples, assay="SCT")
+NKT_Thymus_samples <- RunUMAP(NKT_Thymus_samples, dims = 1:15, assay="SCT", reduction="harmony")
+NKT_Thymus_samples <- FindNeighbors(NKT_Thymus_samples, dims = 1:15, assay="SCT", reduction="harmony")
+NKT_Thymus_samples <- FindClusters(NKT_Thymus_samples, resolution = 0.7, assay="SCT")
+
+DimPlot(NKT_Thymus_samples)
+# FeaturePlot(NKT_Thymus_samples, features = "RAG1")
+
+NKT_Thymus_samples$new_clusters_NKT <- case_when(
+  NKT_Thymus_samples$seurat_clusters == '3' ~ '0',
+  NKT_Thymus_samples$seurat_clusters == '2' ~ '1',
+  NKT_Thymus_samples$seurat_clusters == '1' ~ '2',
+  NKT_Thymus_samples$seurat_clusters == '6' ~ '3',
+  NKT_Thymus_samples$seurat_clusters == '5' ~ '4',
+  NKT_Thymus_samples$seurat_clusters == '0' ~ '5',
+  NKT_Thymus_samples$seurat_clusters == '4' ~ '6'
+)
+
+NKT_Thymus_samples$new_clusters_NKT  <- as.factor(NKT_Thymus_samples$new_clusters_NKT)
+Idents(NKT_Thymus_samples) <- "new_clusters_NKT"
+
+colors_clusters <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#e09351", "4" = "#2b9b81", 
+                     "5" = "#421401", "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f", "9" = "#74c8c3", 
+                     "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "olivedrab2")
+
+colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#74c8c3", "2" = "#5a97c1", "3" = "#9f5691", "4" = "gold", 
+                     "5" = "#a40000", "6" = "grey50")
+
+DimPlot(NKT_Thymus_samples, cols = colors_clusters_NKT, pt.size = 1)
+
+SCpubr::do_DimPlot(sample = NKT_Thymus_samples, 
+                   label = FALSE, 
+                   label.color = "black", colors.use = colors_clusters_NKT,
+                   legend.position = "right")
+
+NKT_Thymus_samples <- NormalizeData(NKT_Thymus_samples)
+SCpubr::do_FeaturePlot(sample = NKT_Thymus_samples, 
+                       features = "CCR7",
+                       plot.title = "",
+                       reduction = "umap",
+                       viridis_color_map = "inferno")
+```
+
+
+
+
 
 
 

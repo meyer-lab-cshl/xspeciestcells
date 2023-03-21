@@ -316,6 +316,8 @@ ggsave(plot=p_bar,
        filename = 'results/plots/proportion_cluster_across_regions.pdf',
        width = 15, height=12)
 
+readr::write_csv(summary.annotated,
+          'results/proportion_cluster_across_regions.csv')
 ## average correlation of cell types found in same spot ####
 
 slices.corr <- lapply(slices_tmp, function(slice) {
@@ -356,6 +358,10 @@ df <- merge(x, y, by = 0, all = TRUE)
 df$location <- thymus.S2_A1$Location
 cell_types <- colnames(y)
 
+cols_nkt <- c("#2166ac", "#4393c3", "#92c5de", "#f4a582", "#67001f")
+names(cols_nkt) <- c("thyNKT_cd8aa", "thyNKT_ccr9", "thyNKT_ccr7",
+                     "thyNKT_effFOSJUN", "thyNKT_effector")
+
 p_nkt <- ggplot() + coord_fixed()
 p_nkt <- p_nkt + scatterpie::geom_scatterpie(data = df,
                                 aes(x = coord_x, 
@@ -364,8 +370,8 @@ p_nkt <- p_nkt + scatterpie::geom_scatterpie(data = df,
                                 cols = cell_types,
                                 pie_scale = 0.4,
                                 color = NA) + 
-  scale_fill_manual(values=colvalues) +
-  scale_color_manual(values=colhisto) +
+  scale_fill_manual(values=cols_nkt) +
+  #scale_color_manual(values=colhisto) +
   coord_flip() +
   scale_x_reverse() +
   scale_size_continuous(range=c(0.01, 0.5)) +

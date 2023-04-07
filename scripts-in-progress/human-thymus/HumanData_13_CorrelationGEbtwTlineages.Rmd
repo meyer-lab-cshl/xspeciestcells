@@ -36,6 +36,7 @@ library(VennDiagram)
 ```{r import-data}
 # Import individual seurat objects
 path <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage"
+path.plot <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/hvg"
 # seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
 seur.cd4  <- readRDS(file.path(path, "seurat_thymus-CD4_2023-02-27.rds"))
 seur.cd8  <- readRDS(file.path(path, "seurat_thymus-CD8_2023-02-27.rds"))
@@ -46,11 +47,11 @@ seur.gdt  <- readRDS(file.path(path, "seurat_thymus-GDT_2023-02-27.rds"))
 
 
 # Sanity check
-DimPlot(seur.cd4)
-DimPlot(seur.cd8)
-DimPlot(seur.nkt)
-DimPlot(seur.mait)
-DimPlot(seur.gdt)
+DimPlot(seur.cd4, group.by="cell_annot")
+DimPlot(seur.cd8, group.by="cell_annot")
+DimPlot(seur.nkt, group.by="cell_annot")
+DimPlot(seur.mait, group.by="cell_annot")
+DimPlot(seur.gdt, group.by="cell_annot")
 ```
 
 
@@ -111,9 +112,9 @@ table(seur.thym@meta.data[,c("cell_annot", "group.ident")], useNA="ifany")
 # Sanity check cells sequenced by WTA or WTA_VDJ per cluster
 test <- seur.thym@meta.data %>%
   group_by(Method, cell_annot) %>%
-  count()
+  dplyr::count()
 ggplot(test, aes(x=cell_annot, y=n, fill=Method))+
-  geom_bar(position="fill", stat="identity")+
+  geom_bar(stat="identity")+
   # geom_bar(position="dodge", stat="identity")+
   theme(axis.text.x=element_text(angle=90, hjust=1))
 ```
@@ -250,7 +251,7 @@ plotHeatmap <- function(values, clust=F, pval=T, colscalerange=c(0.5,1), plottit
 
      # Color scale
      method="color", # visualize corr as color
-     colors=colorRampPalette(c("#ffffcc", "#fd8d3c","#fc4e2a", "#e31a1c", "#bd0026","#800026"))(200),
+     col=colorRampPalette(c("#ffffcc", "#fd8d3c","#fc4e2a", "#e31a1c", "#bd0026","#800026"))(200),
      # col=kovesi.rainbow_bgyr_35_85_c73(200),
      col.lim=colscalerange,
      cl.align.text="l", # alignment text color legend
@@ -283,41 +284,47 @@ plotHeatmap <- function(values, clust=F, pval=T, colscalerange=c(0.5,1), plottit
 
 ### 2.4. Look at correlation of gene expression between two clusters
 ```{r fig.height=6, fig.width=10}
+avgexp <- averageGE(seuratobj=seur.thym, geneslist=rownames(seur))
+
 # Dataframe
 df <- avgexp %>%
   as.data.frame() %>%
   rownames_to_column("gene") %>%
-  mutate(hvg_union=ifelse(gene %in% hvg, T, F),
-         hvg_common=ifelse(gene %in% hvg.common, T, F),
-         hvg_unique=ifelse(gene %in% hvg.unique, T, F))
+  mutate(hvg_integrated=ifelse(gene %in% VariableFeatures(seur), T, F))
+  # mutate(hvg_union=ifelse(gene %in% hvg, T, F),
+  #        hvg_common=ifelse(gene %in% hvg.common, T, F),
+  #        hvg_unique=ifelse(gene %in% hvg.unique, T, F))
 
 # Sanity checks
 dim(df)
+# table(df$hvg_integrated, useNA="ifany")
 # table(df[, c("hvg_union", "hvg_common")])
 # table(df[, c("hvg_union", "hvg_unique")])
 # table(df[, c("hvg_common", "hvg_unique")])
 
 # Example with highly correlating clusters
-ggplot(df %>% arrange(hvg_unique),
-       aes(x=thyCD4_ccr7, y=thyCD4_ccr9, color=hvg_unique))+
+ggplot(df, #%>% arrange(hvg_unique),
+       aes(x=thyCD8_ccr7, y=thyMAIT_ccr7, color=hvg_integrated))+
   geom_point(size=1)+
   scale_x_continuous(trans="log10")+
   scale_y_continuous(trans="log10")+
-  scale_color_manual(values=c("#bdbdbd", "#cb181d"))+
-  labs(title="Gene expression correlation", color="HVG common to all T lineages")+
-  theme_cowplot()
+  scale_color_manual(values=c(alpha("#bdbdbd", 0.3), "#cb181d"))+
+  labs(title="Spearman correlation = 0.89", color="2000 HVGs")+
+  theme_cowplot() |
 
 # Example with lower correlating clusters
-ggplot(df %>% arrange(hvg_unique),
-       aes(x=thyGDT_ccr9, y=thyMAIT_IFNsig, color=hvg_unique))+
+ggplot(df, #%>% arrange(hvg_unique),
+       aes(x=thyCD4_Tagonist, y=thyGDT_effector, color=hvg_integrated))+
   geom_point(size=1)+
-  # scale_x_continuous(trans="log10")+
-  # scale_y_continuous(trans="log10")+
+  scale_x_continuous(trans="log10")+
+  scale_y_continuous(trans="log10")+
   # xlim(c(0,10))+
   # ylim(c(0,10))+
-  scale_color_manual(values=c("#bdbdbd", "#cb181d"))+
-  labs(title="Gene expression correlation", color="HVG unique to 1 T lineage")+
+  scale_color_manual(values=c(alpha("#bdbdbd", 0.3), "#cb181d"))+
+  labs(title="Spearman correlation = 0.65", color="2000 HVGs")+
   theme_cowplot()
+
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/example_low-high_correlation.jpeg", width=15, height=6)
 ```
 
 
@@ -355,7 +362,6 @@ Venn diagram:
 
 # ggVennDiagram
 library(ggVennDiagram)
-path.plot <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/hvg"
 
 venn.plt <- ggVennDiagram(
   x=list(VariableFeatures(seur.cd4),
@@ -422,9 +428,9 @@ length(hvg.all) # 5862
 # Correlation
 corr.hvgall <- runCorrelation(seuratobj=seur.thym, geneslist=hvg.all)
 corr.hvgall$corr[corr.hvgall$corr==1] <- NA
-# jpeg(file.path(path.plot, "all-thym-hvg_corrheatmap.jpeg"), width=2200, height=2200, res=300)
+# jpeg(file.path(path.plot, "all-thym-hvg_corrheatmap2.jpeg"), width=2200, height=2200, res=300)
 plotHeatmap(values=corr.hvgall, clust=T, pval=F, plottitle = "Correlation on 5862 HVGs", colscalerange = c(0.5, 1),
-            diag=F, hclust.method = "complete")
+            diag=T, hclust.method = "complete")
 # dev.off()
 
 
@@ -594,16 +600,18 @@ plot_grid(
 
 
 ### 3.4. 2000 HVGs from integrated seurat object
-```{r hvg-2000-integrated}
+```{r hvg-2000-integrated, height=8, width=8}
 # Get list of common HVGs
 length(VariableFeatures(seur)) # 2000
 
 # Correlation
 corr.hvg2000 <- runCorrelation(seuratobj=seur.thym, geneslist=VariableFeatures(seur))
-corr.hvg2000$corr[corr.hvg2000$corr==1] <- NA
-# jpeg(file.path(path.plot, "int2000hvgs-thym-hvg_corrheatmap2.jpeg"), width=2200, height=2200, res=300)
-plotHeatmap(values=corr.hvg2000, clust=T, pval = T, plottitle = "Correlation on 2000 HVGs (HVGs from integrated object)", colscalerange = c(0.5, 0.92))
-# dev.off()
+# corr.hvg2000$corr[corr.hvg2000$corr==1] <- NA
+jpeg(file.path(path.plot, "int2000hvgs-thym-hvg_corrheatmap3.jpeg"), width=2200, height=2200, res=300)
+# plotHeatmap(values=corr.hvg2000, clust=T, pval = T, plottitle = "Correlation on 2000 HVGs (HVGs from integrated object)", colscalerange = c(0.5, 1))
+plotHeatmap(values=corr.hvg2000, clust=T, pval = F, plottitle = "Correlation on 2000 HVGs (HVGs from integrated object)", colscalerange = c(0.5, 1),
+            diag=T)
+dev.off()
 ```
 
 
@@ -631,6 +639,7 @@ runMetaNeighbor <- function(seurobj=seur.thym, geneslist, plotitle, filename){
                         dat=count,
                         study_id=seurobj$group.ident,
                         cell_type=seurobj$cell_annot,
+                        one_vs_best=TRUE,
                         fast_version=TRUE)
   
   # Rename rows & cols
@@ -639,7 +648,7 @@ runMetaNeighbor <- function(seurobj=seur.thym, geneslist, plotitle, filename){
   
   # Heatmap
   jpeg(file.path("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/metaneighbor", filename),
-       width=1000, height=1000, res=150)
+       width=2000, height=2000, res=320)
   htmp.mtn <- heatmap.2(mtn,
             # trace
             trace="none",
@@ -648,10 +657,14 @@ runMetaNeighbor <- function(seurobj=seur.thym, geneslist, plotitle, filename){
             # color scale
             col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
             breaks=seq(0,1,length=101),
+            key.title="",
+            key.xlab="AUROC",
             # text labels
             main=plotitle,
             cexRow=0.6,
             cexCol=0.6,
+            colRow=col_text,
+            colCol=col_text,
             # margins
             margins=c(7,7))
   dev.off()
@@ -705,7 +718,7 @@ compare_MetaNeighbor_Correlation <- function(htmp.mtn, cor.matrix, cor.colrange=
 ### 4.1. MetaNeighbor on all HVGs (union of thymic HVGs)
 ```{r metaneighbor-allHVG}
 # Run metaneighbor
-htmp.mtn.hvgall <- runMetaNeighbor(geneslist=hvg.all, plotitle = "5862 HVGs", filename="allHVG_metaneighbor.jpeg")
+htmp.mtn.hvgall <- runMetaNeighbor(geneslist=hvg.all, plotitle = "5862 HVGs", filename="allHVG_metaneighbor2.jpeg")
 
 # Compare with correlation
 corr.hvgall <- runCorrelation(seuratobj=seur.thym, geneslist=hvg.all)
@@ -739,7 +752,7 @@ compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvgcommon, cor.matrix = cor
 
 
 ### 4.4. MetaNeighbor on 2000 HVGs from integrated seurat object
-```{r metaneighbor-commonHVG}
+```{r metaneighbor-commonHVG, fig.height=4, fig.width=4}
 # Run metaneighbor
 htmp.mtn.hvg2000 <- runMetaNeighbor(geneslist=VariableFeatures(seur), plotitle = "2000 HVGs (integrated data)", filename="int2000hvgs_metaneighbor.jpeg")
 
@@ -747,4 +760,46 @@ htmp.mtn.hvg2000 <- runMetaNeighbor(geneslist=VariableFeatures(seur), plotitle =
 corr.hvg2000 <- runCorrelation(seuratobj=seur.thym, geneslist=VariableFeatures(seur))
 compare_MetaNeighbor_Correlation(htmp.mtn = htmp.mtn.hvg2000, cor.matrix = corr.hvg2000,
                                  cor.plotitle = "2000 HVGs (integrated data)", cor.colrange = seq(0.5,0.92,length=201), filename="int2000hvgs")
+
+
+# ************
+# Get metaneighbor in same order as gene correlation
+# Prepare text colors
+col_text <- c(rep("#74c476", sum(str_count(colnames(corr.hvg2000$corr), "CD4_"))), # CD4
+                rep("#f768a1", sum(str_count(colnames(corr.hvg2000$corr), "CD8_"))), # CD8
+                rep("#9ecae1", sum(str_count(colnames(corr.hvg2000$corr), "MAIT_"))), # MAIT
+                rep("#9e9ac8", sum(str_count(colnames(corr.hvg2000$corr), "NKT_"))), # NKT
+                rep("#084594", sum(str_count(colnames(corr.hvg2000$corr), "GDT_")))) # GDT
+names(col_text) <- colnames(corr.hvg2000$corr)
+col_text <- col_text[corrMatOrder(corr.hvg2000$corr, order="hclust", hclust.method="ward.D")]
+
+# Reorder same
+htmp.mtn.hvg2000 <- htmp.mtn.hvg2000[names(col_text), names(col_text)]
+
+
+# jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_13_CorrelationGEbtwTlineages/metaneighbor/int2000hvgs_metaneighbor.jpeg",
+#       width=2000, height=2000, res=320)
+heatmap.2(htmp.mtn.hvg2000,
+          # ordering
+          # dendrogram="none",
+          # Rowv=F,
+          # Colv=F,
+            # trace
+            trace="none",
+            # superimpose a density histogram on color key
+            density.info="none",
+            # color scale
+            col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+            breaks=seq(0,1,length=101),
+          key.title="",
+          key.xlab="AUROC",
+            # text labels
+            main="2000 HVGs (integrated data)",
+            cexRow=0.6,
+            cexCol=0.6,
+          colRow=col_text,
+          colCol=col_text,
+            # margins
+            margins=c(7,7))
+# dev.off()
 ```

@@ -20,11 +20,14 @@ SCpubr::do_DimPlot(seur.ms,
                    plot.title = "Mouse",
                    colors.use=cols_nkt,
                    font.size = 24)
-ggsave("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/ms_umap.jpeg", width=6, height=6)
+# ggsave("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/ms_umap.jpeg", width=6, height=6)
 
 
-seur.hu <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-NKT_2023-02-27.rds")
-Idents(seur.hu) <- seur.hu$cell_annot
+# seur.hu <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-NKT_2023-02-27.rds")
+seur.hu <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/thymus.nkt_02_28_23.RDS")
+colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#e09351", "2" = "gold", "3" = "#74c8c3", "4" = "#5a97c1",
+                         "5" = "#a40000", "6" = "#72bcd5")
+Idents(seur.hu) <- seur.hu$new_clusters_NKT
 DimPlot(seur.hu)
 
 ortholog.df <- read.csv("~/Projects/HumanThymusProject/data/cross-species/03_BiomartTable/big_ass_ortholog_table.csv")
@@ -58,7 +61,10 @@ dictionary <- ortholog.df %>%
   # filter(hu_orthology_confidence == 1) %>%
   ## Remove any symbols that are NAs
   filter(!is.na(ms_symbol_data)) %>%
-  filter(!is.na(hu_symbol))
+  filter(!is.na(hu_symbol)) %>%
+  ## Keep only 1:1 orthologs
+  group_by(ms_symbol_data) %>% filter(n_distinct(hu_symbol) == 1) %>% ungroup() %>%
+  group_by(hu_symbol) %>% filter(n_distinct(ms_symbol_data) == 1) %>% ungroup()
   
 
 # Translate the mouse HVGs into "human gene" language
@@ -67,12 +73,17 @@ ms.hvg.translated <- pull(dictionary %>% filter(ms_symbol_data %in% ms.hvg), # n
 hu.hvg.translated <- pull(dictionary %>% filter(hu_symbol %in% hu.hvg), # not all hu HVGs are found in ortholog.df
                           hu_symbol)
 total.hvg <- unique(union(ms.hvg.translated, hu.hvg.translated))
-total.hvg <- total.hvg[!total.hvg %in% test$hu_symbol] # remove duplicates
+length(total.hvg) # 2,370 genes
+
+
+# Keep only ms and hu genes that have 1:1 orthologs
+table(unique(rownames(ms.counts)) %in% dictionary$ms_symbol_data) # 12,201 genes should have a translation
+table(unique(rownames(hu.counts)) %in% dictionary$hu_symbol) # 12,201 genes should have a translation
+ms.counts <- ms.counts[rownames(ms.counts) %in% dictionary$ms_symbol_data,]
+hu.counts <- hu.counts[rownames(hu.counts) %in% dictionary$hu_symbol,]
 
 
 # Translate the mouse genes in count table into "human gene"
-table(unique(rownames(ms.counts)) %in% dictionary$ms_symbol_data) # 12,428 genes should have a translation
-ms.counts <- ms.counts[rownames(ms.counts) %in% dictionary$ms_symbol_data,]
 ms.dict <- dictionary %>%
   filter(ms_symbol_data %in% rownames(ms.counts)) %>%
   select(ms_symbol_data, hu_symbol, hu_orthology_confidence) %>%
@@ -89,11 +100,12 @@ rownames(ms.counts) <- ms.dict$hu_symbol
 # Merge everything into one
 ms.metadata$study <- "Mouse"
 ms.metadata <- ms.metadata[,c("cell_type", "study")]
-colnames(ms.metadata)[1] <- "cell_annot"
+colnames(ms.metadata)[1] <- "clusters_NKT"
 head(ms.metadata)
 
 hu.metadata$study <- "Human"
-hu.metadata <- hu.metadata[,c("cell_annot", "study")]
+hu.metadata <- hu.metadata[,c("new_clusters_NKT", "study")]
+colnames(hu.metadata)[1] <- "clusters_NKT"
 head(hu.metadata)
 
 ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
@@ -102,13 +114,13 @@ seur.total <- merge(ms.seur, hu.seur)
 
 # Sanity checks
 head(seur.total@meta.data)
-table(seur.total$cell_annot, useNA="ifany")
+table(seur.total$clusters_NKT, useNA="ifany")
 table(seur.total$study, useNA="ifany")
 
 
 # Convert seurat count matrix to SummarizedExperiment object
 count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
-                              colData=seur.total$cell_annot)
+                              colData=seur.total$clusters_NKT)
 
 # _______________________
 # METANEIGHBOR
@@ -116,29 +128,31 @@ count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
 mtn <- MetaNeighborUS(var_genes=total.hvg,
                       dat=count,
                       study_id=seur.total$study,
-                      cell_type=seur.total$cell_annot,
+                      cell_type=seur.total$clusters_NKT,
                       fast_version=TRUE)
 
 
 # Heatmap
-mtn.sub <- mtn[1:5,6:10]
+mtn.sub <- mtn[1:5,6:12]
 
-jpeg("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu2.jpeg",
+jpeg("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu3.jpeg",
      width=1000, height=1000, res=200)
 heatmap.2(mtn.sub,
-                      # trace
-                      trace="none",
-                      # superimpose a density histogram on color key
-                      density.info="none",
-                      # color scale
-                      col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
-                      breaks=seq(0,1,length=101),
-                      # text labels
-                      main="",
-                      cexRow=0.6,
-                      cexCol=0.6,
-                      # margins
-                      margins=c(8,6))
+          # trace
+          trace="none",
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          # text labels
+          main="",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(8,6))
 dev.off()
 
 

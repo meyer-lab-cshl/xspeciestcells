@@ -15,19 +15,21 @@ clusters_levels1=c("thyCD4_ISP", "thyCD4_DPp", "thyCD4_DPq", "thyCD4_ccr9", "thy
                   "thyGDT_DP", "thyGDT_immat_cycl", "thyGDT_immat", "thyGDT_ccr9", "thyGDT_IFNsig", "thyGDT_effector")
 
 # colors
-colhisto <- brewer.pal(7, "Dark2")
-location_levels <- c("Cortex", "Junction", "Medulla", "Interlobular", "Inflammatory", "Hemoglobin rich", "Hassall associated")
+# colhisto <- brewer.pal(7, "Dark2")
+colhisto <- c("#bdbdbd", "#fec44f", "#54278f", "#8c96c6", "#fa9fb5", "#dd3497", "#cb181d")
+location_levels <- c("Interlobular", "Cortex", "Inflammatory", "Junction", "Medulla", "Hassall associated", "Hemoglobin rich")
 
 # design <- rbind(c(1:7), c(8:13,NA), c(14:19,NA), c(20:26), c(27:31, NA, NA))
 ggplot(summary.annotated,
        aes(x=factor(cluster, level=clusters_levels1), y=proportion_cluster_across_regions, fill=factor(location, level=location_levels))) +
   geom_bar(stat='identity', position="fill") +
+  geom_vline(xintercept=c(7.5, 13.5,20.5,25.5), linetype="dashed", color="darkgrey")+
   scale_fill_manual(values=colhisto, name="Location") +
   labs(x="", y="% cells in each location")+
   theme_cowplot()+
   # facet_manual(~cluster, design) +
   theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1))
-ggsave("~/Projects/HumanThymusProject/data/human-thymus/SpatialData/proportion_clusters_across_locations.jpeg", width=12, height=6)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/SpatialData/proportion_clusters_across_locations2.jpeg", width=12, height=6)
 
 # ggsave(plot=p_bar,
 #        filename = 'results/plots/proportion_cluster_across_regions.pdf',

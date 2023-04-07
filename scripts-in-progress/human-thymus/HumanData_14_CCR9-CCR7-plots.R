@@ -13,19 +13,39 @@ seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_f
 DimPlot(seur, reduction="UMAP_50", group.by="new_clusters")
 
 
+# Plot blood/thymus
+DimPlot(seur, group.by="Tissue", reduction="UMAP_50", cols=c("#a40000", "#72bcd5"), shuffle=T, pt.size = 0.1, label=F)+
+  theme(legend.position="none",
+        axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        axis.title= element_blank(),
+        axis.line = element_blank(),
+        panel.background = element_rect(fill='transparent'),
+        plot.background = element_rect(fill='transparent', color=NA))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/umap_tissue.png", width=8, height=8, dpi=400, bg='transparent')
+
+
 # Plot CCR9
-for(group in c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus")){
-  SCpubr::do_FeaturePlot(seur, 
-                         cells.highlight= colnames(seur[,seur$group.ident=="CD4_Thymus"]),
+list_ccr9 <- list()
+for(group in c("CD4_Thymus", "NKT_Thymus", "CD8_Thymus", "MAIT_Thymus", "GD_Thymus")){
+  print(group)
+  p <- NULL
+  p <- plot_grid(SCpubr::do_FeaturePlot(seur, 
+                         cells.highlight= colnames(seur[,seur$group.ident==group]),
                          order=T,
                          viridis_color_map="A",
                          slot="data",
-                         plot.title=group,
-                         legend.position="right",
+                         plot.title="",
+                         font.size=0,
+                         legend.position="none",
                          max.cutoff=5,
-                         features = c("CCR9"))
-  ggsave(paste0("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/ccr9_", group, ".jpeg"), width=8, height=7)
+                         features = c("CCR9")))+
+    theme(panel.border=element_rect(colour="black", fill=NA, linewidth=2))
+  list_ccr9[[group]] <- p
+  # ggsave(paste0("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/ccr9_", group, ".jpeg"), width=8, height=7)
 }
+
+plot_grid(plotlist=list_ccr9, ncol=5)
 
 SCpubr::do_FeaturePlot(seur, 
                        # cells.highlight= colnames(seur[,seur$Tissue=="Thymus"]),
@@ -40,16 +60,23 @@ ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-p
 
 
 # Plot CCR7
-for(group in c("CD4_Thymus", "CD8_Thymus", "NKT_Thymus", "MAIT_Thymus", "GD_Thymus")){
-  SCpubr::do_FeaturePlot(seur, 
+list_ccr7 <- list()
+for(group in c("CD4_Thymus", "NKT_Thymus", "CD8_Thymus", "MAIT_Thymus", "GD_Thymus")){
+  print(group)
+  p <- NULL
+  p <- plot_grid(SCpubr::do_FeaturePlot(seur, 
                          cells.highlight= colnames(seur[,seur$group.ident==group]),
                          order=T,
                          viridis_color_map="A",
                          slot="data",
-                         plot.title=group,
-                         legend.position="right",
-                         features = c("CCR7"))
-  ggsave(paste0("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/ccr7_", group, ".jpeg"), width=8, height=7)
+                         plot.title="",
+                         font.size=0,
+                         legend.position="none",
+                         max.cutoff=5,
+                         features = c("CCR7")))+
+    theme(panel.border=element_rect(colour="black", fill=NA, linewidth=2))
+  list_ccr7[[group]] <- p
+  # ggsave(paste0("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/ccr7_", group, ".jpeg"), width=8, height=7)
 }
 
 SCpubr::do_FeaturePlot(seur, 

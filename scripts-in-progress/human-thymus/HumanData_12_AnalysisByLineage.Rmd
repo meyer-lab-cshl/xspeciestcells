@@ -80,6 +80,21 @@ seur.cd8 <- AddModuleScore(object = seur.cd8, assay = "RNA", features = list("ef
 seur.nkt <- AddModuleScore(object = seur.nkt, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
 seur.mait <- AddModuleScore(object = seur.mait, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
 seur.gd <- AddModuleScore(object = seur.gd, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+seur <- AddModuleScore(object = seur, assay = "RNA", features = list("eff"=effectorness_genes, "naiv"=naive_genes, "egr"=egress_genes), name=c("eff", "naiv", "egr"))
+
+SCpubr::do_FeaturePlot(seur, 
+                       features=c("eff1", "naiv2", "egr3"),
+                       viridis_color_map = "A",
+                       ncol=3,
+                       order=T,
+                   # group.by = "new_clusters",
+                   # label=T,
+                   # label.color="black",
+                   # legend.position = "none",
+                   # repel=T,
+                   # colors.use=cols_integrated,
+                   font.size = 24)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/genescores_integrated.jpeg", width=30, height=15)
 
 # VlnPlot(seur.thycd4, features=c("effector1", "naive2"), group.by="cell_annot")
 # VlnPlot(seur.cd8, features=c("effector1", "naive2"), group.by="cell_annot")

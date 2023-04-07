@@ -103,10 +103,33 @@ SCpubr::do_DimPlot(seur.park.thymocytes,
                    font.size = 24)
 # DimPlot(seur.park.thymocytes, group.by="cell_type", label=T)
 
-
 seur.park.thymocytes@meta.data$study <- "park_data"
 seur.park.thymocytes@meta.data
 ```
+
+```{r, fig.height=8, fig.width=10}
+# Plot CCR9-CCR7
+SCpubr::do_FeaturePlot(seur.park.thymocytes, 
+                       order=T,
+                       viridis_color_map="A",
+                       slot="data",
+                       legend.position="right",
+                       ncol=2,
+                       features = c("CCR9", "CCR7"))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_14_CCR9-CCR7-plots/park_ccr9-ccr7.jpeg", width=20, height=10)
+
+# Plot scores
+seur.park.thymocytes <- AddModuleScore(object = seur.park.thymocytes, assay = "RNA", features = list("effector"=effectorness_genes, "naive"=naive_genes, "egress"=egress_genes), name=c("effector", "naive", "egress"))
+
+SCpubr::do_FeaturePlot(seur.park.thymocytes, 
+                       order=T,
+                       viridis_color_map="A",
+                       slot="data",
+                       legend.position="right",
+                       ncol=3,
+                       features = c("effector1", "naive2", "egress3"))
+```
+
 
 Some cell type annotation is clearly missing. I thus downloaded the AnnData object from the [developmental cell atlas](https://developmental.cellatlas.io/thymus-development). Here we are converting the AnnData object to seurat object.
 
@@ -368,22 +391,28 @@ mtn2 <- MetaNeighborUS(var_genes=hvg.union2,
                       dat=count2,
                       study_id=seur.merged2$study,
                       cell_type=seur.merged2$cell_type,
+                      one_vs_best = FALSE,
                       fast_version=TRUE)
   
 # checkpoint save
 saveRDS(mtn2, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/mtn_park.rds")
+mtn2 <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/mtn_park.rds")
 
 # Heatmap
-jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly.jpeg",
+jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly_onevsbest.jpeg",
        width=1000, height=1000, res=150)
 heatmap.2(mtn2,
             # trace
             trace="none",
+            # Rowv=FALSE,
+            # Colv=FALSE,
             # superimpose a density histogram on color key
             density.info="none",
             # color scale
             col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
             breaks=seq(0,1,length=101),
+            #na.rm=F,
+            na.color="grey",
             # text labels
             main="Comparison with Park thymocytes",
             cexRow=0.6,
@@ -411,6 +440,7 @@ ggplot(mtn.df, aes(x=factor(Var1, level=paste0("c", 0:17)),
                    y=value,
                    color=factor(Var2, level=names(cols_park))))+
   geom_hline(yintercept=0.9, linetype="dashed", color="grey")+
+  geom_hline(yintercept=0.5, linetype="dashed", color="grey")+
   geom_point()+
   geom_text_repel(data = interesting_clusters,
                    aes(label = Var2), nudge_y=0.1, show.legend=FALSE)+
@@ -418,8 +448,69 @@ ggplot(mtn.df, aes(x=factor(Var1, level=paste0("c", 0:17)),
   ylim(c(0,1.2))+
   labs(x="Gapin clusters", y="AUROC")+
   theme_cowplot()
-ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly_ggplot.jpeg", width=8, height=5)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly_ggplot.jpeg", width=8, height=5)
+
+# Get number of cells per gapin cluster and per park cluster
+mtn.df <- mtn.df %>%
+  left_join(as.data.frame(table(seur.thymus$cell_type)), by="Var1") %>%
+  dplyr::rename(ncells_gapin=Freq) %>%
+  left_join(as.data.frame(table(seur.park.thymocytes$cell_type)) %>% dplyr::rename(Var2=Var1), by="Var2") %>%
+  dplyr::rename(ncells_park=Freq)
+
+bp.x <- ggplot(data=mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)), y=ncells_gapin))+
+  geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
+  scale_x_discrete(position="top")+
+  labs(y="#cells")+
+  theme(#axis.title.y = element_blank(),
+    axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+        axis.text.x = element_text(size = 15), axis.title.x = element_blank(), axis.line.x=element_blank(),
+        legend.position = "none") #+
+    # scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# Change order of Park clusters
+order_park <- c("DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)", "αβT(entry)", "T(agonist)", "CD8αα(I)", "CD8αα(II)",
+                "γδT", "Treg(diff)", "Treg", "CD4+T", "CD8+T", "Th17", "NKT")
+bp.y <- ggplot(data=mtn.df, aes(x=factor(Var2, levels=rev(order_park)), y=ncells_park))+
+  geom_bar(stat="identity", fill="#bdbdbd") +
+  scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
+  theme(axis.title.y = element_blank(),
+    axis.text.y = element_text(size=15), axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+    #axis.title.x = element_blank(),
+    axis.line.y=element_blank(),
+        legend.position = "none")# +
+    # scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# Bubble plot
+library(scales)
+hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
+                               y=factor(Var2, levels=rev(order_park)), size = value,
+                   color=value)) +
+    geom_point(alpha=0.7)+
+  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC")+
+  labs(x="",y="Park clusters", size="AUROC")+
+  theme_cowplot()+
+  theme(legend.position="bottom", legend.key.width = unit(1, 'cm'))
 ```
+
+```{r, fig.height=8, fig.width=8}
+plot_grid(bp.x+theme(plot.margin = margin(b=-5,unit="cm")),
+          NULL,
+          hm.clean+theme(plot.margin = margin(t=-5, r=-5, unit="cm")),
+          bp.y,
+          align="hv", axis="tblr",
+          ncol=2, nrow=2,
+          rel_widths=c(2.5,1), rel_heights=c(1,3))
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_bubbleplot3.jpeg", width=12, height=12)
+
+ggdraw()+
+  draw_plot(bp.x, x=0.07, y=0.7, width=0.63, height=0.2)+
+  draw_plot(bp.y, x=0.7, y=0.07, width=0.2, height=0.63)+
+  draw_plot(hm.clean, x=0, y=0, width=0.7, height=0.7)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_bubbleplot2.jpeg", width=12, height=12)
+```
+
+
 
 
 ### 2.4. Harmony integration
@@ -473,16 +564,21 @@ seur.int <- FindNeighbors(seur.int, k.param=20, reduction = "harmony", dims = 1:
 seur.int <- FindClusters(seur.int, resolution = 0.8, random.seed = 0)
   
 # saveRDS(seur.int, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_park_23-03-13.rds") # checkpoint save
+seur.int <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_park_23-03-13.rds")
 
 # Visualization sanity check
-DimPlot(seur.int, reduction = "umap", group.by="study", label = TRUE, repel = TRUE)
+DimPlot(seur.int, reduction = "umap", group.by="study", label = F)+
+scale_color_manual(values=c("#d6604d", "#4393c3"))+
+  theme(axis.ticks=element_blank(),
+        axis.text=element_blank(),
+        axis.title=element_text(hjust=0),
+        panel.border = element_rect(colour = "black", fill=NA, linewidth=1))
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/integration_harmony_study.jpeg", width=9, height=8)
+DimPlot(seur.int, reduction = "umap", group.by="cell_type", label = TRUE, repel = TRUE)
+DimPlot(seur.int, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)
 ```
 
 ```{r park-harmony-integration-visualize, fig.width=15, fig.height=10}
-# Cell types
-DimPlot(seur.int, reduction = "umap", group.by="cell_type", label = TRUE, repel = TRUE)
-DimPlot(seur.int, reduction = "umap", group.by="seurat_clusters", label = TRUE, repel = TRUE)
-
 # See cell type composition per cluster
 df <- seur.int@meta.data %>%
   as_tibble() %>%
@@ -525,7 +621,7 @@ cols_integrated <- c("c0" = "#f4c40f",
                      "T(agonist)" = "#9f5691",
                      "Th17" = "#a40000",
                      "Treg" = "blueviolet",
-                     "Treg(diff)" = "#9f5691",
+                     "Treg(diff)" = "#6a51a3",
                      "αβT(entry)" = "#e09351",
                      "γδT" = "#92c051")
 
@@ -534,29 +630,73 @@ DimPlot(seur.int, reduction = "umap", group.by="cell_type", split.by="study", la
 # ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/integration_harmony.jpeg", width=20, height=8)
 
 
-# Split cell names by list
+# Split cell names by cell_type (in list)
 Idents(seur.int) <- "cell_type"
 cells.list <- setNames(names(Idents(seur.int)), Idents(seur.int))
 cells.list <- split(cells.list, names(cells.list))
 cells.list <- lapply(cells.list, unname)
 
-# early DN/DP
-interest <- c("c0", "c1", "c2", "DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)")
-DimPlot(seur.int, reduction = "umap", group.by="cell_type", split.by="study", label = TRUE, repel = TRUE, raster=FALSE,
-        cells.highlight=cells.list[names(cells.list) %in% interest], sizes.highlight = 0.5,
-        cols.highlight=rev(cols_integrated[names(cols_integrated) %in% interest]), cols="#d9d9d9")
+# Function for plotting
+plotUMAP <- function(seurobj=seur.int, cells_of_interest){
+  # Get the colors for clusters of interest, and reorder it in alphabetical order
+  colors_of_interest <- cols_integrated[names(cols_integrated) %in% cells_of_interest]
+  order <- rev(names(colors_of_interest)[order(names(colors_of_interest))]) # alphabetical order
+  colors_of_interest <- colors_of_interest[order]
+  
+  # Create color vector
+  # colors_of_interest <- brewer.pal(length(cells_of_interest), "Paired")
+  # names(colors_of_interest) <- cells_of_interest
+  
+  # Plot
+  p <- DimPlot(seurobj,
+               reduction = "umap",
+               group.by="cell_type",
+               # split.by="study",
+               label = FALSE,
+               repel = FALSE,
+               raster=FALSE,
+               cells.highlight=cells.list[names(cells.list) %in% cells_of_interest],
+               sizes.highlight = 0.5,
+               cols.highlight=colors_of_interest,
+               cols="#d9d9d9")+
+  theme_cowplot()+
+  labs(title="")+
+  theme(axis.text = element_blank(),
+        axis.ticks= element_blank(),
+        axis.title=element_text(hjust=0))
+  
+  return(p)
+}
 
-# CD4
-interest <- c("c3", "c11", "αβT(entry)", "CD4+T")
-DimPlot(seur.int, reduction = "umap", group.by="cell_type", split.by="study", label = TRUE, repel = TRUE, raster=FALSE,
-        cells.highlight=cells.list[names(cells.list) %in% interest], sizes.highlight=0.5,
-        cols.highlight=rev(cols_integrated[names(cols_integrated) %in% interest]), cols="#d9d9d9")
+names(cells.list)
+# split by groups of interest
+plotUMAP(cells_of_interest=c("c0", "c1", "c2", "DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)"))
+plotUMAP(cells_of_interest=c("c3", "c11", "αβT(entry)", "CD4+T"))
+plotUMAP(cells_of_interest=c("c4", "αβT(entry)", "T(agonist)"))
+plotUMAP(cells_of_interest=c("c5", "CD8αα(I)", "CD8αα(II)"))
+plotUMAP(cells_of_interest=c("c6", "γδT", "DN(early)"))
+plotUMAP(cells_of_interest=c("c7", "Treg", "Treg(diff)", "T(agonist)"))
+plotUMAP(cells_of_interest=c("c8", "CD4+T", "Treg", "Treg(diff)", "T(agonist)", "Th17"))
+plotUMAP(cells_of_interest=c("c9", "c10", "αβT(entry)", "CD8+T", "DP(Q)"))
+plotUMAP(cells_of_interest=c("c12", "c13", "c14", "c15", "c16", "c17", "NKT", "Treg", "Th17"))
 
-# CD4 & Treg
-interest <- c("c3", "c4", "c7", "c8", "c11", "αβT(entry)", "CD4+T", "T(agonist)", "Treg(diff)", "Treg", "Th17")
-DimPlot(seur.int, reduction = "umap", group.by="cell_type", split.by="study", label = TRUE, repel = TRUE, raster=FALSE,
-        cells.highlight=cells.list[names(cells.list) %in% interest], sizes.highlight=0.5,
-        cols.highlight=rev(cols_integrated[names(cols_integrated) %in% interest]), cols="#d9d9d9")
+
+# loop through cluster by cluster
+clusters_order <- c("DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)",
+                    "c0", "c1", "c2", "c3", "c9",
+                    "αβT(entry)", "CD8αα(I)", "CD8αα(II)", "γδT", "T(agonist)",
+                    "c4", "c5", "c6", "c7", "c8",
+                    "CD4+T", "CD8+T", "c10", "c11",
+                    "NKT", "Treg", "Treg(diff)", "Th17",
+                    "c12", "c13", "c14", "c15", "c16", "c17")
+
+plist <- list()
+
+for(cellgroup in clusters_order){
+  print(cellgroup)
+  plist[[cellgroup]] <- plotUMAP(cells_of_interest=cellgroup)
+}
+
 
 ```
 

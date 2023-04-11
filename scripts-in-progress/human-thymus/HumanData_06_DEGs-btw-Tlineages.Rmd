@@ -384,11 +384,9 @@ ggplot(results.df.thresh, aes(x = log2FoldChange, y = -log10(padj))) +
 
 
 
-## 4.  CELL IDENTITY ON PBMC
+## 4.  CELL IDENTITY vs CELL STATE ON PBMC
 
-### 4.1. Prepare data
-
-```{r prepare-data}
+```{r extract-counts-metadata}
 ## ****************
 ## IDENTIFY GROUPS FOR DE ANALYSIS
 # Create SingleCellExperiment object
@@ -399,7 +397,342 @@ metadata <- seur.human@meta.data
 metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters")]
 colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
 print(metadata) # sanity check
+```
 
+
+### 4.1. LRT on `batch_id + cell_id`
+
+#### 4.1.1. Prepare data
+```{r prepare-data}
+# Create a "groups" df that will (1) keep only cells of interest; (2) keep the columns of interest (that will define how we group counts)
+groups <- metadata %>%
+  rownames_to_column("cell") %>%
+  filter(tissue_id=="PBMC") %>%
+  # -------
+  # EXAMPLE 1 - BATCH + CELL_ID
+  column_to_rownames("cell") %>%
+  select(cell_id, batch_id)
+  # -------
+  # # EXAMPLE 2 - BATCH + CELL_ID + CLUSTER_ID
+  # filter(cluster_id %in% 9:17) %>%
+  # group_by(cluster_id, cell_id, batch_id) %>%
+  # filter(n()>100) %>%
+  # ungroup() %>%
+  # column_to_rownames("cell") %>%
+  # select(cell_id, batch_id, cluster_id)
+print(groups) # sanity check
+
+
+## ****************
+## AGGREGATE COUNTS
+# Subset to keep only cells of interest (defined in "groups") & put cells in rows (genes as columns)
+count.agg <- t(counts[, which(colnames(counts) %in% rownames(groups))])
+nrow(groups) == nrow(count.agg) # verify nb of cells in "groups" (rows) is same nb of cells in "count.agg" (rows)
+
+# Aggregate counts based on columns in "groups"
+count.agg <- Matrix.utils::aggregate.Matrix(count.agg, groupings = groups, fun = "sum")
+
+# Sanity checks
+dim(count.agg)
+count.agg[1:6, 1:6]
+table(colSums(count.agg) == 0) # check if any gene has total count of 0
+
+# Final counts for DESeq (groups as columns, genes as rows)
+counts.deseq <- data.frame(t(count.agg))
+counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have total count of 0
+
+
+## ****************
+## PREPARE METADATA DF FOR DESEQ
+# Have metadata df where rownames are the colnames of "counts.deseq" (the groups)
+metadf.deseq <- groups %>%
+  distinct() %>%
+  unite(sample_id, remove=FALSE)
+rownames(metadf.deseq) <- metadf.deseq$sample_id
+
+# Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
+metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),] # reorder rows in metadf.deseq to match order of columns in counts.deseq
+all(rownames(metadf.deseq) == colnames(counts.deseq))
+
+
+## ****************
+## CREATE DESEQ2 OBJECT
+dds <- DESeqDataSetFromMatrix(counts.deseq, 
+                              colData = metadf.deseq, 
+                              design = ~ batch_id + cell_id)
+                              # design = ~ batch_id + cell_id + cluster_id)
+```
+
+
+#### 4.1.2. Quality control
+```{r deseq2-qc-2}
+# Transform counts for data visualization
+rld <- rlog(dds, blind=TRUE)
+# Sanity check
+head(assay(rld))
+
+# Plot PCA
+DESeq2::plotPCA(rld, intgroup = "sample_id")
+DESeq2::plotPCA(rld, intgroup = "batch_id")
+DESeq2::plotPCA(rld, intgroup = "cell_id")
+
+
+## ****************
+## IF THERE IS REALLY STRONG BATCH EFFECT IN THE PCA, RUN CODE BELOW
+
+# Correct for batch effect, and then run PCA
+counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
+rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
+select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
+pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
+percentVar <- pca$sdev^2/sum(pca$sdev^2)
+counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
+                         batch = metadf.deseq$batch_id,
+                         condition = metadf.deseq$cell_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
+# Plot
+ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
+  geom_point(size = 4) +
+  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  coord_fixed(expand=TRUE) +
+  scale_y_continuous(expand = c(0.1,0.1))
+
+
+# Compute pairwise correlation values on the batch-effect-corrected matrix
+rld_cor <- cor(counts_corrected[select_rv,])
+# Plot heatmap
+pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
+```
+
+
+#### 4.1.3. Run DESeq2
+```{r lrt1, fig.width=5, fig.height=5}
+## ****************
+## RUN DESEQ2
+# Run DESeq2 differential expression analysis
+dds <- DESeq(dds, test="LRT", reduced=~batch_id)
+
+# Plot dispersion estimates
+plotDispEsts(dds)
+
+# Output results of Wald test for contrast for CD4 vs CD8
+res <- results(dds,
+               # contrast = contrast,
+               alpha = 0.05)
+res <- lfcShrink(dds, type="ashr",
+                 # contrast = contrast,
+                 res=res)
+print(res)
+
+
+## ****************
+## PLOT HEATMAP
+# Extract normalized counts (from DESeq2 object) of the significant genes
+genes.sig <- res %>%
+  data.frame() %>%
+  filter(padj < 0.01)
+counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
+dim(counts.norm.sig) # 1753 genes
+
+# Set a color palette
+heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
+
+# Run pheatmap using the metadata data frame for the annotation
+path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity"
+# jpeg(file.path(path.plots, "heatmap_PBMC_LRTest3.jpeg"), height = 3000, width = 3500, res = 300)
+test1 <- pheatmap(counts.norm.sig,
+    color = heat_colors,
+    scale = "column", # z-score
+    cluster_rows = F,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    # gaps_row=c(2,6, 11, 14),
+    cutree_rows = 5,
+    cutree_cols = 5,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    # annotation_row=matcol,
+    # Change columns
+    angle_col=45,
+    # fontsize_col = 1,
+    show_colnames=F,
+    # title
+    main="PBMC - LRT test")
+# dev.off()
+```
+
+Try heatmap with binarized counts
+```{r heatmap-binarized-counts}
+# Try binarized counts
+counts.norm.sig[1:5,1:5]
+hist(counts.norm.sig, breaks=1000)
+test <- counts.norm.sig
+test[test<=140] <- 0
+test[test>140]  <- 1
+hist(test, breaks=100)
+rownames(test)
+test <- test[, test1$tree_col[["order"]]]
+
+# binarize after scaling?
+# test <- sapply(as.data.frame(counts.norm.sig), function(test) (test-mean(test))/sd(test))
+# rownames(test) <- rownames(counts.norm.sig)
+# test <- test[, test1$tree_col[["order"]]]
+# test[test<=0] <- 0
+# test[test>0]  <- 1
+# hist(test, breaks=100)
+
+# jpeg(file.path(path.plots, "heatmap_PBMC_LRTest_batch-cellid_bin3.jpeg"), height = 1500, width = 2500, res = 300)
+pheatmap(test,
+    color = c("grey", "black"),
+    # color=heat_colors,
+    # scale = "column", # z-score
+    cluster_rows = F,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    gaps_row=c(2,6, 11, 14),
+    cutree_rows = 5,
+    cutree_cols = 5,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    # annotation_row=matcol,
+    # Change columns
+    angle_col=45,
+    # fontsize_col = 1,
+    show_colnames=F,
+    # title
+    main="PBMC - LRT test")
+# dev.off()
+```
+
+
+#### 4.1.4 Cell lineage-specific upregulated genes
+```{r functions}
+cellTypeSignature <- function(cell, padj_max=0.05, log2FC_min=1){
+  
+  # All cell types
+  allcells <- c("CD8", "CD4", "MAIT", "NKT", "GD")
+  allothercells <- allcells[allcells != cell]
+  
+  # Initialize
+  list.up <- list()
+  genesup <- c()
+  
+  # Loop
+  for (cellid in allothercells){
+    print(cellid)
+    # Initialize
+    out       <- NULL
+    result.df <- NULL
+    # Set contrast
+    contrast <- c("cell_id", cell, cellid)
+    # Get results
+    out <- results(dds, contrast = contrast, alpha = 0.05)
+    out <- lfcShrink(dds, type="ashr", contrast = contrast, res=out)
+    # Get log2FC
+    result.df <- out %>%
+      data.frame() %>%
+      rownames_to_column(var="gene") %>%
+      as_tibble() %>%
+      filter(padj < padj_max) %>%
+      filter(log2FoldChange > log2FC_min)
+    print(paste0("# upregulated genes:", nrow(result.df)))
+    # Save DF in list
+    list.up[[paste0(cell, "vs", cellid)]] <- result.df
+    
+    # Get common upregulated genes
+    length_list <- length(list.up)
+    if (length_list==1){ genesup <- list.up[[1]]$gene }
+    else if (length_list>1){
+      genesup <- intersect(genesup, list.up[[length_list]]$gene)
+    }
+    print(paste0("# common upregulated genes:", length(genesup)))
+  }
+  
+  return(list("list"=list.up, "genesup"=genesup))
+}
+```
+
+```{r dds-cellsignature}
+# Get CD8-upregulated genes
+cd8up <- cellTypeSignature(cell="CD8", log2FC_min=0.5)
+cd8up$genesup # 11
+
+# write.csv(result.sig %>% dplyr::arrange(log2FoldChange), "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity/pbmc_cd8vsother_DEGsig.csv")
+
+# Get CD4-upregulated genes
+cd4up <- cellTypeSignature(cell="CD4", log2FC_min=0.5)
+cd4up$genesup # 18
+
+# Get MAIT-upregulated genes
+maitup <- cellTypeSignature(cell="MAIT", log2FC_min=0.5)
+maitup$genesup # 22
+
+# Get NKT-upregulated genes
+nktup <- cellTypeSignature(cell="NKT", log2FC_min=0.5)
+nktup$genesup # 5
+
+# Get GDT-upregulated genes
+gdup <- cellTypeSignature(cell="GD", log2FC_min=0.5)
+gdup$genesup # 7 (most difference with CD4)
+
+
+
+# Extract normalized counts (from DESeq2 object) of the significant genes
+counts.norm.sig2 <- t(data.frame(counts(dds, normalized = TRUE))[c(cd8up$genesup, cd4up$genesup, maitup$genesup, nktup$genesup, gdup$genesup),])
+dim(counts.norm.sig2) # 63 genes
+
+# Run pheatmap using the metadata data frame for the annotation
+# jpeg(file.path(path.plots, "heatmap_PBMC_LRTest_cellidgenes.jpeg"), height = 1500, width = 2500, res = 300)
+pheatmap(counts.norm.sig2,
+    color = heat_colors,
+    scale = "column", # z-score
+    cluster_rows = F,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    gaps_row=c(2, 6, 11, 14),
+    cutree_rows = 5,
+    cutree_cols = 5,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    # annotation_row=matcol,
+    # Change columns
+    angle_col=45,
+    fontsize_col = 4,
+    show_colnames=T,
+    # title
+    main="PBMC - LRT test - cell type signature genes")
+# dev.off()
+
+
+# Make score out of it
+seur.human <- AddModuleScore(seur.human, assay="RNA", features=list("CD8sig" =cd8up$genesup,
+                                                                    "CD4sig" =cd4up$genesup,
+                                                                    "MAITsig"=maitup$genesup,
+                                                                    "NKTsig" =nktup$genesup,
+                                                                    "GDTsig" =gdup$genesup),
+                             name=c("CD8sig", "CD4sig", "MAITsig", "NKTsig", "GDTsig"))
+# Plot score
+VlnPlot(seur.human, features="CD8sig1", group.by="new_clusters") +
+  VlnPlot(seur.human, features="CD4sig2", group.by="new_clusters") +
+  VlnPlot(seur.human, features="MAITsig3", group.by="new_clusters") +
+  VlnPlot(seur.human, features="NKTsig4", group.by="new_clusters") +
+  VlnPlot(seur.human, features="GDTsig5", group.by="new_clusters")
+# ggsave(file.path(path.plots, "cellidgenes_scoring2.jpeg"), width=10, height=30)
+```
+
+
+<br/>
+
+### 4.2. LRT on `batch_id + cell_id + cluster_id`
+
+#### 4.2.1. Prepare data
+```{r prepare-data}
 # Create a "groups" df that will (1) keep only cells of interest; (2) keep the columns of interest (that will define how we group counts)
 groups <- metadata %>%
   rownames_to_column("cell") %>%
@@ -449,26 +782,19 @@ rownames(metadf.deseq) <- metadf.deseq$sample_id
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
 metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),] # reorder rows in metadf.deseq to match order of columns in counts.deseq
 all(rownames(metadf.deseq) == colnames(counts.deseq))
-```
 
 
-### 4.2. Differential expression analysis
-Now we can create our DESeq2 object to prepare to run the DE analysis. We need to include the counts, metadata, and design formula for our comparison of interest. In the design formula we should also include any other columns in the metadata for which we want to regress out the variation (e.g. batch, sex, age, etc.). We only have our comparison of interest, which is stored as the group_id in our metadata data frame.
-
-```{r create-deseq2-object-2}
-# Create DESeq2 object
+## ****************
+## CREATE DESEQ2 OBJECT
 dds <- DESeqDataSetFromMatrix(counts.deseq, 
                               colData = metadf.deseq, 
                               # design = ~ batch_id + cell_id)
                               design = ~ batch_id + cell_id + cluster_id)
 ```
 
-The next step in the DESeq2 workflow is QC, which includes sample-level and gene-level steps to perform QC checks on the count data to help us ensure that the samples/replicates look good.
-To explore the similarity of our samples, we will be performing sample-level QC using Principal Component Analysis (PCA) and hierarchical clustering methods. Sample-level QC allows us to see how well our replicates cluster together, as well as, observe whether our experimental condition represents the major source of variation in the data. Performing sample-level QC can also identify any sample outliers, which may need to be explored further to determine whether they need to be removed prior to DE analysis.
-When using these unsupervised clustering methods, normalization and log2-transformation of the counts improves the distances/clustering for visualization. DESeq2 uses median of ratios method for count normalization and a regularized log transform (rlog) of the normalized counts for sample-level QC as it moderates the variance across the mean, improving the clustering.
 
-
-```{r deseq2-qc-2}
+#### 4.2.2. Quality control
+```{r deseq2-qc-3}
 # Transform counts for data visualization
 rld <- rlog(dds, blind=TRUE)
 # Sanity check
@@ -508,12 +834,118 @@ pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ```
 
 
-Differential expression analysis with DESeq2 involves multiple steps as displayed in the flowchart below in blue. Briefly, DESeq2 will model the raw counts, using normalization factors (size factors) to account for differences in library depth. Then, it will estimate the gene-wise dispersions and shrink these estimates to generate more accurate estimates of dispersion to model the counts. Finally, DESeq2 will fit the negative binomial model and perform hypothesis testing using the Wald test or Likelihood Ratio Test.
-All of these steps are performed by running the single DESeq() function on our DESeq2 object created earlier.
-
-```{r, fig.width=5, fig.height=5}
+#### 4.2.3. Run DESeq2 (reduced model `~batch_id`)
+```{r, fig.width=10, fig.height=10}
+## ****************
+## RUN DESEQ2
 # Run DESeq2 differential expression analysis
 dds <- DESeq(dds, test="LRT", reduced=~batch_id)
+
+# Plot dispersion estimates
+plotDispEsts(dds)
+
+# Output results for contrast batch_id + cell_id + cluster_id VS batch_id
+res <- results(dds,
+               # contrast = contrast,
+               alpha = 0.05)
+res <- lfcShrink(dds, type="ashr",
+                 # contrast = contrast,
+                 res=res)
+print(res)
+
+
+## ****************
+## PLOT HEATMAP
+# Extract normalized counts (from DESeq2 object) of the significant genes
+genes.sig <- res %>%
+  data.frame() %>%
+  filter(padj < 0.01)
+counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
+dim(counts.norm.sig) # 4796 genes
+
+# Set a color palette
+heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
+# Color for row annotation
+matcol <- metadf.deseq %>% select(cell_id, batch_id, cluster_id)
+col_cellid <- brewer.pal(5, "Paired")
+names(col_cellid) <- unique(matcol$cell_id)
+col_batchid <- brewer.pal(5, "Set2")
+names(col_batchid) <- unique(matcol$batch_id)
+# col_clusterid <- c("9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
+#                    "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+#                    "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57")
+col_clusterid <- c("9" = "gold", "10" = "gold", "11" = "gold",
+                   "12" = "#a40000", "13" = "#72bcd5", "14" = "#72bcd5",
+                   "15" = "blueviolet", "16" = "blueviolet", "17" = "blueviolet")
+
+# Run pheatmap using the metadata data frame for the annotation
+# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid2.jpeg"), height = 3000, width = 3500, res = 300)
+pheatmap(counts.norm.sig,
+    color = heat_colors,
+    scale = "column", # z-score
+    cluster_rows = T,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    # gaps_row=c(2,6, 11, 14),
+    # cutree_rows = 5,
+    cutree_cols = 5,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    annotation_row=matcol,
+    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
+    # Change columns
+    angle_col=45,
+    # fontsize_col = 1,
+    show_colnames=F,
+    # title
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid")
+# dev.off()
+
+
+# Reorder counts.norm.sig by cluster number
+order1 <- metadf.deseq %>% arrange(cluster_id, batch_id)
+order2 <- metadf.deseq %>% arrange(batch_id, cluster_id)
+# counts.norm.sig[1:5,1:5]
+counts.norm.sig <- counts.norm.sig[rownames(order1),]
+counts.norm.sig <- counts.norm.sig[rownames(order2),]
+counts.norm.sig[1:5,1:5]
+# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid4.jpeg"), height = 3000, width = 3500, res = 300)
+pheatmap(counts.norm.sig,
+    color = heat_colors,
+    scale = "column", # z-score
+    cluster_rows = F,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    gaps_row=c(16,24,33, 44),
+    # cutree_rows = 5,
+    # cutree_cols = 5,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    annotation_row=matcol,
+    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
+    # Change columns
+    angle_col=45,
+    # fontsize_col = 1,
+    show_colnames=F,
+    # title
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid")
+# dev.off()
+```
+
+
+#### 4.2.4. Run DESeq2 (reduced model `~batch_id + cell_id`)
+```{r, fig.width=10, fig.height=10}
+## ****************
+## RUN DESEQ2
+dds <- DESeqDataSetFromMatrix(counts.deseq, 
+                              colData = metadf.deseq, 
+                              # design = ~ batch_id + cell_id)
+                              design = ~ batch_id + cell_id + cluster_id)
+dds <- DESeq(dds, test="LRT", reduced=~batch_id + cell_id)
 
 # Plot dispersion estimates
 plotDispEsts(dds)
@@ -526,212 +958,45 @@ res <- lfcShrink(dds, type="ashr",
                  # contrast = contrast,
                  res=res)
 print(res)
-```
 
-```{r heatmap-general}
+
+## ****************
+## PLOT HEATMAP
 # Extract normalized counts (from DESeq2 object) of the significant genes
 genes.sig <- res %>%
   data.frame() %>%
   filter(padj < 0.01)
 counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
-dim(counts.norm.sig) # 1753 genes
+dim(counts.norm.sig) # 4132 genes
 
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 # Run pheatmap using the metadata data frame for the annotation
-path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity"
-jpeg(file.path(path.plots, "heatmap_PBMC_LRTest3.jpeg"), height = 3000, width = 3500, res = 300)
-test1 <- pheatmap(counts.norm.sig,
+# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_BatchCell/heatmap_PBMC_LRTest.jpeg"), height = 3000, width = 3500, res = 300)
+pheatmap(counts.norm.sig,
     color = heat_colors,
     scale = "column", # z-score
-    cluster_rows = F,
+    cluster_rows = T,
     cluster_cols = T,
     border_color = NA,
-    # Create gaps to separate CD4/NKT
+    # Create gaps
     # gaps_row=c(2,6, 11, 14),
-    cutree_rows = 5,
+    # cutree_rows = 5,
     cutree_cols = 5,
     # Change rows text format
     show_rownames = T,
     fontsize_row = 10,
-    # annotation_row=matcol,
+    annotation_row=matcol,
+    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
     # Change columns
     angle_col=45,
     # fontsize_col = 1,
     show_colnames=F,
     # title
-    main="PBMC - LRT test")
-dev.off()
-
-
-# Try binarized counts
-counts.norm.sig[1:5,1:5]
-hist(counts.norm.sig, breaks=1000)
-test <- counts.norm.sig
-test[test<=140] <- 0
-test[test>140]  <- 1
-hist(test, breaks=100)
-rownames(test)
-test <- test[, test1$tree_col[["order"]]]
-
-# binarize after scaling?
-# test <- sapply(as.data.frame(counts.norm.sig), function(test) (test-mean(test))/sd(test))
-# rownames(test) <- rownames(counts.norm.sig)
-# test <- test[, test1$tree_col[["order"]]]
-# test[test<=0] <- 0
-# test[test>0]  <- 1
-# hist(test, breaks=100)
-
-jpeg(file.path(path.plots, "heatmap_PBMC_LRTest_batch-cellid_bin2.jpeg"), height = 1500, width = 2500, res = 300)
-pheatmap(test,
-    color = c("grey", "black"),
-    # color=heat_colors,
-    # scale = "column", # z-score
-    cluster_rows = F,
-    cluster_cols = F,
-    border_color = NA,
-    # Create gaps to separate CD4/NKT
-    gaps_row=c(2,6, 11, 14),
-    cutree_rows = 5,
-    cutree_cols = 5,
-    # Change rows text format
-    show_rownames = T,
-    fontsize_row = 10,
-    # annotation_row=matcol,
-    # Change columns
-    angle_col=45,
-    # fontsize_col = 1,
-    show_colnames=F,
-    # title
-    main="PBMC - LRT test")
-dev.off()
-# matcol <- metadf.deseq %>% select(cell_id, batch_id, cluster_id)
-# col_cellid <- brewer.pal(5, "Paired")
-# names(col_cellid) <- unique(matcol$cell_id)
-# col_batchid <- brewer.pal(5, "Set2")
-# names(col_batchid) <- unique(matcol$batch_id)
-# col_clusterid <- brewer.pal(9, "Paired")
-# names(col_clusterid) <- unique(matcol$cluster_id)
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid+cellid")
+# dev.off()
 ```
-
-
-### 4.3. Get upregulated genes for each cell type
-
-```{r functions}
-cellTypeSignature <- function(cell, padj_max=0.05, log2FC_min=1){
-  
-  # All cell types
-  allcells <- c("CD8", "CD4", "MAIT", "NKT", "GD")
-  allothercells <- allcells[allcells != cell]
-  
-  # Initialize
-  list.up <- list()
-  genesup <- c()
-  
-  # Loop
-  for (cellid in allothercells){
-    print(cellid)
-    # Initialize
-    out       <- NULL
-    result.df <- NULL
-    # Set contrast
-    contrast <- c("cell_id", cell, cellid)
-    # Get results
-    out <- results(dds, contrast = contrast, alpha = 0.05)
-    out <- lfcShrink(dds, type="ashr", contrast = contrast, res=out)
-    # Get log2FC
-    result.df <- out %>%
-      data.frame() %>%
-      rownames_to_column(var="gene") %>%
-      as_tibble() %>%
-      filter(padj < padj_max) %>%
-      filter(log2FoldChange > log2FC_min)
-    print(paste0("# upregulated genes:", nrow(result.df)))
-    # Save DF in list
-    list.up[[paste0(cell, "vs", cellid)]] <- result.df
-    
-    # Get common upregulated genes
-    length_list <- length(list.up)
-    if (length_list==1){ genesup <- list.up[[1]]$gene }
-    else if (length_list>1){
-      genesup <- intersect(genesup, list.up[[length_list]]$gene)
-    }
-    print(paste0("# common upregulated genes:", length(genesup)))
-  }
-  
-  return(list("list"=list.up, "genesup"=genesup))
-}
-```
-
-
-#### 4.3.1. CD8 vs rest
-```{r dds-cd8up}
-# Get CD8-upregulated genes
-cd8up <- cellTypeSignature(cell="CD8", log2FC_min=0.5)
-cd8up$genesup # 11
-
-# write.csv(result.sig %>% dplyr::arrange(log2FoldChange), "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity/pbmc_cd8vsother_DEGsig.csv")
-
-# Get CD4-upregulated genes
-cd4up <- cellTypeSignature(cell="CD4", log2FC_min=0.5)
-cd4up$genesup # 18
-
-# Get MAIT-upregulated genes
-maitup <- cellTypeSignature(cell="MAIT", log2FC_min=0.5)
-maitup$genesup # 22
-
-# Get NKT-upregulated genes
-nktup <- cellTypeSignature(cell="NKT", log2FC_min=0.5)
-nktup$genesup # 5
-
-# Get GDT-upregulated genes
-gdup <- cellTypeSignature(cell="GD", log2FC_min=0.5)
-gdup$genesup # 7 (most difference with CD4)
-
-
-
-# Extract normalized counts (from DESeq2 object) of the significant genes
-counts.norm.sig2 <- t(data.frame(counts(dds, normalized = TRUE))[c(cd8up$genesup, cd4up$genesup, maitup$genesup, nktup$genesup, gdup$genesup),])
-dim(counts.norm.sig2) # 63 genes
-
-# Run pheatmap using the metadata data frame for the annotation
-jpeg(file.path(path.plots, "heatmap_PBMC_LRTest_cellidgenes.jpeg"), height = 1500, width = 2500, res = 300)
-pheatmap(counts.norm.sig2,
-    color = heat_colors,
-    scale = "column", # z-score
-    cluster_rows = F,
-    cluster_cols = T,
-    border_color = NA,
-    # Create gaps to separate CD4/NKT
-    gaps_row=c(2, 6, 11, 14),
-    cutree_rows = 5,
-    cutree_cols = 5,
-    # Change rows text format
-    show_rownames = T,
-    fontsize_row = 10,
-    # annotation_row=matcol,
-    # Change columns
-    angle_col=45,
-    fontsize_col = 4,
-    show_colnames=T,
-    # title
-    main="PBMC - LRT test - cell type signature genes")
-dev.off()
-
-
-# Make score out of it
-seur.human <- AddModuleScore(seur.human, assay="RNA", features=list("CD8sig" =cd8up$genesup,
-                                                                    "CD4sig" =cd4up$genesup,
-                                                                    "MAITsig"=maitup$genesup,
-                                                                    "NKTsig" =nktup$genesup,
-                                                                    "GDTsig" =gdup$genesup),
-                             name=c("CD8sig", "CD4sig", "MAITsig", "NKTsig", "GDTsig"))
-# Plot score
-VlnPlot(seur.human, features=c("CD8sig1", "CD4sig2", "MAITsig3", "NKTsig4", "GDTsig5"), group.by="group.ident")
-
-```
-
 
 
 

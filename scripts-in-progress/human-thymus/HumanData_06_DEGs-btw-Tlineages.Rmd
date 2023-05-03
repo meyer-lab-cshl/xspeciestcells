@@ -30,14 +30,19 @@ library(cowplot)
 
 ```{r import-data}
 # Import seurat object
+path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity"
 seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
 # seur.filt <- readRDS("~/Projects/HumanThymusProject/data/CLUSTER/seurat-integration/input/seur_filt_22-12-19.rds")
 
 # Sanity check
-print(seur.human) # 81,378 cells (it's the whole seurat object)
+print(seur.human) # 78,607 cells (it's the whole seurat object)
 
 # Quick visualization
-DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters")
+cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#e09351", "4" = "#2b9b81", 
+                     "5" = "#421401", "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f", "9" = "#74c8c3", 
+                     "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "#bdbdbd")
+DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_integrated)
 ```
 
 
@@ -162,17 +167,14 @@ groups <- metadata %>%
   # select(cell_id, batch_id) # I want to group cells by batch_id and cell_id
   # ---
   # EXAMPLE 5: Compare thymic MAIT cells and CD8 cells in clusters 9 & 10
-  # filter(tissue_id == "Thymus" & cell_id %in% c("CD8", "MAIT") & cluster_id %in% c("9", "10")) %>%
-  # select(cell_id, batch_id) # I want to group cells by batch_id and cell_id
+  filter(tissue_id == "Thymus" & cell_id %in% c("CD8", "MAIT") & cluster_id %in% c("9", "10")) %>%
+  select(cell_id, batch_id) # I want to group cells by batch_id and cell_id
   # ---
   # EXAMPLE 6: Compare CD8 vs others in periphery
-  filter(tissue_id=="PBMC") %>%
-  select(cell_id, batch_id)
+  # filter(tissue_id=="PBMC") %>%
+  # select(cell_id, batch_id)
 print(groups) # sanity check
 
-# For peripheral DEG:
-groups <- groups %>%
-  mutate(cell_id=ifelse(cell_id=="CD8", "CD8", "Other"))
 
 ## ****************
 ## AGGREGATE COUNTS
@@ -204,14 +206,16 @@ rownames(metadf.deseq) <- metadf.deseq$sample_id
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
 metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),] # reorder rows in metadf.deseq to match order of columns in counts.deseq
 all(rownames(metadf.deseq) == colnames(counts.deseq))
+
+
+## ****************
+## EXPORT TABLES FOR HANNAH
+# write.csv(counts.deseq, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages/CD8vsMAIT_thymus_c9c11_rawcountsagg.csv")
+# write.csv(metadf.deseq, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages/CD8vsMAIT_thymus_c9c11_metadf.csv")
 ```
 
 
-
-
 ### 3.2. Differential expression analysis
-
-
 Now we can create our DESeq2 object to prepare to run the DE analysis. We need to include the counts, metadata, and design formula for our comparison of interest. In the design formula we should also include any other columns in the metadata for which we want to regress out the variation (e.g. batch, sex, age, etc.). We only have our comparison of interest, which is stored as the group_id in our metadata data frame.
 
 ```{r create-deseq2-object}
@@ -221,11 +225,9 @@ dds <- DESeqDataSetFromMatrix(counts.deseq,
                               design = ~ batch_id + cell_id) # TO MODIFY BASED ON WHAT YOU WANT TO COMPARE (keep batch_id though)
 ```
 
-
 The next step in the DESeq2 workflow is QC, which includes sample-level and gene-level steps to perform QC checks on the count data to help us ensure that the samples/replicates look good.
 To explore the similarity of our samples, we will be performing sample-level QC using Principal Component Analysis (PCA) and hierarchical clustering methods. Sample-level QC allows us to see how well our replicates cluster together, as well as, observe whether our experimental condition represents the major source of variation in the data. Performing sample-level QC can also identify any sample outliers, which may need to be explored further to determine whether they need to be removed prior to DE analysis.
 When using these unsupervised clustering methods, normalization and log2-transformation of the counts improves the distances/clustering for visualization. DESeq2 uses median of ratios method for count normalization and a regularized log transform (rlog) of the normalized counts for sample-level QC as it moderates the variance across the mean, improving the clustering.
-
 
 ```{r deseq2-qc}
 # Transform counts for data visualization
@@ -243,7 +245,9 @@ DESeq2::plotPCA(rld, intgroup = "cell_id")
 ## IF THERE IS REALLY STRONG BATCH EFFECT IN THE PCA, RUN CODE BELOW
 
 # Correct for batch effect, and then run PCA
-counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
+counts_corrected <- limma::removeBatchEffect(x=assay(rld),
+                                             batch=metadf.deseq$batch_id,
+                                             design=model.matrix(~ cell_id, metadf.deseq))
 rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
 select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
 pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
@@ -257,7 +261,8 @@ ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
   xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
   ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
   coord_fixed(expand=TRUE) +
-  scale_y_continuous(expand = c(0.1,0.1))
+  scale_y_continuous(expand = c(0.1,0.1))+
+  ggtitle("limma without design formula")
 
 
 # Compute pairwise correlation values on the batch-effect-corrected matrix
@@ -265,7 +270,6 @@ rld_cor <- cor(counts_corrected[select_rv,])
 # Plot heatmap
 pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ```
-
 
 Differential expression analysis with DESeq2 involves multiple steps as displayed in the flowchart below in blue. Briefly, DESeq2 will model the raw counts, using normalization factors (size factors) to account for differences in library depth. Then, it will estimate the gene-wise dispersions and shrink these estimates to generate more accurate estimates of dispersion to model the counts. Finally, DESeq2 will fit the negative binomial model and perform hypothesis testing using the Wald test or Likelihood Ratio Test.
 All of these steps are performed by running the single DESeq() function on our DESeq2 object created earlier.
@@ -277,8 +281,8 @@ dds <- DESeq(dds)
 # Plot dispersion estimates
 plotDispEsts(dds)
 
-# Output results of Wald test for contrast for CD4 vs CD8
-contrast <- c("cell_id", "CD4", "CD8") # MODIFY BASED ON WHAT YOU ARE COMPARING
+# Output results of Wald test for contrast for CD4 vs NKT
+contrast <- c("cell_id", "CD8", "MAIT") # MODIFY BASED ON WHAT YOU ARE COMPARING
 res <- results(dds,
                contrast = contrast,
                alpha = 0.05)
@@ -286,7 +290,7 @@ res <- lfcShrink(dds,
                  type="ashr",
                  contrast = contrast,
                  res=res)
-res # condition CD4 vs CD8 (high log2FC means upregulated in CD4)
+res # condition CD4 vs NKT (high log2FC means upregulated in CD4)
 
 # Turn the results object into a tibble for use with tidyverse functions
 result.df <- res %>%
@@ -313,48 +317,54 @@ result.sig <- result.df %>%
 table(result.sig$log2FoldChange > 0)
 result.sig %>%
   dplyr::arrange(log2FoldChange)
+
+head(as.data.frame(result.sig))
 ```
 
 
 ### 3.3. Heatmap
-```{r heatmap}
-# Extract normalized counts (from DESeq2 object) of the significant genes
-counts.norm <- counts(dds, normalized = TRUE)
-counts.norm.sig <- data.frame(counts.norm) %>%
-  rownames_to_column(var = "gene") %>%
-  filter(gene %in% result.sig$gene) %>%
-  column_to_rownames("gene") %>%
-  t()
-        
+```{r heatmap, fig.height=8, fig.width=4}
+# Don't get normalized counts from DESeq2: these are not batch-corrected!!
+# counts.norm <- counts(dds, normalized = TRUE)
+# counts.norm.sig <- data.frame(counts.norm) %>%
+#   rownames_to_column(var = "gene") %>%
+#   filter(gene %in% result.sig$gene) %>%
+#   column_to_rownames("gene")
+
+# Keep only significant DE genes from corrected counts (we corrected the counts with limma a bit earlier)
+counts_corrected.sig <- counts_corrected[result.sig$gene,]
+dim(counts_corrected.sig)
+
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 # Run pheatmap using the metadata data frame for the annotation
 path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_06_DEGs-btw-Tlineages"
-jpeg(file.path(path.plots, "heatmap_PBMC_LRTest.jpeg"), height = 2000, width = 3500, res = 300)
-pheatmap(counts.norm.sig,
+jpeg(file.path(path.plots, "heatmap_c9c10_CD8vsMAIT.jpeg"), height = 1800, width = 1000, res = 300)
+pheatmap(counts_corrected.sig,
     color = heat_colors,
-    scale = "column", # z-score
-    cluster_rows = F,
-    cluster_cols = T,
+    scale = "row", # z-score
+    cluster_rows = T,
+    cluster_cols = F,
     border_color = NA,
     # Create gaps to separate CD4/NKT
-    gaps_row=c(2,6, 11, 14),
-    cutree_cols = 5,
+    # gaps_row=c(2,6, 11, 14),
+    cutree_rows = 2,
     # Change rows text format
     show_rownames = T,
-    fontsize_row = 10,
+    fontsize_row = 4,
     # Change columns
     angle_col=45,
-    fontsize_col = 2,
+    fontsize_col = 4,
     # title
-    main="PBMC - LRT test")
+    main="CD8 vs naive MAIT Thymus")
 dev.off()
 ```
 
 
-### 3.4. Volcano plot
 
+
+### 3.4. Volcano plot
 ```{r volcano, fig.height=5, fig.width=5}
 ## Obtain logical vector where TRUE values denote padj values < 0.05 and fold change > 1.5 in either direction
 results.df.thresh <- result.df %>%
@@ -411,7 +421,8 @@ groups <- metadata %>%
   # -------
   # EXAMPLE 1 - BATCH + CELL_ID
   column_to_rownames("cell") %>%
-  select(cell_id, batch_id)
+  select(cell_id, batch_id) %>%
+  filter(batch_id %in% c("E", "I"))
   # -------
   # # EXAMPLE 2 - BATCH + CELL_ID + CLUSTER_ID
   # filter(cluster_id %in% 9:17) %>%
@@ -480,8 +491,11 @@ DESeq2::plotPCA(rld, intgroup = "cell_id")
 ## ****************
 ## IF THERE IS REALLY STRONG BATCH EFFECT IN THE PCA, RUN CODE BELOW
 
+
 # Correct for batch effect, and then run PCA
-counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
+counts_corrected <- limma::removeBatchEffect(assay(rld),
+                                             batch=metadf.deseq$batch_id,
+                                             design=model.matrix(~ cell_id, metadf.deseq))
 rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
 select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
 pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
@@ -506,7 +520,7 @@ pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 
 
 #### 4.1.3. Run DESeq2
-```{r lrt1, fig.width=5, fig.height=5}
+```{r lrt1, fig.width=10, fig.height=10}
 ## ****************
 ## RUN DESEQ2
 # Run DESeq2 differential expression analysis
@@ -534,20 +548,28 @@ genes.sig <- res %>%
 counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
 dim(counts.norm.sig) # 1753 genes
 
+# Get corrected counts
+rld <- rlog(dds, blind=TRUE) # need to provide log-normalized counts to limma
+counts.norm.sig <- assay(rld)[rownames(genes.sig),] # keep only the genes of interest
+# counts.norm.sig[1:5,1:5]
+counts.corr.sig <- t(limma::removeBatchEffect(counts.norm.sig, metadf.deseq$batch_id))
+counts.corr.sig[1:5,1:5]
+dim(counts.corr.sig) # 1753 genes
+
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 # Run pheatmap using the metadata data frame for the annotation
 path.plots <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_19_CellIdentity"
-# jpeg(file.path(path.plots, "heatmap_PBMC_LRTest3.jpeg"), height = 3000, width = 3500, res = 300)
-test1 <- pheatmap(counts.norm.sig,
+# jpeg(file.path(path.plots, "LRT_BatchCell_vs_Batch/heatmap_PBMC_LRTest_batch-cellid_limma_corrected.jpeg"), height = 2000, width = 3500, res = 300)
+pheatmap(counts.corr.sig,
     color = heat_colors,
     scale = "column", # z-score
     cluster_rows = F,
     cluster_cols = T,
     border_color = NA,
     # Create gaps to separate CD4/NKT
-    # gaps_row=c(2,6, 11, 14),
+    gaps_row=c(2,6, 11, 14),
     cutree_rows = 5,
     cutree_cols = 5,
     # Change rows text format
@@ -559,7 +581,7 @@ test1 <- pheatmap(counts.norm.sig,
     # fontsize_col = 1,
     show_colnames=F,
     # title
-    main="PBMC - LRT test")
+    main="PBMC - LRT test - batchid+cellid vs batchid (batch corrected)")
 # dev.off()
 ```
 
@@ -682,12 +704,16 @@ gdup$genesup # 7 (most difference with CD4)
 
 
 # Extract normalized counts (from DESeq2 object) of the significant genes
-counts.norm.sig2 <- t(data.frame(counts(dds, normalized = TRUE))[c(cd8up$genesup, cd4up$genesup, maitup$genesup, nktup$genesup, gdup$genesup),])
-dim(counts.norm.sig2) # 63 genes
+# counts.norm.sig2 <- t(data.frame(counts(dds, normalized = TRUE))[c(cd8up$genesup, cd4up$genesup, maitup$genesup, nktup$genesup, gdup$genesup),])
+counts.norm.sig2 <- assay(rld)[c(cd8up$genesup, cd4up$genesup, maitup$genesup, nktup$genesup, gdup$genesup),]
+# counts.norm.sig2[1:5,1:5]
+counts.corr.sig2 <- t(limma::removeBatchEffect(counts.norm.sig2, metadf.deseq$batch_id))
+counts.corr.sig2[1:5,1:5]
+dim(counts.corr.sig2) # 63 genes
 
 # Run pheatmap using the metadata data frame for the annotation
-# jpeg(file.path(path.plots, "heatmap_PBMC_LRTest_cellidgenes.jpeg"), height = 1500, width = 2500, res = 300)
-pheatmap(counts.norm.sig2,
+# jpeg(file.path(path.plots, "LRT_BatchCell_vs_Batch/heatmap_PBMC_LRTest_cellidgenes_limma_corrected.jpeg"), height = 1500, width = 2500, res = 300)
+pheatmap(counts.corr.sig2,
     color = heat_colors,
     scale = "column", # z-score
     cluster_rows = F,
@@ -776,7 +802,11 @@ counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have
 # Have metadata df where rownames are the colnames of "counts.deseq" (the groups)
 metadf.deseq <- groups %>%
   distinct() %>%
-  unite(sample_id, remove=FALSE)
+  unite(sample_id, remove=FALSE) %>%
+  mutate(gene_program=ifelse(cluster_id %in% c(9,10,11), "naive",
+                             ifelse(cluster_id==12, "Tcm_GEP6",
+                                    ifelse(cluster_id %in% c(13,14), "Th17_GEP1",
+                                           ifelse(cluster_id %in% 15:17, "Temra_GEP4", NA)))))
 rownames(metadf.deseq) <- metadf.deseq$sample_id
 
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
@@ -810,21 +840,29 @@ DESeq2::plotPCA(rld, intgroup = "cell_id")
 ## IF THERE IS REALLY STRONG BATCH EFFECT IN THE PCA, RUN CODE BELOW
 
 # Correct for batch effect, and then run PCA
-counts_corrected <- limma::removeBatchEffect(assay(rld), metadf.deseq$batch_id)
+counts_corrected <- limma::removeBatchEffect(x=assay(rld),
+                                             batch=metadf.deseq$batch_id,
+                                             design=model.matrix(~ cell_id + cluster_id, metadf.deseq))
 rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
 select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
 pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
 percentVar <- pca$sdev^2/sum(pca$sdev^2)
 counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
-                         batch = metadf.deseq$batch_id,
-                         condition = metadf.deseq$cell_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
+                         batch_id = metadf.deseq$batch_id,
+                         cell_id = metadf.deseq$cell_id,
+                         cluster_id = metadf.deseq$cluster_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
 # Plot
-ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=batch)) +
+ggplot(counts_pca, aes(x = PC1, y = PC2, color = cell_id, shape=batch_id)) +
   geom_point(size = 4) +
   xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
   ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
-  coord_fixed(expand=TRUE) +
-  scale_y_continuous(expand = c(0.1,0.1))
+  coord_fixed(expand=TRUE)
+ggplot(counts_pca, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
+  geom_point(size = 4) +
+  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  coord_fixed(expand=TRUE)+
+  scale_color_manual(values=cols_integrated)
 
 
 # Compute pairwise correlation values on the batch-effect-corrected matrix
@@ -840,6 +878,7 @@ pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ## RUN DESEQ2
 # Run DESeq2 differential expression analysis
 dds <- DESeq(dds, test="LRT", reduced=~batch_id)
+dds <- dds[which(mcols(dds)$fullBetaConv),]
 
 # Plot dispersion estimates
 plotDispEsts(dds)
@@ -853,15 +892,24 @@ res <- lfcShrink(dds, type="ashr",
                  res=res)
 print(res)
 
+# Keep only significant DE genes
+genes.sig <- res %>%
+  data.frame() %>%
+  filter(padj < 0.01)# %>%
+  # filter(abs(log2FoldChange)>1)
+dim(genes.sig) # 1164 genes (if padj & log2FC filter), 4796 genes (if padj filter)
+
 
 ## ****************
 ## PLOT HEATMAP
 # Extract normalized counts (from DESeq2 object) of the significant genes
-genes.sig <- res %>%
-  data.frame() %>%
-  filter(padj < 0.01)
-counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
-dim(counts.norm.sig) # 4796 genes
+# counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
+# dim(counts.norm.sig) # 4796 genes
+
+# Get corrected counts (that we batch corrected with limma earlier)
+counts.corr.sig <- t(counts_corrected[rownames(genes.sig),]) # keep only the genes of interest
+counts.corr.sig[1:5,1:5]
+dim(counts.corr.sig) # 1164 genes
 
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
@@ -871,16 +919,16 @@ col_cellid <- brewer.pal(5, "Paired")
 names(col_cellid) <- unique(matcol$cell_id)
 col_batchid <- brewer.pal(5, "Set2")
 names(col_batchid) <- unique(matcol$batch_id)
-# col_clusterid <- c("9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
-#                    "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
-#                    "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57")
+col_clusterid <- c("9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
+                   "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                   "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57")
 col_clusterid <- c("9" = "gold", "10" = "gold", "11" = "gold",
                    "12" = "#a40000", "13" = "#72bcd5", "14" = "#72bcd5",
                    "15" = "blueviolet", "16" = "blueviolet", "17" = "blueviolet")
 
 # Run pheatmap using the metadata data frame for the annotation
-# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid2.jpeg"), height = 3000, width = 3500, res = 300)
-pheatmap(counts.norm.sig,
+# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_log2FCabove1_1.jpeg"), height = 3000, width = 3500, res = 300)
+pheatmap(counts.corr.sig,
     color = heat_colors,
     scale = "column", # z-score
     cluster_rows = T,
@@ -889,7 +937,7 @@ pheatmap(counts.norm.sig,
     # Create gaps to separate CD4/NKT
     # gaps_row=c(2,6, 11, 14),
     # cutree_rows = 5,
-    cutree_cols = 5,
+    cutree_cols = 10,
     # Change rows text format
     show_rownames = T,
     fontsize_row = 10,
@@ -900,7 +948,7 @@ pheatmap(counts.norm.sig,
     # fontsize_col = 1,
     show_colnames=F,
     # title
-    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid")
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
 # dev.off()
 
 
@@ -936,6 +984,153 @@ pheatmap(counts.norm.sig,
 # dev.off()
 ```
 
+Get the genes from each dendrogram cluster
+
+```{r}
+out <- pheatmap(counts.corr.sig,
+    color = heat_colors,
+    scale = "column", # z-score
+    cluster_rows = T,
+    cluster_cols = T,
+    border_color = NA,
+    # Create gaps to separate CD4/NKT
+    # gaps_row=c(2,6, 11, 14),
+    # cutree_rows = 5,
+    cutree_cols = 10,
+    # Change rows text format
+    show_rownames = T,
+    fontsize_row = 10,
+    annotation_row=matcol,
+    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
+    # Change columns
+    angle_col=45,
+    # fontsize_col = 1,
+    show_colnames=F,
+    # title
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
+
+counts.corr.sig[1:5,1:5]
+gene_order <- colnames(counts.corr.sig[,out$tree_col[["order"]]])
+tree_numbers <- sort(cutree(out$tree_col, k=10))
+unique(unname(tree_numbers[gene_order])) # ORDER OF TREE
+table(tree_numbers)
+
+# ATTEMPT AT GENE LISTS
+genes_naive <- names(tree_numbers[tree_numbers==1])
+length(genes_naive) # 1420
+genes_Tcm_GEP6 <- names(tree_numbers[tree_numbers==3])
+length(genes_Tcm_GEP6) # 188
+genes_Th17_GEP1 <- names(tree_numbers[tree_numbers==2])
+length(genes_Th17_GEP1) # 521
+genes_Temra_GEP4 <- names(tree_numbers[tree_numbers %in% c(7, 4)])
+length(genes_Temra_GEP4) # 1506
+
+
+# Sanity checks
+# pheatmap(counts.corr.sig[,genes_Temra_GEP6],
+#     color = heat_colors,
+#     scale = "column", # z-score
+#     cluster_rows = T,
+#     cluster_cols = T,
+#     border_color = NA,
+#     # Change rows text format
+#     show_rownames = T,
+#     fontsize_row = 10,
+#     annotation_row=matcol,
+#     annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
+#     # Change columns
+#     angle_col=45,
+#     # fontsize_col = 1,
+#     show_colnames=F,
+#     # title
+#     main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
+
+
+# COMPARE WITH LAURENT's GEPs
+geps.df <- read.csv("~/Desktop/genes_per_GEP_df.csv", row.names=1)
+table(genes_Tcm_GEP6 %in% geps.df$GEP_6)
+table(genes_Th17_GEP1 %in% geps.df$GEP_1)
+table(genes_Temra_GEP4 %in% geps.df$GEP_4)
+
+test <- geps.df %>%
+  pivot_longer(everything(), names_to="GEP", values_to="gene") %>%
+  filter(gene %in% genes_Temra_GEP4) %>%
+  group_by(GEP) %>%
+  summarize(n_gene=n())
+ggplot(test, aes(x=GEP, y=n_gene))+
+  geom_bar(stat="identity")+
+  labs(x="", y="# genes found in GEP", title="Genes up in cluster 15-17")
+
+
+```
+
+
+
+Get the genes that are up in naïve vs effector clusters
+
+```{r}
+cellStateSignature <- function(cluster, padj_max=0.05, log2FC_min=1){
+  
+  # All cell types
+  allclusters <- 9:17
+  allotherclusters <- allclusters[allclusters != cluster]
+  
+  # Initialize
+  list.up <- list()
+  genesup <- c()
+  
+  # Loop
+  for (clusterid in allotherclusters){
+    print(clusterid)
+    # Initialize
+    out       <- NULL
+    result.df <- NULL
+    # Set contrast
+    contrast <- c("cluster_id", cluster, clusterid)
+    # Get results
+    out <- results(dds, contrast = contrast, alpha = 0.05)
+    out <- lfcShrink(dds, type="ashr", contrast = contrast, res=out)
+    # Get log2FC
+    result.df <- out %>%
+      data.frame() %>%
+      rownames_to_column(var="gene") %>%
+      as_tibble() %>%
+      filter(padj < padj_max) %>%
+      filter(log2FoldChange > log2FC_min)
+    print(paste0("# upregulated genes:", nrow(result.df)))
+    # Save DF in list
+    list.up[[paste0(cluster, "vs", clusterid)]] <- result.df
+    
+    # Get common upregulated genes
+    length_list <- length(list.up)
+    if (length_list==1){ genesup <- list.up[[1]]$gene }
+    else if (length_list>1){
+      genesup <- intersect(genesup, list.up[[length_list]]$gene)
+    }
+    print(paste0("# common upregulated genes:", length(genesup)))
+  }
+  
+  return(list("list"=list.up, "genesup"=genesup))
+}
+
+
+# Run on cluster 12
+c12up <- cellStateSignature(cluster=12, log2FC_min=0.5)
+c12up$genesup # 11
+
+res
+test <- results(dds,
+               contrast = c("cluster_id", 9, 10),
+               alpha = 0.05)
+test <- lfcShrink(dds, type="ashr",
+                 contrast = c("gene_program", "naive", "Tcm_GEP6"),
+                 res=test)
+table(test$log2FoldChange>1)
+colData(dds)$cluster_id
+```
+
+
+
 
 #### 4.2.4. Run DESeq2 (reduced model `~batch_id + cell_id`)
 ```{r, fig.width=10, fig.height=10}
@@ -950,7 +1145,7 @@ dds <- DESeq(dds, test="LRT", reduced=~batch_id + cell_id)
 # Plot dispersion estimates
 plotDispEsts(dds)
 
-# Output results of Wald test for contrast for CD4 vs CD8
+# Output results for contrast batch_id + cell_id + cluster_id VS batch_id + cell_id
 res <- results(dds,
                # contrast = contrast,
                alpha = 0.05)
@@ -965,16 +1160,36 @@ print(res)
 # Extract normalized counts (from DESeq2 object) of the significant genes
 genes.sig <- res %>%
   data.frame() %>%
-  filter(padj < 0.01)
+  filter(padj < 0.01) %>%
+  filter(abs(log2FoldChange)>1)
 counts.norm.sig <- t(data.frame(counts(dds, normalized = TRUE))[rownames(genes.sig),])
-dim(counts.norm.sig) # 4132 genes
+dim(counts.norm.sig) # 4132 genes (with only padj threshold), 1141 genes (with padj+log2FC thresholds)
+
+# Get corrected counts
+rld <- rlog(dds, blind=TRUE) # need to provide log-normalized counts to limma
+counts.norm.sig <- assay(rld)[rownames(genes.sig),] # keep only the genes of interest
+# counts.norm.sig[1:5,1:5]
+counts.corr.sig <- t(limma::removeBatchEffect(counts.norm.sig, metadf.deseq$batch_id))
+counts.corr.sig[1:5,1:5]
 
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
+# Color for row annotation
+matcol <- metadf.deseq %>% select(cell_id, batch_id, cluster_id)
+col_cellid <- brewer.pal(5, "Paired")
+names(col_cellid) <- unique(matcol$cell_id)
+col_batchid <- brewer.pal(5, "Set2")
+names(col_batchid) <- unique(matcol$batch_id)
+# col_clusterid <- c("9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
+#                    "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+#                    "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57")
+col_clusterid <- c("9" = "gold", "10" = "gold", "11" = "gold",
+                   "12" = "#a40000", "13" = "#72bcd5", "14" = "#72bcd5",
+                   "15" = "blueviolet", "16" = "blueviolet", "17" = "blueviolet")
 
 # Run pheatmap using the metadata data frame for the annotation
-# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_BatchCell/heatmap_PBMC_LRTest.jpeg"), height = 3000, width = 3500, res = 300)
-pheatmap(counts.norm.sig,
+# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_BatchCell/heatmap_PBMC_LRTest_limma_corrected_log2FCabove1_2.jpeg"), height = 3000, width = 3500, res = 300)
+pheatmap(counts.corr.sig,
     color = heat_colors,
     scale = "column", # z-score
     cluster_rows = T,
@@ -983,7 +1198,7 @@ pheatmap(counts.norm.sig,
     # Create gaps
     # gaps_row=c(2,6, 11, 14),
     # cutree_rows = 5,
-    cutree_cols = 5,
+    # cutree_cols = 5,
     # Change rows text format
     show_rownames = T,
     fontsize_row = 10,
@@ -994,7 +1209,7 @@ pheatmap(counts.norm.sig,
     # fontsize_col = 1,
     show_colnames=F,
     # title
-    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid+cellid")
+    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid+cellid (batch corrected)")
 # dev.off()
 ```
 

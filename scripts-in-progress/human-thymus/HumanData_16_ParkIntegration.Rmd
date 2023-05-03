@@ -73,6 +73,7 @@ SCpubr::do_DimPlot(seur.park,
                    legend.position = "none",
                    repel=T,
                    font.size = 24)
+table(seur.park$cell_type, useNA="ifany")
 
 # check out gene names
 rownames(seur.park)[1:5]
@@ -85,6 +86,38 @@ ggVennDiagram(
   label="count"
   )+
   ggplot2::scale_fill_gradient(low="white",high = "blue")
+
+
+# Add better cell_type to full park seurat object
+park_metadata <- read.csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_metadata.csv")
+
+seur.park2 <- seur.park
+table(park_metadata$index %in% rownames(seur.park2@meta.data)) # only 76,903 cells common
+park_metadata.sub <- park_metadata[park_metadata$index %in% rownames(seur.park2@meta.data),]
+table(park_metadata.sub$index %in% rownames(seur.park2@meta.data)) # only 76,903 cells common
+
+table(park_metadata.sub$index == rownames(seur.park2@meta.data[park_metadata.sub$index,])) # yessss nice
+seur.park2@meta.data$cell_type <- as.character(seur.park2@meta.data$cell_type)
+table(seur.park2@meta.data[park_metadata.sub$index,"cell_type"], useNA="ifany")
+seur.park2@meta.data[park_metadata.sub$index,"cell_type"] <- park_metadata.sub$cell.types
+table(seur.park2$cell_type, useNA="ifany")
+
+SCpubr::do_DimPlot(seur.park2,
+                   group.by = "cell_type",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   font.size = 24)
+
+# Sanity check
+as.data.frame(table(seur.park$cell_type, useNA="ifany")) %>%
+  dplyr::rename(freq_before=Freq, celltype=Var1) %>%
+  full_join(as.data.frame(table(seur.park2$cell_type, useNA="ifany")) %>% dplyr::rename(freq_after=Freq, celltype=Var1),
+            by="celltype", keep=T) %>%
+  replace_na(list(freq_before=0)) %>%
+  select(-celltype.x) %>%
+  filter(freq_before != freq_after)
 ```
 
 
@@ -172,6 +205,7 @@ table(park_metadata$index == rownames((seur.park.thymocytes@meta.data))) # yesss
 
 # Get the cell types eheheh
 seur.park.thymocytes@meta.data$cell_type <- park_metadata$cell.types
+
 
 # Visualize
 cols_park <- c("DN(early)" = "#78c679",
@@ -701,41 +735,280 @@ for(cellgroup in clusters_order){
 ```
 
 
-### 2.5. Query thinggy
-
-```{r}
-anchors <- FindTransferAnchors(reference = seur.park.thymocytes,
-                               reference.assay="RNA",
-                               reference.reduction = "UMAP",
-                               query = seur.thymus,
-                               dims = 1:30)
-predictions <- TransferData(anchorset = pancreas.anchors, refdata = pancreas.integrated$celltype,
-    dims = 1:30)
-pancreas.query <- AddMetaData(pancreas.query, metadata = predictions)
-
-
-# Find anchors between reference (thym.li) and query (thym.combined)
-# VariableFeatures(immune.combined)
-# VariableFeatures(seur.B6)
-anchors <- FindTransferAnchors(
-  reference = seur.B6,
-  reference.assay="integrated",
-  query = seur.iNKT,
-  normalization.method = "LogNormalize",
-  reference.reduction = "pca",
-  dims = 1:30
-) # found 9655 anchors (retained 6044)
+### 2.5. Integration of full Park dataset with our dataset
+#### 2.5.1. Import data
+```{r fullpark-gapin-integration1}
+## GAPIN DATA ####
+# Import our seurat object
+seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+print(seur) # 78,607 cells
+cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#e09351", "4" = "#2b9b81", 
+                     "5" = "#421401", "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f", "9" = "#74c8c3", 
+                     "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "#bdbdbd")
+SCpubr::do_DimPlot(seur, 
+                   group.by = "new_clusters",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   colors.use=cols_integrated,
+                   font.size = 24)
 
 
-# Transfer cell type labels from the reference to the query
-# seur.B6@meta.data
-thym.mapquery <- MapQuery(
-  anchorset = anchors,
-  query     = seur.iNKT,
-  reference = seur.B6,
-  refdata   = list(seurat_clusters="seurat_clusters", cell_type="cell_type"),
-  reference.reduction = "pca", 
-  reduction.model     = "umap"
+## PARK DATA ####
+seur.park <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_full_seu_gene_names.rds")
+
+# Add better cell_type to full park seurat object
+park_metadata <- read.csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_fullmetadata.csv")
+
+# Thymus more refined annotation
+# seur.park2 <- seur.park
+# table(park_metadata$index %in% rownames(seur.park2@meta.data)) # only 76,903 cells common
+# park_metadata.sub <- park_metadata[park_metadata$index %in% rownames(seur.park2@meta.data),]
+# table(park_metadata.sub$index %in% rownames(seur.park2@meta.data)) # only 76,903 cells common
+# 
+# table(park_metadata.sub$index == rownames(seur.park2@meta.data[park_metadata.sub$index,])) # yessss nice
+# seur.park2@meta.data$cell_type <- as.character(seur.park2@meta.data$cell_type)
+# table(seur.park2@meta.data[park_metadata.sub$index,"cell_type"], useNA="ifany")
+# seur.park2@meta.data[park_metadata.sub$index,"cell_type"] <- park_metadata.sub$cell.types
+# table(seur.park2$cell_type, useNA="ifany")
+
+# Whole data annotation
+seur.park2 <- seur.park
+table(park_metadata$index == rownames(seur.park2@meta.data)) # yessss nice
+annotation_columns <- colnames(park_metadata)[2:7]
+seur.park2@meta.data[,annotation_columns] <- park_metadata[,annotation_columns]
+# table(seur.park2@meta.data[,c("cell_type", "Anno_level_1")]) # sanity check
+seur.park2@meta.data$cell_type <- NULL
+```
+
+#### 2.5.2. Prepare data
+```{r fullpark-gapin-integration2}
+## KEEP ONLY COMMON GENES TO 2 DATASETS ####
+# check out overlap gene names between Park data and our data
+ggVennDiagram(
+  x=list(rownames(seur), rownames(seur.park2)),
+  category.names = c("Gapin" , "Park"),
+  label_alpha=0,
+  label="count"
+  )+
+  ggplot2::scale_fill_gradient(low="white",high = "blue")
+# keep only genes common to the 2 datasets
+common_genes <- intersect(rownames(seur), rownames(seur.park2))
+length(common_genes) # 13,988 genes
+seur.gapin <- seur[common_genes,]
+seur.park2 <- seur.park2[common_genes,]
+
+
+## KEEP ONLY RELEVANT METADATA COLUMNS ####
+# Gapin data
+gapin_columns_to_keep <- colnames(seur.gapin@meta.data)[1:32]
+gapin_columns_to_keep <- gapin_columns_to_keep[!gapin_columns_to_keep %in% c("seurat_clusters", "RNA_snn_res.0.7", "RNA_snn_res.1.2")]
+seur.gapin@meta.data <- seur.gapin@meta.data[,gapin_columns_to_keep]
+colnames(seur.gapin@meta.data)[6] <- "sex"
+colnames(seur.gapin@meta.data)[8] <- "donor_id"
+colnames(seur.gapin@meta.data)[11] <- "tissue"
+colnames(seur.gapin@meta.data)[14] <- "cell_clusters"
+seur.gapin@meta.data[,"cell_clusters"] <- paste0("c",seur.gapin@meta.data[,"cell_clusters"])
+seur.gapin@meta.data$study <- "gapin_data"
+
+# Park data
+colnames(seur.park2@meta.data)[13] <- "Batch"
+colnames(seur.park2@meta.data)[20] <- "percent.mt"
+seur.park2@meta.data$tissue <- "Thymus"
+seur.park2@meta.data$study <- "park_data"
+# table(seur.park2@meta.data$tissue, useNA="ifany")
+# table(seur.park2@meta.data$Batch, useNA="ifany")
+
+
+## GET RAW COUNTS ####
+# counts.gapin <- seur.gapin@assays[["RNA"]]@counts
+# metadf.gapin <- seur.gapin@meta.data
+# counts.park  <- seur.park2@assays[["RNA"]]@counts
+# metadf.park  <- seur.park2@meta.data
+
+
+## ADD DIFFERENT LEVELS OF CELL ANNOTATION TO GAPIN DATA ####
+# DimPlot(seur.park2, group.by = "Anno_level_1", label=T)
+# DimPlot(seur.park2, group.by = "Anno_level_2", label=T)
+# DimPlot(seur.park2, group.by = "Anno_level_3", label=T)
+# DimPlot(seur.park2, group.by = "Anno_level_5", label=T)
+
+seur.gapin@meta.data$Anno_level_1 <- case_when(
+  seur.gapin@meta.data$cell.ident %in% c("NKT", "MAIT", "GD") ~ "Innate_T",
+  seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "T",
 )
+# table(seur.gapin@meta.data[,c("cell.ident", "Anno_level_1")], useNA="ifany")
+# seur.gapin@meta.data$Anno_level_2 <- case_when(
+#   seur.gapin@meta.data$tissue=="PBMC" ~ "Periph_T",
+#   seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c0", "c1") ~ "DN",
+#   seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c2") ~ "DP",
+#   seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) & seur.gapin@meta.data$cell.ident %in% c("NKT", "MAIT", "GD") ~ "Innate_T",
+#   seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) & seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "SP"
+# )
+# table(seur.gapin@meta.data[,c("tissue", "Anno_level_2")], useNA="ifany")
+seur.gapin@meta.data$Anno_level_3 <- case_when(
+  seur.gapin@meta.data$tissue=="PBMC"   & seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:11) ~ "pbmc_T_naive",
+  seur.gapin@meta.data$tissue=="PBMC"   & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) ~ "pbmc_T_memory",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c0", "c1") ~ "DN",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c2") ~ "DP",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17)           & seur.gapin@meta.data$cell.ident == "GD" ~ "γδT",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c3", "c11", "c9", "c10") & seur.gapin@meta.data$cell.ident != "GD" ~ "T_naive",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c4"                          & seur.gapin@meta.data$cell.ident != "GD" ~ "T(agonist)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c5"                          & seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(I)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c6"                          & seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(II)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c7"                          & seur.gapin@meta.data$cell.ident != "GD" ~ "Treg",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c8"                          & seur.gapin@meta.data$cell.ident != "GD" ~ "T_IFNsignaling",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17)          & seur.gapin@meta.data$cell.ident != "GD" ~ "Teffector",
+)
+# table(seur.gapin@meta.data[,c("tissue", "Anno_level_3")], useNA="ifany")
+# table(seur.gapin@meta.data[,c("cell_clusters", "Anno_level_3")], useNA="ifany")
+
+
+seur.gapin@meta.data$Anno_level_5 <- case_when(
+  # PBMC
+  seur.gapin@meta.data$tissue=="PBMC"   & seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:11)  ~ "pbmc_T_naive",
+  seur.gapin@meta.data$tissue=="PBMC"   & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) ~ "pbmc_T_memory",
+  # THYMUS
+  # THYMUS - DN
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c0" ~ "DN(Q)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c1" ~ "DN(P)",
+  # THYMUS - DP
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c2" ~ "DP",
+  # THYMUS - γδ
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17)          & seur.gapin@meta.data$cell.ident == "GD" ~ "γδT",
+  # THYMUS - T naive
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c3", "c9")              & seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "αβT(entry)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c11", "c10")            & seur.gapin@meta.data$cell.ident == "CD4" ~ "CD4+T",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c11", "c10")            & seur.gapin@meta.data$cell.ident == "CD8" ~ "CD8+T",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c3", "c9","c11", "c10") & seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_naive",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% c("c3", "c9","c11", "c10") & seur.gapin@meta.data$cell.ident == "MAIT" ~ "MAIT_naive",
+  # THYMUS - Tagnonist
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c4"                         & seur.gapin@meta.data$cell.ident != "GD" ~ "T(agonist)",
+  # THYMUS - CD8aa
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c5"                         & seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(I)",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c6"                         & seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(II)",
+  # THYMUS - Treg
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c7"                         & seur.gapin@meta.data$cell.ident != "GD" ~ "Treg",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c8"                         & seur.gapin@meta.data$cell.ident != "GD" ~ "T_IFNsignaling",
+  # THYMUS - effector
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17)         & seur.gapin@meta.data$cell.ident == "CD4" ~ "CD4+T_effector",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17)         & seur.gapin@meta.data$cell.ident == "CD8" ~ "CD8+T_effector",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters == "c12"                        & seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_effector_Tcm",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 13:17)         & seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_effector_Tem",
+  seur.gapin@meta.data$tissue=="Thymus" & seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17)         & seur.gapin@meta.data$cell.ident == "MAIT" ~ "MAIT_effector_Tem",
+)
+# table(seur.gapin@meta.data[,c("Anno_level_5", "Anno_level_3")], useNA="ifany")
+```
+
+#### 2.5.3. Integrate data
+```{r fullpark-gapin-integration3, fig.height=10, fig.width=10}
+## MAKE SEURAT OBJECT
+# seur.combined <- merge(CreateSeuratObject(counts=seur.gapin@assays[["RNA"]]@counts,
+#                                           meta.data = seur.gapin@meta.data),
+#                        CreateSeuratObject(counts=seur.park2@assays[["RNA"]]@counts,
+#                                           meta.data = seur.park2@meta.data))
+seur.combined <- merge(seur.gapin, seur.park2)
+
+# Sanity checks
+sum(ncol(seur.gapin), ncol(seur.park2)) # sanity check number of cells
+seur.gapin@assays[["RNA"]]@data[5:10,1:5]
+seur.combined@assays[["RNA"]]@data[5:10,1:5]
+seur.park2@assays[["RNA"]]@data[5:10,1:5]
+seur.combined@assays[["RNA"]]@data[5:10,78608:78613] # same data counts
+table(seur.combined@meta.data$tissue, useNA="ifany")
+table(seur.combined@meta.data$study, useNA="ifany")
+table(seur.combined@meta.data$cell_clusters, useNA="ifany")
+table(seur.combined@meta.data$Batch, useNA="ifany")
+table(seur.combined@meta.data$Anno_level_1, useNA="ifany")
+table(seur.combined@meta.data$Anno_level_3, useNA="ifany")
+table(seur.combined@meta.data$Anno_level_5, useNA="ifany")
+
+# Save seurat object
+# saveRDS(seur.combined, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_fullpark_fullgapin_23-05-02.rds")
+
+
+# ## NORMALIZE
+# seur.list <- SplitObject(seur.combined, split.by = "Batch")
+# 
+# seur.list <- lapply(X = seur.list, FUN = function(x) {
+#     x <- NormalizeData(x)
+#     x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+# })
+# features <- SelectIntegrationFeatures(object.list = seur.list, nfeatures=2000)
+# 
+# 
+# ## INTEGRATE
+# anchors <- FindIntegrationAnchors(object.list = seur.list, anchor.features = features)
+# seur.integrated <- IntegrateData(anchorset = anchors)
+# 
+# 
+# ## INTEGRATED ANALYSIS
+# seur.integrated <- ScaleData(seur.integrated, verbose = FALSE)
+# seur.integrated <- RunPCA(seur.integrated, npcs = 50, verbose = FALSE)
+# seur.integrated <- RunUMAP(seur.integrated, reduction = "pca", dims = 1:30)
+
+
+## VISUALIZE
+# DimPlot(seur.integrated, reduction = "umap", group.by = "study")
+```
+
+#### 2.5.4. Get markers
+First at high level:
+- DP
+- cTEC
+- mTEC
+- iNKT
+- MAIT
+
+```{r fullpark-gapin-integration4, fig.height=10, fig.width=10}
+## PARK MARKERS
+# Markers bigger categories
+Idents(seur.park2) <- "Anno_level_3"
+markers.dp <- FindMarkers(seur.park2, ident.1="DP", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.dp %>% arrange(-avg_log2FC)
+markers.ctec <- FindMarkers(seur.park2, ident.1="cTEC", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.ctec %>% arrange(-avg_log2FC)
+markers.mtec <- FindMarkers(seur.park2, ident.1="mTEC", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.mtec %>% arrange(-avg_log2FC)
+
+DimPlot(seur.park2, group.by = "Anno_level_5", label=T)
+VlnPlot(seur.park2, group.by = "Anno_level_3", features=c("MR1"), raster=F)
+
+
+## GAPIN MARKERS
+Idents(seur.gapin) <- "Anno_level_5"
+markers.nkt_naive <- FindMarkers(seur.gapin, ident.1="iNKT_naive", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.nkt_naive %>% arrange(-avg_log2FC)
+markers.nkt_effectorTcm <- FindMarkers(seur.gapin, ident.1="iNKT_effector_Tcm", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.nkt_effectorTcm %>% arrange(-avg_log2FC)
+markers.nkt_effectorTem <- FindMarkers(seur.gapin, ident.1="iNKT_effector_Tem", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.nkt_effectorTem %>% arrange(-avg_log2FC)
+
+markers.mait_naive <- FindMarkers(seur.gapin, ident.1="MAIT_naive", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.mait_naive %>% arrange(-avg_log2FC)
+markers.mait_effectorTem <- FindMarkers(seur.gapin, ident.1="MAIT_effector_Tem", min.pct=0.5, logfc.threshold = 0.5, only.pos=T)
+markers.mait_effectorTem %>% arrange(-avg_log2FC)
+
+DimPlot(seur.gapin, reduction="UMAP_50", group.by = "Anno_level_3", label=T)
+
+
+## JOIN INTO ONE TABLE
+final_markers <- data.frame(
+           "DP"               = markers.dp %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes),
+           "cTEC"             = markers.ctec %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes),
+           "mTEC"             = markers.mtec %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes),
+           "NKT_naive"        = markers.nkt_naive %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes) %>% append(rep(NA,24)),
+           "NKT_effectorTcm"  = markers.nkt_effectorTcm %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes),
+           "NKT_effectorTem"  = markers.nkt_effectorTem %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes)  %>% append(rep(NA,16)),
+           "MAIT_naive"       = markers.mait_naive %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes)  %>% append(rep(NA,10)),
+           "MAIT_effectorTem" = markers.mait_effectorTem %>% arrange(-avg_log2FC) %>% head(50) %>% rownames_to_column("genes") %>% pull(genes) %>% append(rep(NA,14))
+           )
+# write.csv2(final_markers, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/cellphonedb_markers.csv")
+
+markers.dp %>%
+  rownames_to_column("genes") %>%
+  filter(genes=="CD1D")
 ```
 

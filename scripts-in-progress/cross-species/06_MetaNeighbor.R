@@ -1,14 +1,17 @@
 # Import librairies
+library(Seurat)
 library(MetaNeighbor)
 library(SummarizedExperiment)
 library(gplots)
 library(dendextend)
 library(ggplot2)
+library(cowplot)
+library(RColorBrewer)
 library(tidyverse)
 
 # Import data
 seur.ms <- readRDS("~/Projects/HumanThymusProject/data/cross-species/00_Reproduce_UMAPs/ms_seurobj.rds")
-DimPlot(seur.ms)
+# DimPlot(seur.ms)
 cols_nkt <- c("#810f7c", "#8856a7", "#8c96c6", "#b3cde3", "#edf8fb")
 names(cols_nkt) <- unique(seur.ms$cell_type)
 SCpubr::do_DimPlot(seur.ms, 
@@ -28,7 +31,16 @@ seur.hu <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12
 colors_clusters_NKT <- c("0" = "#d8443c", "1" = "#e09351", "2" = "gold", "3" = "#74c8c3", "4" = "#5a97c1",
                          "5" = "#a40000", "6" = "#72bcd5")
 Idents(seur.hu) <- seur.hu$new_clusters_NKT
-DimPlot(seur.hu)
+SCpubr::do_DimPlot(seur.hu, 
+                   group.by = "new_clusters_NKT",
+                   label=T,
+                   label.color="black",
+                   legend.position = "none",
+                   repel=T,
+                   plot.title = "Human",
+                   colors.use=colors_clusters_NKT,
+                   font.size = 24)
+
 
 ortholog.df <- read.csv("~/Projects/HumanThymusProject/data/cross-species/03_BiomartTable/big_ass_ortholog_table.csv")
 length(unique(ortholog.df$ms_symbol_data)) # 17,085 ms genes
@@ -106,6 +118,7 @@ head(ms.metadata)
 hu.metadata$study <- "Human"
 hu.metadata <- hu.metadata[,c("new_clusters_NKT", "study")]
 colnames(hu.metadata)[1] <- "clusters_NKT"
+hu.metadata$clusters_NKT <- paste0("c", hu.metadata$clusters_NKT)
 head(hu.metadata)
 
 ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
@@ -129,17 +142,23 @@ mtn <- MetaNeighborUS(var_genes=total.hvg,
                       dat=count,
                       study_id=seur.total$study,
                       cell_type=seur.total$clusters_NKT,
-                      fast_version=TRUE)
-
+                      fast_version=FALSE)
+# saveRDS(mtn, "~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu_mtnslowversion.rds")
+mtn <- readRDS("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu_mtnslowversion.rds")
 
 # Heatmap
 mtn.sub <- mtn[1:5,6:12]
+mtn.sub <- mtn.sub[rev(rownames(mtn.sub)),]
 
-jpeg("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu3.jpeg",
+jpeg("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu_slowversion.jpeg",
      width=1000, height=1000, res=200)
-heatmap.2(mtn.sub,
+heatmap.2(mtn.sub[,order(colnames(mtn.sub))],
           # trace
           trace="none",
+          # dendrogram
+          Rowv=FALSE,
+          Colv=FALSE,
+          dendrogram="none",
           # superimpose a density histogram on color key
           density.info="none",
           # color scale
@@ -147,13 +166,82 @@ heatmap.2(mtn.sub,
           breaks=seq(0,1,length=101),
           key.xlab = "AUROC",
           key.title="",
+          keysize = 1.2,
           # text labels
-          main="",
+          main="Mouse vs Human iNKT",
           cexRow=0.6,
           cexCol=0.6,
           # margins
-          margins=c(8,6))
+          margins=c(6,6))
 dev.off()
+
+
+# Bubble plot
+library(reshape2)
+library(ggrepel)
+mtn.df <- melt(mtn)
+mtn.df <- mtn.df %>%
+  filter(str_detect(Var1,"Human")) %>%
+  mutate(Var1 = gsub("Human\\|", "", Var1)) %>%
+  filter(str_detect(Var2, "Mouse")) %>%
+  mutate(Var2 = gsub("Mouse\\|", "", Var2))
+
+
+# Get number of cells per human cluster and per mouse cluster
+mtn.df <- mtn.df %>%
+  rename(human=Var1, mouse=Var2, auroc=value) %>%
+  # add nb of cells per human cluster
+  mutate(Var1=gsub("c", "", human)) %>%
+  left_join(as.data.frame(table(seur.hu$new_clusters_NKT)), by="Var1") %>%
+  dplyr::rename(ncells_human=Freq) %>%
+  # add nb of cells per mouse cluster
+  select(-Var1) %>%
+  mutate(Var1=mouse) %>%
+  left_join(as.data.frame(table(seur.ms$cell_type)), by="Var1") %>%
+  dplyr::rename(ncells_mouse=Freq) %>%
+  select(-Var1)
+
+# NUMBER OF HUMAN NKT CELLS PER CLUSTER
+bp.x <- ggplot(data=mtn.df, aes(x=factor(human, levels=paste0("c", 0:6)), y=ncells_human))+
+  geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
+  scale_x_discrete(position="top")+
+  labs(y="#cells")+
+  theme(#axis.title.y = element_blank(),
+    axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y=element_text(size=20),
+    axis.text.x = element_text(size = 15), axis.title.x = element_blank(), axis.line.x=element_blank(),
+    legend.position = "none") #+
+# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# NUMBER OF MOUSE NKT CELLS PER CLUSTER
+order_mouse <- c("Stage0", "iNKTp", "iNKT2", "iNKT17", "iNKT1")
+bp.y <- ggplot(data=mtn.df, aes(x=factor(mouse, levels=rev(order_mouse)), y=ncells_mouse))+
+  geom_bar(stat="identity", fill="#bdbdbd") +
+  scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_text(size=15), axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_text(size=20),
+        axis.line.y=element_blank(),
+        legend.position = "none")# +
+# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# BUBBLE PLOT
+# library(scales)
+hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("c", 0:6)),
+                               y=factor(mouse, levels=rev(order_mouse)),
+                               size = auroc,
+                               color= auroc)) +
+  geom_point(alpha=0.7)+
+  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC")+
+  labs(x="Human clusters",y="Mouse clusters", size="AUROC")+
+  theme_cowplot()+
+  theme(legend.position="bottom", legend.key.width = unit(0.8, 'cm'),
+        axis.text = element_text(size=15), axis.title=element_text(size=20))
+
+# COMBINE
+library(patchwork)
+(bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
+# ggsave("~/Projects/HumanThymusProject/data/cross-species/04_Metaneighbor/nkt_ms-hu_metaneighbor_bubbleplot1.svg", width=9, height=8)
 
 
 

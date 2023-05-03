@@ -7,7 +7,7 @@
 # 1. IMPORT ####
 # **************
 
-# Import librairies
+# Import libraries
 library(Seurat)
 library(ggplot2)
 # library(ggpointdensity)

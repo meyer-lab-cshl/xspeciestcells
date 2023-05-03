@@ -152,7 +152,7 @@ markers.subsets <- readr::read_csv("results/top20markers_thymic_populations.csv"
 hvgs.subsets <- readr::read_csv("results/hvgs_thymic_populations.csv")
 
 # From: Heimli M, Flåm ST, Hjorthaug HS, Trinh D, Frisk M, Dumont K-A, Ribarska
-# T, Tekpli X, Saare M and Lie BA (2023) Multimodal human thymic pro!ling
+# T, Tekpli X, Saare M and Lie BA (2023) Multimodal human thymic profiling
 # reveals trajectories and cellular milieu for T agonist selection.Front.
 # Immunol doi: 10.3389/fimmu.2022.1092028
 

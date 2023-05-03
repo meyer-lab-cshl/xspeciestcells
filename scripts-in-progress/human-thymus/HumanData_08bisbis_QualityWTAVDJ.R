@@ -50,7 +50,7 @@ df <- as.data.frame(seur@meta.data)
 # FeatureScatter(test, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "Method")
 
 # Look at count/gene relationship per method
-ggplot(df, aes(x=nCount_RNA, y=nFeature_RNA, color=Method))+
+ggplot(df %>% filter(Batch %in% c("C", "D")), aes(x=nCount_RNA, y=nFeature_RNA, color=Method))+
   facet_wrap(~Batch)+
   geom_point(size=0.1)+
   scale_color_manual(values=c("#d01c8b", "#4dac26"))+

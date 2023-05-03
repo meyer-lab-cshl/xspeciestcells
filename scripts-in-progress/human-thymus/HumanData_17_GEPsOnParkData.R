@@ -10,7 +10,7 @@
 # Import librairies
 library(Seurat)
 library(cowplot)
-library(ggplot)
+library(ggplot2)
 
 path <- "~/Projects/HumanThymusProject/data/human-thymus/HumanData_17_GEPsOnParkData/"
 

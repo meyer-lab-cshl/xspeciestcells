@@ -546,6 +546,25 @@ ggdraw()+
 ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_bubbleplot2.jpeg", width=12, height=12)
 ```
 
+#### 2.3.2. Score Park's NKT signature on our data
+
+```{r}
+# Get NKT gene signature
+park_markergenes <- read.csv("../../data/park_genesignatures.csv", row.names=1)
+
+# add module score
+seur <- AddModuleScore(object = seur, assay = "RNA", features = list("nkt"=park_markergenes$NKT), name=c("park_nkt"))
+FeaturePlot(seur, features="park_nkt1", reduction="UMAP_50")
+VlnPlot(seur, features="park_nkt1", group.by="new_clusters", split.by="cell.ident")+
+  scale_fill_manual(values=brewer.pal(5, "Dark2"))+
+  labs(x="Clusters", title="Park NKT gene signature")
+# ggsave("../../data/human-thymus/HumanData_16_ParkIntegration/park_nktsignature_integratedumap.jpeg", width=10, height=6)
+VlnPlot(seur, features="CCR6", group.by="new_clusters", split.by="cell.ident")+
+  scale_fill_manual(values=brewer.pal(5, "Dark2"))+
+  labs(x="Clusters", title="CCR6 expression")
+ggsave("../../data/human-thymus/vlnplt_ccr6expression.jpeg", width=10, height=6)
+```
+
 
 
 

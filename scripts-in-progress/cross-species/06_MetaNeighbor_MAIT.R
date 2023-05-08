@@ -43,7 +43,6 @@ SCpubr::do_DimPlot(seur.ms,
 seur.hu <- readRDS("./data/human-thymus/HumanData_12_AnalysisByLineage/thymus.MAIT_03_02_23.RDS")
 colors_clusters_MAIT <- c("MAIT_c0" = "#d8443c", "MAIT_c1" = "#e09351", "MAIT_c2" = "gold", "MAIT_c3" = "#74c8c3", "MAIT_c5" = "#5a97c1",
                          "MAIT_c4" = "#a40000", "MAIT_c6" = "#fec44f")
-Idents(seur.hu) <- seur.hu$new_clusters_NKT
 SCpubr::do_DimPlot(seur.hu, 
                    group.by = "new_clusters_MAIT",
                    label=T,
@@ -161,7 +160,7 @@ mtn <- MetaNeighborUS(var_genes=total.hvg,
                       cell_type=seur.total$clusters_MAIT,
                       fast_version=FALSE)
 # saveRDS(mtn, "./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
-# mtn <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
+mtn <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
 
 # Heatmap
 mtn.sub <- mtn[1:7,8:14]
@@ -209,55 +208,64 @@ mtn.df <- mtn.df %>%
   # add nb of cells per human cluster
   left_join(as.data.frame(table(seur.hu$new_clusters_MAIT)), by="Var1") %>%
   dplyr::rename(ncells_human=Freq, human=Var1, Var1=Var2) %>%
+  mutate(totalcells_human = dim(seur.hu)[2],
+         propcells_human = ncells_human*100/totalcells_human) %>%
   # add nb of cells per mouse cluster
   left_join(as.data.frame(table(seur.ms$cell_type)), by="Var1") %>%
-  dplyr::rename(ncells_mouse=Freq, mouse=Var1, auroc=value)
+  dplyr::rename(ncells_mouse=Freq, mouse=Var1, auroc=value) %>%
+  mutate(totalcells_mouse = dim(seur.ms)[2],
+         propcells_mouse = ncells_mouse*100/totalcells_mouse)
 
-# NUMBER OF HUMAN NKT CELLS PER CLUSTER
-bp.x <- ggplot(data=mtn.df %>% select(human,ncells_human) %>% distinct(),
-               aes(x=factor(human, levels=paste0("MAIT_c", 0:6)), y=ncells_human))+
+
+# PROPORTION OF HUMAN MAIT CELLS IN EACH CLUSTER
+bp.x <- ggplot(data=mtn.df %>% select(human,propcells_human) %>% distinct(),
+               aes(x=factor(human, levels=paste0("MAIT_c", 0:6)), y=propcells_human))+
   geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
   scale_x_discrete(position="top")+
-  ylim(c(0,2700))+
-  labs(y="#cells")+
-  theme(#axis.title.y = element_blank(),
-    axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y=element_text(size=20),
-    axis.text.x = element_text(size = 15, angle=45, hjust=0), axis.title.x = element_blank(), axis.line.x=element_blank(),
-    legend.position = "none") #+
-# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+  scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+
+  labs(y="%cells")+
+  theme(axis.text.y = element_text(size=15),
+        axis.ticks.y = element_blank(),
+        axis.title.y=element_text(size=20),
+        axis.text.x = element_text(size = 15, angle=45, hjust=0),
+        axis.title.x = element_blank(), axis.line.x=element_blank(),
+        legend.position = "none")
 
-# NUMBER OF MOUSE NKT CELLS PER CLUSTER
+
+# PROPORTION OF MOUSE MAIT CELLS IN EACH CLUSTER
 order_mouse <- c("MAIT0", "Cluster 7", "CyclingG2M", "CyclingS", "MAIT1", "MAIT17a", "MAIT17b")
-bp.y <- ggplot(data=mtn.df %>% select(mouse,ncells_mouse) %>% distinct(),
-               aes(x=factor(mouse, levels=rev(order_mouse)), y=ncells_mouse))+
+bp.y <- ggplot(data=mtn.df %>% select(mouse,propcells_mouse) %>% distinct(),
+               aes(x=factor(mouse, levels=rev(order_mouse)), y=propcells_mouse))+
   geom_bar(stat="identity", fill="#bdbdbd") +
-  ylim(c(0,2700))+
-  scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
+  scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+
+  scale_x_discrete(position="top") +
+  labs(y="%cells")+ coord_flip() + theme_cowplot()+
   theme(axis.title.y = element_blank(),
-        axis.text.y = element_text(size=15), axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
+        axis.text = element_text(size=15),
+        axis.ticks.x = element_blank(),
         axis.title.x = element_text(size=20),
         axis.line.y=element_blank(),
-        legend.position = "none")# +
-# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+        legend.position = "none")
+
+
 
 # BUBBLE PLOT
 # library(scales)
 hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("MAIT_c", 0:6)),
-                               y=factor(mouse, levels=rev(order_mouse)),
-                               color= auroc)) +
-  geom_point(aes(size=auroc))+
-  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="black")+
-  scale_size_continuous(range = c(1, 15))+
-  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=c(0,0.2,0.4,0.6,0.8,1))+
+                               y=factor(mouse, levels=rev(order_mouse)))) +
+  geom_point(aes(size=auroc, color= auroc))+
+  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
+  scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
+  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
   labs(x="Human clusters",y="Mouse clusters", size="AUROC")+
   theme_cowplot()+
   theme(legend.position="bottom", legend.key.width = unit(0.8, 'cm'),
         axis.text = element_text(size=15), axis.title=element_text(size=20), axis.text.x=element_text(angle=45, hjust=1))
 
+
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-# ggsave("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_metaneighbor_bubbleplot1.svg", width=9, height=8)
+ggsave("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_metaneighbor_bubbleplot3.svg", width=9, height=8)
 
 

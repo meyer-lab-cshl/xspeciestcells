@@ -966,6 +966,57 @@ pheatmap(counts.corr.sig,
     main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
 dev.off()
 
+
+# # Are some of the genes present in the GEPs?
+# dim(counts.corr.sig)
+# test <- data.frame("gene"=colnames(counts.corr.sig))
+# test <- test %>%
+#   left_join(geps.df %>% mutate("rank"=dplyr::row_number()) %>% pivot_longer(!rank, names_to="GEP", values_to="gene"),
+#             by="gene", keep=FALSE) %>%
+#   mutate(GEP=replace_na(GEP, "noGEP"),
+#          rank=replace_na(rank, 0)) %>%
+#   group_by(gene) %>%
+#   dplyr::slice(which.min(rank))
+# length(unique(test$GEP))
+# 
+# 
+# for(i in 1:13){
+#   col_gep <- rep("#f0f0f0", 13)
+#   names(col_gep) <- unique(test$GEP)
+#   # col_gep[["GEP_1"]] <- "#cbd5e8"
+#   # col_gep[["GEP_4"]] <- "#fdcdac"
+#   # col_gep[["GEP_5"]] <- "#b3e2cd"
+#   # col_gep[["GEP_6"]] <- "#f4cae4"
+#   col_gep[i] <- "red"
+#   
+#   filename <- paste0("../../data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/highlight_gep/heatmap_", names(col_gep)[i], ".jpeg")
+#   
+#   jpeg(filename, height = 3000, width = 3500, res = 300)
+#   pheatmap(counts.corr.sig,
+#       color = heat_colors,
+#       scale = "column", # z-score
+#       cluster_rows = T,
+#       cluster_cols = T,
+#       # clustering_method="complete",
+#       border_color = NA,
+#       # Create gaps to separate CD4/NKT
+#       # gaps_row=c(2,6, 11, 14),
+#       # cutree_rows = 5,
+#       cutree_cols = 10,
+#       # Change rows text format
+#       show_rownames = T,
+#       fontsize_row = 10,
+#       annotation_row=matcol,
+#       annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid, cell_state=col_cellstate, GEP=col_gep),
+#       annotation_col = as.data.frame(test %>% select(!rank) %>% column_to_rownames(var="gene")),
+#       # Change columns
+#       angle_col=45,
+#       # fontsize_col = 1,
+#       show_colnames=F,
+#       # title
+#       main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
+#   dev.off()
+# }
 ```
 
 Get the genes from each dendrogram cluster

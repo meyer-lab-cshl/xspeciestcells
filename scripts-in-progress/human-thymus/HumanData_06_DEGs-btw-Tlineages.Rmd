@@ -777,6 +777,9 @@ groups <- metadata %>%
   select(cell_id, batch_id, cluster_id)
 print(groups) # sanity check
 
+# Remove levels that are absent
+groups$cluster_id <- factor(groups$cluster_id)
+
 
 ## ****************
 ## AGGREGATE COUNTS
@@ -802,11 +805,11 @@ counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have
 # Have metadata df where rownames are the colnames of "counts.deseq" (the groups)
 metadf.deseq <- groups %>%
   distinct() %>%
-  unite(sample_id, remove=FALSE) %>%
-  mutate(gene_program=ifelse(cluster_id %in% c(9,10,11), "naive",
-                             ifelse(cluster_id==12, "Tcm_GEP6",
-                                    ifelse(cluster_id %in% c(13,14), "Th17_GEP1",
-                                           ifelse(cluster_id %in% 15:17, "Temra_GEP4", NA)))))
+  unite(sample_id, remove=FALSE)# %>%
+  # mutate(gene_program=ifelse(cluster_id %in% c(9,10,11), "naive",
+  #                            ifelse(cluster_id==12, "Tcm_GEP6",
+  #                                   ifelse(cluster_id %in% c(13,14), "Th17_GEP1",
+  #                                          ifelse(cluster_id %in% 15:17, "Temra_GEP4", NA)))))
 rownames(metadf.deseq) <- metadf.deseq$sample_id
 
 # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
@@ -868,7 +871,9 @@ ggplot(counts_pca, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
 # Compute pairwise correlation values on the batch-effect-corrected matrix
 rld_cor <- cor(counts_corrected[select_rv,])
 # Plot heatmap
-pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
+pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id", "cluster_id", "batch_id"), drop=F],
+        annotation_row=matcol,
+        annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),)
 ```
 
 
@@ -878,7 +883,7 @@ pheatmap(rld_cor, annotation = metadf.deseq[, c("cell_id"), drop=F])
 ## RUN DESEQ2
 # Run DESeq2 differential expression analysis
 dds <- DESeq(dds, test="LRT", reduced=~batch_id)
-dds <- dds[which(mcols(dds)$fullBetaConv),]
+dds <- dds[which(mcols(dds)$fullBetaConv),] # remove 3 genes that didn't converge
 
 # Plot dispersion estimates
 plotDispEsts(dds)
@@ -909,12 +914,16 @@ dim(genes.sig) # 1164 genes (if padj & log2FC filter), 4796 genes (if padj filte
 # Get corrected counts (that we batch corrected with limma earlier)
 counts.corr.sig <- t(counts_corrected[rownames(genes.sig),]) # keep only the genes of interest
 counts.corr.sig[1:5,1:5]
-dim(counts.corr.sig) # 1164 genes
+dim(counts.corr.sig) # 4796 genes (if padj filter)
 
 # Set a color palette
 heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 # Color for row annotation
-matcol <- metadf.deseq %>% select(cell_id, batch_id, cluster_id)
+matcol <- metadf.deseq %>%
+  select(cell_id, batch_id, cluster_id) %>%
+  mutate(cell_state=ifelse(cluster_id %in% 9:11, "Tnaive",
+                           ifelse(cluster_id==12, "Tcm",
+                                  ifelse(cluster_id %in% 13:14, "Th17", "Temra"))))
 col_cellid <- brewer.pal(5, "Paired")
 names(col_cellid) <- unique(matcol$cell_id)
 col_batchid <- brewer.pal(5, "Set2")
@@ -922,17 +931,23 @@ names(col_batchid) <- unique(matcol$batch_id)
 col_clusterid <- c("9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
                    "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
                    "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57")
-col_clusterid <- c("9" = "gold", "10" = "gold", "11" = "gold",
-                   "12" = "#a40000", "13" = "#72bcd5", "14" = "#72bcd5",
-                   "15" = "blueviolet", "16" = "blueviolet", "17" = "blueviolet")
+col_cellstate <- c("Tnaive"= "#b3e2cd",
+                   "Tcm"   = "#f4cae4",
+                   "Th17"  = "#cbd5e8",
+                   "Temra" = "#fdcdac")
+# col_clusterid <- c("9" = "gold", "10" = "gold", "11" = "gold",
+#                    "12" = "#a40000", "13" = "#72bcd5", "14" = "#72bcd5",
+#                    "15" = "blueviolet", "16" = "blueviolet", "17" = "blueviolet")
 
 # Run pheatmap using the metadata data frame for the annotation
-# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_log2FCabove1_1.jpeg"), height = 3000, width = 3500, res = 300)
+jpeg("../../data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_adjpval01.jpeg", height = 3000, width = 3500, res = 300)
+# svg("../../data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_adjpval01.svg", height = 10, width = 11)
 pheatmap(counts.corr.sig,
     color = heat_colors,
     scale = "column", # z-score
     cluster_rows = T,
     cluster_cols = T,
+    # clustering_method="complete",
     border_color = NA,
     # Create gaps to separate CD4/NKT
     # gaps_row=c(2,6, 11, 14),
@@ -942,46 +957,15 @@ pheatmap(counts.corr.sig,
     show_rownames = T,
     fontsize_row = 10,
     annotation_row=matcol,
-    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
+    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid, cell_state=col_cellstate),
     # Change columns
     angle_col=45,
     # fontsize_col = 1,
     show_colnames=F,
     # title
     main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
-# dev.off()
+dev.off()
 
-
-# Reorder counts.norm.sig by cluster number
-order1 <- metadf.deseq %>% arrange(cluster_id, batch_id)
-order2 <- metadf.deseq %>% arrange(batch_id, cluster_id)
-# counts.norm.sig[1:5,1:5]
-counts.norm.sig <- counts.norm.sig[rownames(order1),]
-counts.norm.sig <- counts.norm.sig[rownames(order2),]
-counts.norm.sig[1:5,1:5]
-# jpeg(file.path(path.plots, "LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid4.jpeg"), height = 3000, width = 3500, res = 300)
-pheatmap(counts.norm.sig,
-    color = heat_colors,
-    scale = "column", # z-score
-    cluster_rows = F,
-    cluster_cols = T,
-    border_color = NA,
-    # Create gaps to separate CD4/NKT
-    gaps_row=c(16,24,33, 44),
-    # cutree_rows = 5,
-    # cutree_cols = 5,
-    # Change rows text format
-    show_rownames = T,
-    fontsize_row = 10,
-    annotation_row=matcol,
-    annotation_colors = list(cell_id = col_cellid, batch_id=col_batchid, cluster_id=col_clusterid),
-    # Change columns
-    angle_col=45,
-    # fontsize_col = 1,
-    show_colnames=F,
-    # title
-    main="PBMC - LRT test - batchid+cellid+clusterid vs batchid")
-# dev.off()
 ```
 
 Get the genes from each dendrogram cluster
@@ -1009,15 +993,15 @@ out <- pheatmap(counts.corr.sig,
     # title
     main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected)")
 
-counts.corr.sig[1:5,1:5]
+# counts.corr.sig[1:5,1:5]
 gene_order <- colnames(counts.corr.sig[,out$tree_col[["order"]]])
 tree_numbers <- sort(cutree(out$tree_col, k=10))
 unique(unname(tree_numbers[gene_order])) # ORDER OF TREE
 table(tree_numbers)
 
 # ATTEMPT AT GENE LISTS
-genes_naive <- names(tree_numbers[tree_numbers==1])
-length(genes_naive) # 1420
+# genes_naive <- names(tree_numbers[tree_numbers==1])
+# length(genes_naive) # 1420
 genes_Tcm_GEP6 <- names(tree_numbers[tree_numbers==3])
 length(genes_Tcm_GEP6) # 188
 genes_Th17_GEP1 <- names(tree_numbers[tree_numbers==2])
@@ -1027,7 +1011,7 @@ length(genes_Temra_GEP4) # 1506
 
 
 # Sanity checks
-# pheatmap(counts.corr.sig[,genes_Temra_GEP6],
+# pheatmap(counts.corr.sig[,genes_naive],
 #     color = heat_colors,
 #     scale = "column", # z-score
 #     cluster_rows = T,
@@ -1052,14 +1036,34 @@ table(genes_Tcm_GEP6 %in% geps.df$GEP_6)
 table(genes_Th17_GEP1 %in% geps.df$GEP_1)
 table(genes_Temra_GEP4 %in% geps.df$GEP_4)
 
-test <- geps.df %>%
-  pivot_longer(everything(), names_to="GEP", values_to="gene") %>%
-  filter(gene %in% genes_Temra_GEP4) %>%
-  group_by(GEP) %>%
-  summarize(n_gene=n())
-ggplot(test, aes(x=GEP, y=n_gene))+
-  geom_bar(stat="identity")+
-  labs(x="", y="# genes found in GEP", title="Genes up in cluster 15-17")
+# FUNCTION FOR PLOTTING AGAINST GEPs
+compare_with_geps <- function(genesvector, color, title){
+  # Create DF
+  df <- geps.df %>%
+    pivot_longer(everything(), names_to="GEP", values_to="gene") %>%
+    filter(gene %in% genesvector) %>%
+    group_by(GEP) %>%
+    summarize(n_gene=n()) %>%
+    ungroup() %>%
+    mutate(total_gene=length(genesvector),
+           prop_genes=n_gene*100/total_gene)
+  # Plot
+  p <- ggplot(df, aes(x=factor(GEP, level=paste0("GEP_",1:12)), y=prop_genes))+
+    geom_bar(stat="identity", fill=color)+
+    labs(x="", y="% genes found in each GEP", title=title)+
+    theme_cowplot()+
+    theme(axis.text.x=element_text(angle=45, hjust=1))
+  return(p)
+}
+path.plots <- "../../data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch"
+ggsave(plot=compare_with_geps(genesvector=genes_naive, color="#b3e2cd", title="Genes from Tnaive"),
+       filename=file.path(path.plots, "comparison_DE_GEPs_naive.jpeg"), width=8, height=5)
+ggsave(compare_with_geps(genesvector=genes_Tcm_GEP6, color="#f4cae4", title="Genes from Tcm"),
+       filename=file.path(path.plots, "comparison_DE_GEPs_Tcm.jpeg"), width=8, height=5)
+ggsave(compare_with_geps(genesvector=genes_Th17_GEP1, color="#cbd5e8", title="Genes from Th17"),
+       filename=file.path(path.plots, "comparison_DE_GEPs_Th17.jpeg"), width=8, height=5)
+ggsave(compare_with_geps(genesvector=genes_Temra_GEP4, color="#fdcdac", title="Genes from Temra"),
+       filename=file.path(path.plots, "comparison_DE_GEPs_Temra.jpeg"), width=8, height=5)
 
 
 ```

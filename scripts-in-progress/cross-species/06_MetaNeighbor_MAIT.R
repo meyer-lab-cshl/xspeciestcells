@@ -215,6 +215,7 @@ mtn.df <- mtn.df %>%
   dplyr::rename(ncells_mouse=Freq, mouse=Var1, auroc=value) %>%
   mutate(totalcells_mouse = dim(seur.ms)[2],
          propcells_mouse = ncells_mouse*100/totalcells_mouse)
+# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion_DF.rds")
 
 
 # PROPORTION OF HUMAN MAIT CELLS IN EACH CLUSTER

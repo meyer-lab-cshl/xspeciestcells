@@ -204,12 +204,15 @@ mtn.df <- mtn.df %>%
   dplyr::rename(ncells_mouse=Freq) %>%
   mutate(totalcells_mouse = dim(seur.ms)[2],
          propcells_mouse = ncells_mouse*100/totalcells_mouse) %>%
-  select(-Var1)
+  select(-Var1) %>%
+  # rename human clusters
+  mutate(human=paste0("iNKT_", human))
+# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion_DF.rds")
 
 
 # PROPORTION OF HUMAN NKT CELLS IN EACH CLUSTER
 bp.x <- ggplot(data=mtn.df%>% select(human,propcells_human) %>% distinct(),
-               aes(x=factor(human, levels=paste0("c", 0:6)), y=propcells_human))+
+               aes(x=factor(human, levels=paste0("iNKT_c", 0:6)), y=propcells_human))+
   geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
   scale_x_discrete(position="top")+
   scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+

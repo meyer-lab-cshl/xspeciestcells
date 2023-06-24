@@ -186,7 +186,7 @@ gdt.hm <- ggplot(mtn.gdt, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
 
 # COMBINE
 gdt.tot <- (gdt.bpX+plot_spacer() + plot_layout(widths = c(5, 1))) / (gdt.hm + gdt.bpY + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-# ggsave("./data/cross-species/04_Metaneighbor_gdt/nkt_ms-hu_metaneighbor_bubbleplot.jpeg", width=12, height=9)
+# ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_ms-hu_metaneighbor_bubbleplot.jpeg", width=12, height=9)
 
 
 

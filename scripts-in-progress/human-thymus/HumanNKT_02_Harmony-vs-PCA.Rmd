@@ -24,7 +24,7 @@ library(Seurat)
 
 ```{r import-data}
 # Import seurat object
-seur.human <- readRDS("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_Harmony_07-22-22.RDS")
 
 # Sanity check
 print(seur.human) # 79,801 cells (it's the whole seurat object)

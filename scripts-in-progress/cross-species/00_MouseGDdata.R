@@ -28,8 +28,8 @@ plotsymbolsmap(sc,sub("(\\_|\\.).+","", colnames(sc@ndata)),fr=F,
 # *************************
 
 # Explore structure of RaceID object
-sc@umap # UMAP embedding
-sub("(\\_|\\.).+","", colnames(sc@ndata))[1:5] # sorted cell types
+head(sc@umap) # UMAP embedding
+unique(sub("(\\_|\\.).+","", colnames(sc@ndata))) # sorted cell types
 sc@expdata[1:5,1:5] # raw data
 
 
@@ -41,22 +41,25 @@ metadata <- data.frame("cell_id" = colnames(sc@expdata),
                        "cell_sort" = sub("(\\_|\\.).+","", colnames(sc@expdata)),
                        row.names = colnames(sc@expdata))
 metadata$cell_kept_sagar <- ifelse(metadata$cell_id %in% colnames(sc@ndata), T, F)
-metadata %>%
-  mutate(cell.ident = replace(cell_sort, cell_sort=="DN1", "cKIT+ DN1"),
-         cell.ident = replace(cell_sort, cell_sort=="DN3GDLO", "Pre-selected GD"),
-         cell.ident = replace(cell_sort, cell_sort=="DN3GDHI", "Post-selected GD"),
-         cell.ident = replace(cell_sort, cell_sort=="GDCD24NEG", "CD24- GD"),
-         cell.ident = replace(cell_sort, cell_sort=="GDCD24POS", "CD24+ GD"),
-         cell.ident = replace(cell_sort, cell_sort=="CD24NEG", "CD24- GD"),)
+metadata <- metadata %>%
+  mutate(cell.ident = replace(cell.ident, cell_sort=="Cd24POSCD122POS", "CD122+ GD"),
+         cell.ident = replace(cell.ident, cell_sort=="DN1", "cKIT+ DN1"),
+         # cell.ident = replace(cell_sort, cell_sort=="DN2", "DN2"),
+         # cell.ident = replace(cell_sort, cell_sort=="DN3", "DN3"),
+         cell.ident = replace(cell.ident, cell_sort=="DN3GDLO", "Pre-selected GD"),
+         cell.ident = replace(cell.ident, cell_sort=="DN3GDHI", "Post-selected GD"),
+         cell.ident = replace(cell.ident, cell_sort=="GD", "Pan GD (mainly CD24+)"),
+         cell.ident = replace(cell.ident, cell_sort=="GD1", "Pan GD (mainly CD24+)"),
+         cell.ident = replace(cell.ident, cell_sort=="GDCD24NEG", "CD24- GD"),
+         cell.ident = replace(cell.ident, cell_sort=="GDCD24POS", "Pan GD (mainly CD24+)"),
+         cell.ident = replace(cell.ident, cell_sort=="GD24NEG", "CD24- GD"))
   
 
 # Create seurat object
 seur.raw <- CreateSeuratObject(counts=counts[!rownames(counts) %in% genes_with_pipes,],
                                meta.data=metadata)
+Idents(seur.raw) <- "cell.ident"
 print(seur.raw)
-
-# add umap embedding
-# seur.raw[["umap_sagar"]] <- CreateDimReducObject(embeddings=as.matrix(sc@umap), key="UMAP_", assay=DefaultAssay(seur.raw))
 
 
 
@@ -69,13 +72,23 @@ print(seur.raw)
 # QC
 # seur.raw[["percent.mt"]] <- PercentageFeatureSet(seur.raw, pattern = "^mt-") # no mitochondrial genes
 FeatureScatter(seur.raw, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
-VlnPlot(seur.raw, features = c("nFeature_RNA", "nCount_RNA"), ncol = 3, pt.size=.01)
+VlnPlot(seur.raw, features = c("nFeature_RNA", "nCount_RNA"), ncol = 2, pt.size=.01)
 seur.filt <- subset(seur.raw, subset = nCount_RNA >= 2500) # 4122 cells left
 table(seur.filt$cell_kept_sagar) # they are all kept from authors
 
 # add umap embedding
 seur.filt[["umap_sagar"]] <- CreateDimReducObject(embeddings=as.matrix(sc@umap[colnames(seur.filt),]),
                                                   key="UMAP_", assay=DefaultAssay(seur.filt))
-seur.filt[["tsne_sagar"]] <- CreateDimReducObject(embeddings=as.matrix(sc@tsne[colnames(seur.filt),]),
+DimPlot(seur.filt, reduction="umap_sagar", label=T)
+
+# add tsne embedding
+tsne <- as.data.frame(sc@tsne)
+rownames(tsne) <- rownames(sc@umap)
+seur.filt[["tsne_sagar"]] <- CreateDimReducObject(embeddings=as.matrix(tsne[colnames(seur.filt),]),
                                                   key="TSNE_", assay=DefaultAssay(seur.filt))
-DimPlot(seur.filt, reduction="umap_sagar")
+DimPlot(seur.filt, reduction="tsne_sagar", label=T)+
+  scale_color_manual(values=RColorBrewer::brewer.pal(11, "Paired"))
+
+# Save seurat object
+saveRDS(seur.filt, "./data/cross-species/04_Metaneighbor_gdt/seuratobj_ms_gdt_sagar.rds")
+

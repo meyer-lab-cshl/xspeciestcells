@@ -17,3 +17,10 @@ cols_lineages <- c("CD4"  = "#74c476",
                    "GD"   = "#08519c",
                    "MAIT" = "#9ecae1",
                    "NKT"  = "#9e9ac8")
+
+# Cell states
+cols_cellstate <- c("Tnaive"= "#b3e2cd",
+                    "Tcm"   = "#f4cae4",
+                    "Th17"  = "#cbd5e8",
+                    "Temra" = "#fdcdac",
+                    "Treg" = "#fbb4ae")

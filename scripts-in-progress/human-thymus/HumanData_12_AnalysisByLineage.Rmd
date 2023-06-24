@@ -179,7 +179,7 @@ ggplot(df, aes(x=factor(cell_annot, level=clusters_levels), y=egress, fill=cell_
 
 ```{r preprocessing1}
 # Preprocessing
-preprocess <- function(seurobj, ndim, res, celltype, approxPCA=FALSE){
+preprocess <- function(seurobj, ndim, res, celltype, umapneighbors=50, approxPCA=FALSE){
   print(seurobj)
   cat("Cells:", unique(seurobj$group.ident), "\n")
   
@@ -202,7 +202,7 @@ preprocess <- function(seurobj, ndim, res, celltype, approxPCA=FALSE){
   # DimPlot(seurobj, reduction="pca", group.by="Method") | DimPlot(seurobj, reduction="harmony", group.by="Method")
   print(ElbowPlot(seurobj, ndims=50, reduction="harmony"))
   print("UMAP")
-  seurobj <- RunUMAP(seurobj, reduction = "harmony", dims = 1:ndim, n.neighbors=50, reduction.key = "UMAP50_")
+  seurobj <- RunUMAP(seurobj, reduction = "harmony", dims = 1:ndim, n.neighbors=umapneighbors, reduction.key = "UMAP50_")
   print("Cluster")
   seurobj <- FindNeighbors(seurobj, reduction = "harmony", dims = 1:ndim)
   seurobj <- FindClusters(seurobj, resolution = res, random.seed = 0)
@@ -751,7 +751,8 @@ SCpubr::do_DimPlot(seur.thynkt,
 
 ### 2.6. GDT cells
 ```{r preprocessing-gdt}
-seur.gd <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="GD_Thymus"), celltype = "GDthy", ndim=10, res=0.2)
+seur.gd <- preprocess(seurobj = subset(seur.filt, subset=group.ident=="GD_Thymus"), celltype = "GDthy",
+                      ndim=15, res=0.4, approxPCA=F, umapneighbors = 50)
 
 # Annotate
 # Idents(seur.gd) <- "cell_annot"
@@ -796,7 +797,7 @@ SCpubr::do_DimPlot(seur.gd,
 # Import object if necessary
 seur.thygdt <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_12_AnalysisByLineage/seurat_thymus-GDT_2023-02-27.rds")
 
-# Add thymic CD4 clusters to integrated object
+# Add thymic GDT clusters to integrated object
 table(rownames(seur@meta.data[seur@meta.data$group.ident=="GD_Thymus",]) == rownames(seur.thygdt@meta.data)) # check rownames are in same order
 seur@meta.data[seur@meta.data$group.ident=="GD_Thymus", "clusters_thyGDT"] <- seur.thygdt@meta.data$cell_annot
 table(seur@meta.data[,c("group.ident", "clusters_thyGDT")], useNA="ifany")
@@ -811,7 +812,7 @@ SCpubr::do_DimPlot(seur.thygdt,
                    label.color="black",
                    legend.position = "none",
                    repel=T,
-                   colors.use=cols_gdt,
+                   # colors.use=cols_gdt,
                    plot.title="CD8 thymocyte clusters",
                    font.size = 24) |
   SCpubr::do_DimPlot(seur.thygdt, 

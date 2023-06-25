@@ -67,6 +67,7 @@ gapindf <- gather(genes.gep, key=geneprogram, value=gene, colnames(genes.gep)) %
          geneprogram=replace(geneprogram, geneprogram=="GEP4", "GEP4_Temra"),
          geneprogram=replace(geneprogram, geneprogram=="GEP5", "GEP5_Tnaive"),
          geneprogram=replace(geneprogram, geneprogram=="GEP6", "GEP6_Tcm"))
+head(gapindf)
 table(gapindf$geneprogram, useNA="ifany")
 table(is.na(gapindf$gene))
 
@@ -88,6 +89,7 @@ canodf <- genes.cano %>%
   # convert to long format
   select(cluster, gene) %>%
   rename(geneprogram=cluster)
+head(canodf)
 genes.long[["canogamez"]] <- canodf
 # table(is.na(genes.long$canogamez$gene)) # sanity check
 
@@ -124,6 +126,7 @@ roseCD8 <- genesCD8.rose %>%
                      ifelse(geneprogram==4, "Rose | CD8_modul4_Tnaive",
                      ifelse(geneprogram==5, "Rose | CD8_modul5_Tnaive/cm", "?"))))))
 
+head(rbind(roseCD4, roseCD8))
 genes.long[["rose"]] <- rbind(roseCD4, roseCD8)
 # table(is.na(genes.long$rose$gene)) # sanity check
 # table(genes.long$rose$geneprogram, useNA="ifany")
@@ -299,7 +302,7 @@ df.facet <- df.facet %>%
 ggplot(df.facet, aes(x=reorder_within(geneprogram2, -prop_genes, geneprogram1), y=prop_genes, fill=geneprogram2))+
   geom_bar(stat="identity")+
   facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:12)), nrow=1, scales="free_x")+
-  scale_x_reordered() +
+  tidytext::scale_x_reordered() +
   ylim(c(0,30))+
   scale_fill_manual(values=cols_alldatasets)+
   theme_cowplot()+
@@ -315,8 +318,9 @@ ggplot(df.facet, aes(x=reorder_within(geneprogram2, -prop_genes, geneprogram1), 
 # 4. GENE SCORES COEXPRESSION ####
 # ********************************
 
-seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
+seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
 print(seur.human) # 78,607 cells (it's the whole seurat object)
+source("./scripts-final/colors_universal.R")
 # DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_integrated)
 
 
@@ -335,7 +339,10 @@ longdf2 <- rbind(gapindf2, canodf, roseCD4, roseCD8, poondf[,c("gene", "geneprog
 geneprograms.list <- list()
 for(gp in unique(longdf2$geneprogram)){
   print(gp)
-  genes_in_program <- longdf2 %>% filter(geneprogram==gp & gene %in% rownames(seur.human)) %>% slice_head(n=200) %>% pull(gene)
+  genes_in_program <- longdf2 %>%
+    filter(geneprogram==gp & gene %in% rownames(seur.human)) %>%
+    slice_head(n=200) %>%
+    pull(gene)
   print(length(genes_in_program))
   geneprograms.list[[gp]] <- genes_in_program
 }
@@ -347,7 +354,37 @@ seur.human <- AddModuleScore(seur.human, name = names(geneprograms.list), featur
 # Remove the annoying numbers that are being added
 colnames(seur.human@meta.data)[14:22] <- stringr::str_sub(colnames(seur.human@meta.data)[14:22], end=-2)
 colnames(seur.human@meta.data)[23:49] <- stringr::str_sub(colnames(seur.human@meta.data)[23:49], end=-3)
-# colnames(seur.human@meta.data)[26:49] <- gsub("\\.\\.\\.|\\.", "_", colnames(seur.human@meta.data)[26:49])
+
+# Checkpoint save
+# saveRDS(seur.human, "./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_top200genes.rds")
+# seur.human <- readRDS("./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_top200genes.rds")
+
+
+# ********************************************
+## 4.2. Plot co-expression on scatterplot ####
+library(GGally)
+
+test <- seur.human@meta.data %>%
+  as_tibble() %>%
+  pivot_longer(cols=colnames(seur.human@meta.data)[14:25], names_to="gep", values_to="gep_score") %>%
+  pivot_longer(cols=colnames(seur.human@meta.data)[26:49], names_to="genexprogram", values_to="genexprogram_score")
+
+ggplot(test,
+       aes(x=gep_score, y=genexprogram_score))+
+  facet_grid(genexprogram ~ gep, scales="free")+
+  # facet_wrap(~genexprogram)+
+  geom_point(aes(color=new_clusters), size=0.1)+
+  scale_color_manual(values=cols_integrated)+
+  theme_classic()
+ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/ggpairs_scatters/all_scatters.jpeg", width=20, height=50)
+
+
+ggplot(seur.human@meta.data, aes(x=GEP1_MAIT, y=Poon_CD8MAIT))+
+  geom_point(aes(color=new_clusters))+
+  scale_color_manual(values=cols_integrated)+
+  theme_classic()
+
+
 
 
 # ******************************************
@@ -441,7 +478,7 @@ Melt <- function(x) {
   ))
 }
 
-BlendMap <- function(color.matrix) {
+BlendMap <- function(color.matrix, step=2, xtext='rows', ytext="cols") {
   color.heat <- matrix(
     data = 1:prod(dim(x = color.matrix)) - 1,
     nrow = nrow(x = color.matrix),
@@ -451,35 +488,43 @@ BlendMap <- function(color.matrix) {
       1:ncol(x = color.matrix)
     )
   )
-  xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = 2)
-  ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = 2)
+  xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = step)
+  ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = step)
   color.heat <- Melt(x = color.heat)
   color.heat$rows <- as.numeric(x = as.character(x = color.heat$rows))
   color.heat$cols <- as.numeric(x = as.character(x = color.heat$cols))
   color.heat$vals <- factor(x = color.heat$vals)
   plot <- ggplot(
     data = color.heat,
-    mapping = aes_string(x = 'rows', y = 'cols', fill = 'vals')
+    mapping = aes_string(x = "rows", y = "cols", fill = 'vals')
   ) +
     geom_raster(show.legend = FALSE) +
     theme(plot.margin = unit(x = rep.int(x = 0, times = 4), units = 'cm')) +
     scale_x_continuous(breaks = xbreaks, expand = c(0, 0), labels = xbreaks) +
     scale_y_continuous(breaks = ybreaks, expand = c(0, 0), labels = ybreaks) +
     scale_fill_manual(values = as.vector(x = color.matrix)) +
+    labs(x=xtext, y=ytext)+
     theme_cowplot()
   return(plot)
 }
 
-# Test
-BlendMap(BlendMatrix(
-  two.colors = c("#999999", "#d73027"),
+# Test plotting color matrix
+color.matrix <- BlendMatrix(
+  two.colors = c("#74c476", "#fd8d3c"),
   col.threshold = 0.5,
-  negative.color = "#f7f7f7",
+  negative.color = "#737373",
   n=10
-))
+)
+BlendMap(color.matrix, step=5, xtext="GEP1_MAIT", ytext="Poon_CD8MAIT")
+# colors <- list(
+#   color.matrix[, 1], # red
+#   color.matrix[1, ], # green
+#   as.vector(x = color.matrix)
+# )
 
 
-BlendExpression <- function(data) {
+# Normalize expression level of 2 features?...
+BlendExpression <- function(data, nlevels=100) {
   if (ncol(x = data) != 2) {
     stop("'BlendExpression' only blends two features")
   }
@@ -488,24 +533,76 @@ BlendExpression <- function(data) {
     X = data,
     MARGIN = 2,
     FUN = function(x) {
-      return(round(x = 9 * (x - min(x)) / (max(x) - min(x))))
+      return(round(x = (nlevels-1) * (x - min(x)) / (max(x) - min(x))))
     }
   ))
-  data[, 3] <- data[, 1] + data[, 2] * 10
-  colnames(x = data) <- c(features, paste(features, collapse = '_'))
+  data[, 3] <- data[, 1] + data[, 2] * nlevels
+  # colnames(x = data) <- c(features, paste(features, collapse = '_'))
+  colnames(x = data) <- c(features, "blend")
   for (i in 1:ncol(x = data)) {
     data[, i] <- factor(x = data[, i])
   }
   return(data)
 }
 
-data.plot <- cbind(data.plot[, c(dims, 'ident')], BlendExpression(data = data.plot[, features[1:2]]))
+# Blend expression
+df <- seur.human@meta.data[, c("GEP9", "Poon_CD8MAIT")]
+df <- BlendExpression(df, nlevels=10)
+head(df)
+
+# Add UMAP coordinates
+dims <- seur.human@reductions$UMAP_50@cell.embeddings
+head(dims)
+
+# Make it into one df
+df_final <- cbind(df, dims, seur.human@meta.data[,"new_clusters"])
+colnames(df_final)[6] <- "clusters"
+head(df_final)
+# Sanity check
+# ggplot(df_final, aes(x=umap50_1, y=umap50_2, color=clusters))+
+#   geom_point()+
+#   scale_color_manual(values=cols_integrated)
+
+# Plot expression feature 1
+df_final %>%
+  arrange(GEP1_MAIT) %>%
+  ggplot(aes(x=umap50_1, y=umap50_2, color=as.numeric(as.character(GEP1_MAIT))))+
+  geom_point(size=0.1)+
+  scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[nrow(color.matrix), 1])
+# Plot expression feature 2
+df_final %>%
+  arrange(Poon_CD8MAIT) %>%
+  ggplot(aes(x=umap50_1, y=umap50_2, color=as.numeric(as.character(Poon_CD8MAIT))))+
+  geom_point(size=0.1)+
+  scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[1, ncol(color.matrix)])
+# Plot blend
+# cols.use <- as.vector(color.matrix)
+# names(cols.use) <- as.character(0:99)
+p <- df_final %>%
+  # arrange(Poon_CD8MAIT, GEP5_Tnaive) %>%
+  ggplot(aes(x=umap50_1, y=umap50_2,
+             color=as.numeric(as.character(blend))))+
+             # color=blend))+
+  geom_point(size=0.1)+
+  # scale_color_manual(values=cols.use)+
+  scale_color_gradientn(colours=as.vector(color.matrix))+
+  labs(x="UMAP1", y="UMAP2")+
+  theme_cowplot()+
+  theme(legend.position="none",
+        axis.text=element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        panel.border=element_rect(color="black", fill=NA, size=1))
+ggdraw(p)+
+  draw_plot(BlendMap(color.matrix, step=5, xtext="GEP9", ytext="Poon_CD8MAIT"),
+            0.05,0.06,.2,.3)
+
 
 
 # ********************************************
 ## 4.3. Plot co-expression of gene scores ####
-FeaturePlot(seur.human, reduction="UMAP_50", features=c("GEP4", "Rose_CD8_modul1_Temra"),
+FeaturePlot(seur.human, reduction="UMAP_50", features=c("GEP1_MAIT", "Poon_CD8MAIT"),
             # cols=c("lightgrey", "red"),
-            blend=T, cols=c("#f7f7f7", "#2b8cbe", "#fec44f"),
+            blend=T, cols=c("#f7f7f7", "#de2d26", "#31a354"),
             order=T)
 ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/coexp_gep4_rosemodul1.jpeg", width=14, height=4)

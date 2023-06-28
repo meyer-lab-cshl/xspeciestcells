@@ -131,7 +131,7 @@ table(seur.combined@meta.data$Anno_level_4, useNA="ifany")
 table(seur.combined@meta.data$Anno_level_5, useNA="ifany")
 
 # Save seurat object
-saveRDS(seur.combined, "data/human-thymus/HumanData_16_ParkIntegration/park_garpin_full_seu_gene_names_updated_anno.rds")
+saveRDS(seur.combined, "data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_fullpark_fullgapin_23-05-02.rds")
 ```
 
 

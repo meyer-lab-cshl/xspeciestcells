@@ -47,7 +47,7 @@ cols_park <- c("DN(early)" = "#78c679", "DN(P)" = "#41ab5d",
 ```{R}
 # Import our seurat object (low quality cells removed)
 # generated in: 01_annotate_thymic_celltypes-gapin.R
-seur.gapin <- readRDS("data/human-thymus/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+seur.gapin <- readRDS("data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
 print(seur.gapin) # 78,607 cells
 ```
 
@@ -56,7 +56,7 @@ print(seur.gapin) # 78,607 cells
 -> this is where we'll have to do the final cleanup!
 ```{R}
 # Gapin data
-gapin_columns_to_keep <- colnames(seur.gapin@meta.data)[1:32]
+gapin_columns_to_keep <- colnames(seur.gapin@meta.data)[c(1:32,76)]
 gapin_columns_to_keep <- gapin_columns_to_keep[!gapin_columns_to_keep %in% c("seurat_clusters", "RNA_snn_res.0.7", "RNA_snn_res.1.2")]
 seur.gapin@meta.data <- seur.gapin@meta.data[,gapin_columns_to_keep]
 
@@ -236,5 +236,5 @@ seur.gapin@meta.data$Anno_level_5 <- case_when(
 )
 table(seur.gapin@meta.data[,c("tissue", "Anno_level_3")], useNA="ifany")
 
-saveRDS(seur.gapin, 'data/human-thymus/HumanData_16_ParkIntegration/gapin_full_seu_gene_names_updated_anno.rds')
+saveRDS(seur.gapin, 'data/human-thymus/annotation/gapin_full_seu_gene_names_updated_anno.rds')
 ```

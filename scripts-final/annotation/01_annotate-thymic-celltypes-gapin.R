@@ -116,6 +116,7 @@ markers.nkt <- markers.nkt %>%
   relocate(gene, cell_annot) %>%
   as.data.frame
 
+saveRDS(thymus.nkt, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS")
 
 ## MAIT CELLS ####
 thymus.mait <- preprocess(seurobj = subset(thymus.filt,
@@ -153,6 +154,8 @@ markers.mait <- markers.mait %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.mait, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.mait.RDS")
+
 ## CD4 CELLS ####
 thymus.cd4 <- preprocess(seurobj = subset(thymus.filt,
                                           subset=group.ident=="CD4_Thymus"), 
@@ -188,6 +191,8 @@ markers.cd4 <- markers.cd4 %>%
               distinct(),
             by="cluster") %>%
   relocate(gene, cell_annot)
+
+saveRDS(thymus.cd4, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.cd4.RDS")
 
 
 ## CD8 CELLS ####
@@ -225,11 +230,12 @@ markers.cd8 <- markers.cd8 %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.cd8, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS")
+
 ## GD CELLS ####
 thymus.gd <- preprocess(seurobj = subset(thymus.filt,
                                        subset=group.ident=="GD_Thymus"),
                       celltype = "GDthy", ndim=10, res=0.2)
-
 # Annotate
 thymus.gd@meta.data$cell_annot <- case_when(
   thymus.gd@meta.data$seurat_clusters == 0 ~ "GDT_c5", #thyGDT_IFNsig
@@ -260,6 +266,8 @@ markers.gd <- markers.gd %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.gd, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+
 # Annotate integrated  based on clusters derived here
 # combine all metadata:
 subset_annotations <- c(thymus.nkt$cell_annot, thymus.mait$cell_annot,
@@ -271,7 +279,7 @@ subset_annotations <- subset_annotations[match(colnames(thymus),
 # check: sum(names(subset_annotations) == colnames(thymus)) == ncol(thymus)
 
 thymus@meta.data$subset_annotations <- subset_annotations
-saveRDS(thymus, "data/human-thymus/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+saveRDS(thymus, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
 
 
 # combine hvg:

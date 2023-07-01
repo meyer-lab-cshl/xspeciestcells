@@ -30,7 +30,7 @@ library(biomaRt)
 
 # Import Park seurat object
 # Downloading the seurat object from [here](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910)
-park_thymus_seurat <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seurat.rds")
+park_thymus_seurat <- readRDS("data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seurat.rds")
 
 
 
@@ -127,7 +127,7 @@ DimPlot(park_seu_final, group.by="cell_type", label=T)+
 #                    repel=T,
 #                    colors.use=cols_park,
 #                    font.size = 24)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_umap2.jpeg", width=10, height=9)
+# ggsave("data/human-thymus/HumanData_16_ParkIntegration/park_umap2.jpeg", width=10, height=9)
 
 
 
@@ -136,4 +136,4 @@ DimPlot(park_seu_final, group.by="cell_type", label=T)+
 # 4. SAVE SEURAT OBJECT ####
 # **************************
 
-saveRDS(park_seu_final, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seu_gene_names.rds")
+saveRDS(park_seu_final, "data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seu_gene_names.rds")

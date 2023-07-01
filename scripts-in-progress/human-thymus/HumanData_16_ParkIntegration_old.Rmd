@@ -38,6 +38,23 @@ library(SummarizedExperiment)
 # library(SingleCellExperiment)
 ```
 
+```{R setup}
+cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c",
+                     "3" = "#e09351", "4" = "#2b9b81", "5" = "#421401",
+                     "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f",
+                     "9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
+                     "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57",
+                     "18" = "#bdbdbd")
+
+cols_park <- c("DN(early)" = "#78c679", "DN(P)" = "#41ab5d",
+               "DN(Q)" = "#238443", "γδT" = "#92c051", "DP(P)" = "#b75347",
+               "DP(Q)" = "#d8443c", "αβT(entry)" = "#e09351",
+               "CD8+T"= "#5a97c1","CD8αα(I)" = "#421401",
+               "CD8αα(II)" = "#0a2e57", "CD4+T"= "gold",
+               "T(agonist)" = "#9f5691", "Treg(diff)" = "#9f5691",
+               "Treg" = "blueviolet", "Th17" = "#a40000", "NKT" = "#72bcd5")
+```
 
 ### 1.2. Import data
 ```{r import-data, fig.height=8, fig.width=8}
@@ -46,10 +63,6 @@ seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_f
 
 # Sanity check
 print(seur) # 78,607 cells
-cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c", "3" = "#e09351", "4" = "#2b9b81", 
-                     "5" = "#421401", "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f", "9" = "#74c8c3", 
-                     "10" = "#5a97c1", "11" = "gold", "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
-                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57", "18" = "#bdbdbd")
 SCpubr::do_DimPlot(seur, 
                    group.by = "new_clusters",
                    label=T,
@@ -210,22 +223,7 @@ seur.park.thymocytes@meta.data$cell_type <- park_metadata$cell.types
 
 
 # Visualize
-cols_park <- c("DN(early)" = "#78c679",
-               "DN(P)" = "#41ab5d",
-               "DN(Q)" = "#238443",
-               "γδT" = "#92c051",
-               "DP(P)" = "#b75347",
-               "DP(Q)" = "#d8443c",
-               "αβT(entry)" = "#e09351",
-               "CD8+T"= "#5a97c1",
-               "CD8αα(I)" = "#421401",
-               "CD8αα(II)" = "#0a2e57",
-               "CD4+T"= "gold",
-               "T(agonist)" = "#9f5691",
-               "Treg(diff)" = "#9f5691",
-               "Treg" = "blueviolet",
-               "Th17" = "#a40000",
-               "NKT" = "#72bcd5")
+
 DimPlot(seur.park.thymocytes, group.by="cell_type", label=T)+
   scale_color_manual(values=cols_park)
 
@@ -1019,7 +1017,7 @@ table(seur.combined@meta.data$Anno_level_3, useNA="ifany")
 table(seur.combined@meta.data$Anno_level_5, useNA="ifany")
 
 # Save seurat object
-saveRDS(seur.combined, "data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_fullpark_fullgapin_23-05-02.rds")
+saveRDS(seur.combined, "data/human-thymus/HumanData_16_ParkIntegration/park_garpin_full_seu_gene_names_updated_anno.rds")
 ```
 
 
@@ -1123,7 +1121,7 @@ metadata <- seur.combined@meta.data %>%
                              TRUE ~ Anno_level_3)) %>%
   select(barcode_sample, cell_type)
 
-write_delim(metadata, "data/human-thymus/HumanData_16_ParkIntegration/metadata_scenic.tsv",
+write_delim(metadata, "data/human-thymus/HumanData_16_ParkIntegration/metadata.tsv",
             delim="\t")
 
 markers_TT <- rbind(park.lymphoid_markers_level_3, gapin_markers_level_4) %>%
@@ -1133,11 +1131,18 @@ markers_TT <- rbind(park.lymphoid_markers_level_3, gapin_markers_level_4) %>%
 markers_Tstromal <- rbind(park.stromal_markers_level_3, gapin_markers_level_4) %>%
   select(celltype, gene) 
   
+markers_all <- rbind(park.stromal_markers_level_3, park.lymphoid_markers_level_3, gapin_markers_level_4) %>%
+  select(celltype, gene)
+
 write_delim(markers_TT, "data/human-thymus/HumanData_16_ParkIntegration/markers_TT.tsv",
             delim="\t")
 write_delim(markers_Tstromal, "data/human-thymus/HumanData_16_ParkIntegration/markers_Tstromal.tsv",
             delim="\t")
+write_delim(markers_all, "data/human-thymus/HumanData_16_ParkIntegration/markers.tsv",
+            delim="\t")
 
+write_delim(park.stromal_markers_level_3, "data/human-thymus/HumanData_16_ParkIntegration/markers_cTEC_mTEC.tsv",
+            delim="\t")
 ```
 
 ```{r covert to h5ad objects}

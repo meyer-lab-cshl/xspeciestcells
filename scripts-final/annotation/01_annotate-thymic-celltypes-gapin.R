@@ -58,13 +58,14 @@ preprocess <- function(seurobj, ndim=20, res=0.8, colvalues, celltype,
 ############
 
 colvalues <- colorRampPalette(brewer.pal(12,"Paired"))(18)
-all_cells <- readRDS('data/seurat_filtered_harmony_02_15_23.RDS')
-print(all_cells) # 78,607 cells
+all_cells <- readRDS('data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS')
+#print(all_cells) # 78,607 cells
 
 # filter for thymus only:
 thymus <- subset(all_cells,
                       subset=Tissue=="Thymus")
 print(thymus) # 37,369 cells
+
 
 # Make raw object
 thymus.filt <- CreateSeuratObject(counts=thymus@assays$RNA@counts,
@@ -81,16 +82,17 @@ print(thymus.filt) # 37,369 cells
 ## NKT CELLS ####
 thymus.nkt <- preprocess(seurobj = subset(thymus.filt,
                                           subset=group.ident=="NKT_Thymus"),
-                         celltype = "NKTthy", colvalues=colvalues, ndim=10, res=0.4)
+                         celltype = "NKTthy", colvalues=colvalues, ndim=10,
+                         res=0.4)
 
 # Annotate
 thymus.nkt@meta.data$cell_annot <- case_when(
-  thymus.nkt@meta.data$seurat_clusters == 0 ~ "thyNKT_ccr7",
-  thymus.nkt@meta.data$seurat_clusters == 1 ~ "thyNKT_effFOSJUN",
-  thymus.nkt@meta.data$seurat_clusters == 2 ~ "thyNKT_ccr9",
-  thymus.nkt@meta.data$seurat_clusters == 3 ~ "thyNKT_cd8aa",
-  thymus.nkt@meta.data$seurat_clusters == 4 ~ "thyNKT_effector",
-  #seur.nkt@meta.data$seurat_clusters == 5 ~ "thyNKT_IFNsig"
+  thymus.nkt@meta.data$seurat_clusters == 0 ~ "NKT_c2", #thyNKT_ccr7
+  thymus.nkt@meta.data$seurat_clusters == 1 ~ "NKT_c5", #thyNKT_effFOSJUN
+  thymus.nkt@meta.data$seurat_clusters == 2 ~ "NKT_c1", #thyNKT_ccr9
+  thymus.nkt@meta.data$seurat_clusters == 3 ~ "NKT_c0", #thyNKT_cd8aa
+  thymus.nkt@meta.data$seurat_clusters == 4 ~ "NKT_c6", #thyNKT_effector
+  TRUE ~ thymus.nkt@meta.data$seurat_clusters  #thyNKT_IFNsig
 )
 
 p_nkt <- DimPlot(thymus.nkt, group.by="cell_annot", label=T, repel=T) +
@@ -107,13 +109,14 @@ markers.nkt <- FindAllMarkers(thymus.nkt, only.pos=TRUE,
 markers.nkt <- markers.nkt %>%
   select(avg_log2FC, p_val_adj, cluster, gene) %>%
   left_join(thymus.nkt@meta.data %>%
-              select(cell_annot, RNA_snn_res.0.3) %>%
-              dplyr::rename(cluster=RNA_snn_res.0.3) %>%
+              select(cell_annot, RNA_snn_res.0.4) %>%
+              dplyr::rename(cluster=RNA_snn_res.0.4) %>%
               distinct(),
             by="cluster") %>%
   relocate(gene, cell_annot) %>%
   as.data.frame
 
+saveRDS(thymus.nkt, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS")
 
 ## MAIT CELLS ####
 thymus.mait <- preprocess(seurobj = subset(thymus.filt,
@@ -122,13 +125,13 @@ thymus.mait <- preprocess(seurobj = subset(thymus.filt,
                           ndim=10, res=0.2)
 
 thymus.mait@meta.data$cell_annot <- case_when(
-  thymus.mait@meta.data$seurat_clusters == 0 ~ "thyMAIT_ccr9",
-  thymus.mait@meta.data$seurat_clusters == 1 ~ "thyMAIT_ccr7",
-  thymus.mait@meta.data$seurat_clusters == 2 ~ "thyMAIT_effector",
-  thymus.mait@meta.data$seurat_clusters == 3 ~ "thyMAIT_tbc",
-  thymus.mait@meta.data$seurat_clusters == 4 ~ "thyMAIT_cd8aa",
-  thymus.mait@meta.data$seurat_clusters == 5 ~ "thyMAIT_DP",
-  thymus.mait@meta.data$seurat_clusters == 6 ~ "thyMAIT_IFNsig"
+  thymus.mait@meta.data$seurat_clusters == 0 ~ "MAIT_c2", #thyMAIT_ccr9
+  thymus.mait@meta.data$seurat_clusters == 1 ~ "MAIT_c4", #thyMAIT_ccr7
+  thymus.mait@meta.data$seurat_clusters == 2 ~ "MAIT_c6", #thyMAIT_effector
+  thymus.mait@meta.data$seurat_clusters == 3 ~ "MAIT_c3", #thyMAIT_tbc
+  thymus.mait@meta.data$seurat_clusters == 4 ~ "MAIT_c1", #thyMAIT_cd8aa
+  thymus.mait@meta.data$seurat_clusters == 5 ~ "MAIT_c0", #thyMAIT_DP
+  thymus.mait@meta.data$seurat_clusters == 6 ~ "MAIT_c5"  #thyMAIT_IFNsig
 )
 
 p_mait <- DimPlot(thymus.mait, group.by="cell_annot", label=T, repel=T) +
@@ -151,7 +154,7 @@ markers.mait <- markers.mait %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
-
+saveRDS(thymus.mait, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.mait.RDS")
 
 ## CD4 CELLS ####
 thymus.cd4 <- preprocess(seurobj = subset(thymus.filt,
@@ -189,6 +192,8 @@ markers.cd4 <- markers.cd4 %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.cd4, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.cd4.RDS")
+
 
 ## CD8 CELLS ####
 thymus.cd8 <- preprocess(seurobj = subset(thymus.filt,
@@ -225,19 +230,20 @@ markers.cd8 <- markers.cd8 %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.cd8, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS")
+
 ## GD CELLS ####
 thymus.gd <- preprocess(seurobj = subset(thymus.filt,
                                        subset=group.ident=="GD_Thymus"),
                       celltype = "GDthy", ndim=10, res=0.2)
-
 # Annotate
 thymus.gd@meta.data$cell_annot <- case_when(
-  thymus.gd@meta.data$seurat_clusters == 0 ~ "thyGDT_IFNsig",
-  thymus.gd@meta.data$seurat_clusters == 1 ~ "thyGDT_immat",
-  thymus.gd@meta.data$seurat_clusters == 2 ~ "thyGDT_ccr9",
-  thymus.gd@meta.data$seurat_clusters == 3 ~ "thyGDT_effector",
-  thymus.gd@meta.data$seurat_clusters == 4 ~ "thyGDT_immat_cycl",
-  thymus.gd@meta.data$seurat_clusters == 5 ~ "thyGDT_DP"
+  thymus.gd@meta.data$seurat_clusters == 0 ~ "GDT_c5", #thyGDT_IFNsig
+  thymus.gd@meta.data$seurat_clusters == 1 ~ "GDT_c2", #thyGDT_immat
+  thymus.gd@meta.data$seurat_clusters == 2 ~ "GDT_c1", #thyGDT_ccr9
+  thymus.gd@meta.data$seurat_clusters == 3 ~ "GDT_c7", #thyGDT_effector
+  thymus.gd@meta.data$seurat_clusters == 4 ~ "GDT_c4", #thyGDT_immat_cycl
+  thymus.gd@meta.data$seurat_clusters == 5 ~ "GDT_c0" #thyGDT_DP
 )
 
 p_gd <- DimPlot(thymus.gd, group.by="cell_annot", label=TRUE, repel=TRUE) +
@@ -260,6 +266,8 @@ markers.gd <- markers.gd %>%
             by="cluster") %>%
   relocate(gene, cell_annot)
 
+saveRDS(thymus.gd, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+
 # Annotate integrated  based on clusters derived here
 # combine all metadata:
 subset_annotations <- c(thymus.nkt$cell_annot, thymus.mait$cell_annot,
@@ -271,7 +279,7 @@ subset_annotations <- subset_annotations[match(colnames(thymus),
 # check: sum(names(subset_annotations) == colnames(thymus)) == ncol(thymus)
 
 thymus@meta.data$subset_annotations <- subset_annotations
-saveRDS(thymus, "data/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+saveRDS(thymus, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
 
 
 # combine hvg:

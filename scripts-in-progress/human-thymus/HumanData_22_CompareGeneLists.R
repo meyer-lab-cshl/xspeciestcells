@@ -158,7 +158,7 @@ for (i in seq(1,ncol(genes.poon), 3)){
   colnames(subdf) <- c("gene", "padj", "logFC")
   subdf <- subdf %>%
     filter(padj<0.01 & logFC>0) %>%
-    slice_head(n=500) # take 200 top genes
+    slice_head(n=500) # take 500 top genes
     # slice_max(logFC, n=200)
   subdf$geneprogram <- paste0("Poon | ", geneprogram) # add column with the name of the geneprogram
   poondf <- rbind(poondf, subdf)
@@ -202,6 +202,8 @@ cols_df <- cols_df %>%
                  ifelse(geneprogram_cat=="Trm", "#4292c6", "#8c6bb1")))))))
 cols_geneprogcat <- unique(cols_df$color)
 names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
+
+
 
 
 # ******************
@@ -538,13 +540,12 @@ seur.human@meta.data[,13:16] <- NULL
 # ******************************
 ## 4.1. Compute gene scores ####
 # Get gene lists into a list (lol)
-longdf2 <- rbind(gapindf_all, canodf, roseCD4, roseCD8, poondf[,c("gene", "geneprogram")])
-# table(is.na(longdf2$geneprogram))
-# table(is.na(longdf2$gene))
+# table(is.na(longdf$geneprogram))
+# table(is.na(longdf$gene))
 geneprograms.list <- list()
-for(gp in unique(longdf2$geneprogram)){
+for(gp in unique(longdf$geneprogram)){
   print(gp)
-  genes_in_program <- longdf2 %>%
+  genes_in_program <- longdf %>%
     filter(geneprogram==gp & gene %in% rownames(seur.human)) %>%
     slice_head(n=200) %>%
     pull(gene)
@@ -755,8 +756,9 @@ PlotCoexpression <- function(seuratobj,
                              features,
                              plotting="blend",
                              pwithmatrix=T,
-                             nlevels=10,
-                             cols.neg="#737373", cols.pos=c("#74c476", "#fd8d3c"), col.threshold=0.5, colmatrix_stepsize=10,
+                             rasterdpi=300,
+                             nlevels=100,
+                             cols.neg="#bdbdbd", cols.pos=c("#74c476", "#fd8d3c"), col.threshold=0.5, colmatrix_stepsize=10,
                              order=T){
   # GET COLOR MATRIX
   cat("\n-> Getting color matrix\n")
@@ -824,6 +826,9 @@ PlotCoexpression <- function(seuratobj,
             axis.ticks = element_blank(),
             axis.line = element_blank(),
             panel.border=element_rect(color="white", fill=NA, size=1))
+    # rasterise to avoid computer crashing
+    p <- ggrastr::rasterise(p, layers="Point", dpi=rasterdpi)
+    # add color matrix if specified
     if(pwithmatrix==T){
       cat("\n-> Adding color matrix on plot\n")
       p <- ggdraw(p)+
@@ -876,27 +881,55 @@ for(gep in gepsall[gepsall!="GEP6_Tcm"]){
 colnames(seur.human@meta.data)[14] <- "GEP1"
 colnames(seur.human@meta.data)[17] <- "GEP4"
 colnames(seur.human@meta.data)[19] <- "GEP6"
-# GEP1
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "CanoGamez_CD4_TEM"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_canogamez_CD4TEM.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Rose_CD8_modul3_Tem.emra"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_rose_CD8modul3.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Poon_CD8MAIT"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_poon_CD8mait.pdf", width=9, height=8)
 
-# GEP4
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "CanoGamez_CD4_TEMRA"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_canogamez_CD4TEMRA.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Rose_CD8_modul1_Temra"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_rose_CD8modul1.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Poon_CD8TEM.TEMRA"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_poon_CD8tem_temra.pdf", width=9, height=8)
+# GEP1 (row1)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "CanoGamez_CD4_TEM"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_canogamez_CD4TEM.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Rose_CD8_modul3_Tem.emra"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_rose_CD8modul3.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Poon_CD8MAIT"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_poon_CD8mait.pdf", width=9, height=8)
+p11 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "CanoGamez_CD4_TEM")) +
+  draw_label("CD4 Tem", hjust=0.5, y=0.98, size=30)
+p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Rose_CD8_modul3_Tem.emra")) +
+  draw_label("CD8 Tem/emra (module 3)", hjust=0.5, y=0.98, size=30)
+p13 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Poon_CD8MAIT")) +
+  draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
+
+
+# GEP4 (row 2)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "CanoGamez_CD4_TEMRA"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_canogamez_CD4TEMRA.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Rose_CD8_modul1_Temra"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_rose_CD8modul1.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Poon_CD8TEM.TEMRA"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_poon_CD8tem_temra.pdf", width=9, height=8)
+p21 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "CanoGamez_CD4_TEMRA")) +
+  draw_label("CD4 Temra", hjust=0.5, y=0.98, size=30)
+p22 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Rose_CD8_modul1_Temra")) +
+  draw_label("CD8 Temra (module 1)", hjust=0.5, y=0.98, size=30)
+p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Poon_CD8TEM.TEMRA")) +
+  draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
+
 
 # GEP6
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "CanoGamez_CD4_TCM"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_canogamez_CD4Tcm.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Rose_CD8_modul2_Tcm.em"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_rose_CD8modul2.pdf", width=9, height=8)
-ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Poon_CD4TCM.TFH"), nlevels=100, colmatrix_stepsize=0),
-       filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_poon_CD4Tcm.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "CanoGamez_CD4_TCM"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_canogamez_CD4Tcm.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Rose_CD8_modul2_Tcm.em"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_rose_CD8modul2.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Poon_CD4TCM.TFH"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_poon_CD4Tcm.pdf", width=9, height=8)
+p31 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "CanoGamez_CD4_TCM")) +
+  draw_label("CD4 Tcm", hjust=0.5, y=0.98, size=30)
+p32 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Rose_CD8_modul2_Tcm.em")) +
+  draw_label("CD8 Tcm/em (module 2)", hjust=0.5, y=0.98, size=30)
+p33 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Poon_CD4TCM.TFH")) +
+  draw_label("CD4 Tcm/fh", hjust=0.5, y=0.98, size=30)
 
+
+# Combine into one
+plot_grid(plot_grid(p11,p12,p13, nrow = 1, scale=0.95),
+          plot_grid(p21,p22,p23, nrow = 1, scale=0.95),
+          plot_grid(p31,p32,p33, nrow = 1, scale=0.95),
+          nrow=3, scale=0.95)
+ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid3.pdf", width=23, height=20)

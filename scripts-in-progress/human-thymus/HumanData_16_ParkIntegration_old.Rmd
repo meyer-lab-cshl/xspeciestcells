@@ -24,8 +24,8 @@ library(cowplot)
 library(tidyverse)
 library(dplyr)
 library(Seurat)
-library(SeuratData)
-library(SeuratDisk)
+# library(SeuratData)
+# library(SeuratDisk)
 library(RColorBrewer)
 library(harmony)
 # library(corrplot)
@@ -418,6 +418,18 @@ count2 <- SummarizedExperiment(assays=seur.merged2@assays[["RNA"]]@counts,
 
 # sanity check
 # table(colnames(seur.merged2@assays[["RNA"]]@counts) == rownames(seur.merged2@meta.data))
+seur.merged2 <- readRDS("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_merged.rds")
+count2 <- readRDS("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/summarizedexpobj_merged.rds")
+
+# export to run on Elzar with slow version
+# SeuratDisk::SaveH5Seurat(seur.merged2,
+#                          filename = "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_convert.h5Seurat")
+# SeuratDisk::Convert("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_convert.h5Seurat", dest = "h5ad")
+# VariableFeatures(seur.merged2)
+# df <- data.frame("features"=rownames(seur.merged2), "highly_variable"=(rownames(seur.merged2) %in% VariableFeatures(seur.merged2)))
+# write.csv(df, "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/list_hvg.csv")
+# write.table(VariableFeatures(seur.merged2), "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/list_hvg.txt",
+#             sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
 
 
 # Run metaneighbor

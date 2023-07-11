@@ -17,7 +17,7 @@ library(patchwork)
 # Import data
 mtn.inkt <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion_DF.rds")
 mtn.mait <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion_DF.rds")
-mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF.rds")
+mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF_2023-07-10.rds")
 
 
 
@@ -194,4 +194,4 @@ gdt.tot <- (gdt.bpX+plot_spacer() + plot_layout(widths = c(5, 1))) / (gdt.hm + g
 
 ## 3. COMBINE EVERYTHING ####
 inkt.tot | mait.tot | gdt.tot
-ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot1.pdf", width=27, height=8)
+ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot3.pdf", width=27, height=8)

@@ -26,12 +26,12 @@ SCpubr::do_DimPlot(seur.ms,
 # ggsave("./data/cross-species/04_Metaneighbor_gdt/ms_umap.jpeg", width=6, height=6)
 
 
-seur.hu <- readRDS("./data/cross-species/04_Metaneighbor_gdt/seuratobj_hu_gdt_2023-06-24.rds")
+seur.hu <- readRDS("./data/human-thymus/HumanData_12_AnalysisByLineage/thymus.GD.03_09_23.RDS")
 colors_clusters_GDT <- c("GD_c0" = "#d8443c", "GD_c1" = "#e09351", "GD_c2" = "gold", "GD_c3"="#bcbddc", "GD_c4" = "#74c8c3", "GD_c5" = "#6a51a3",
                          "GD_c6" = "#addd8e", "GD_c7" = "#bdbdbd")
 # Idents(seur.hu) <- seur.hu$new_clusters_GDT
 SCpubr::do_DimPlot(seur.hu, 
-                   group.by = "new_clusters_GDT",
+                   group.by = "new_clusters_GD",
                    label=T,
                    label.color="black",
                    legend.position = "none",
@@ -39,7 +39,7 @@ SCpubr::do_DimPlot(seur.hu,
                    plot.title = "Human",
                    colors.use=colors_clusters_GDT,
                    font.size = 24)
-# ggsave("./data/cross-species/04_Metaneighbor_gdt/hu_umap.jpeg", width=6, height=6)
+# ggsave("./data/cross-species/04_Metaneighbor_gdt/hu_umap2.jpeg", width=6, height=6)
 
 
 ortholog.df <- read.csv("./data/cross-species/03_BiomartTable/big_ass_ortholog_table.csv")
@@ -116,7 +116,7 @@ colnames(ms.metadata)[1] <- "clusters_GDT"
 head(ms.metadata)
 
 hu.metadata$study <- "Human"
-hu.metadata <- hu.metadata[,c("new_clusters_GDT", "study")]
+hu.metadata <- hu.metadata[,c("new_clusters_GD", "study")]
 colnames(hu.metadata)[1] <- "clusters_GDT"
 head(hu.metadata)
 
@@ -142,15 +142,15 @@ mtn <- MetaNeighborUS(var_genes=total.hvg,
                       study_id=seur.total$study,
                       cell_type=seur.total$clusters_GDT,
                       fast_version=FALSE)
-# saveRDS(mtn, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-06-24.rds")
-mtn <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-06-24.rds")
+# saveRDS(mtn, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-07-10.rds")
+mtn <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-07-10.rds")
 
 # Heatmap
 mtn.sub <- mtn[1:8,9:16]
 mtn.sub <- mtn.sub[,paste0("Human|GD_c", 0:7)]
 mtn.sub <- mtn.sub[paste0("Mouse|", order_mouse),]
 
-jpeg("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_slowversion_fulltree.jpeg",
+jpeg("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_slowversion_fulltree2.jpeg",
      width=1500, height=1500, res=200)
 heatmap.2(mtn, # mtn.sub[,order(colnames(mtn.sub))],
           # trace
@@ -192,7 +192,7 @@ mtn.df <- mtn.df %>%
   as_tibble() %>%
   dplyr::rename(auroc=value) %>%
   # add nb of cells per human cluster
-  left_join(as.data.frame(table(seur.hu$new_clusters_GDT)), by="Var1") %>%
+  left_join(as.data.frame(table(seur.hu$new_clusters_GD)), by="Var1") %>%
   dplyr::rename(human=Var1, ncells_human=Freq) %>%
   mutate(totalcells_human = dim(seur.hu)[2],
          propcells_human = ncells_human*100/totalcells_human) %>%
@@ -202,7 +202,7 @@ mtn.df <- mtn.df %>%
   dplyr::rename(mouse=Var1, ncells_mouse=Freq) %>%
   mutate(totalcells_mouse = dim(seur.ms)[2],
          propcells_mouse = ncells_mouse*100/totalcells_mouse)
-# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF.rds")
+# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF_2023-07-10.rds")
 
 
 # PROPORTION OF HUMAN GDT CELLS IN EACH CLUSTER
@@ -250,4 +250,4 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_ms-hu_metaneighbor_bubbleplot.jpeg", width=12, height=9)
+ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_ms-hu_metaneighbor_bubbleplot2.jpeg", width=12, height=9)

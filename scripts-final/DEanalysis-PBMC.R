@@ -211,9 +211,7 @@ heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 
 # Run pheatmap using the metadata data frame for the annotation
-jpeg("./data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_adjpval01_allclusters.jpeg", height = 3000, width = 3500, res = 300)
-# svg("./data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/heatmap_PBMC_LRTest_batch-cellid-clusterid_limma_corrected_adjpval01.svg", height = 10, width = 11)
-phtmap <- pheatmap(counts.correc.sig,
+phtmap <- pheatmap::pheatmap(counts.correc.sig,
          color = heat_colors,
          scale = "column", # z-score
          clustering_method="ward.D2",
@@ -239,7 +237,6 @@ phtmap <- pheatmap(counts.correc.sig,
          show_colnames=F,
          # title
          main="PBMC - LRT test - batchid+cellid+clusterid vs batchid (batch corrected, all groups with >100 cells)")
-dev.off()
 
 # Get col dendrogram and flip it
 col_dend <- as.dendrogram(phtmap[[2]])
@@ -252,12 +249,12 @@ bloc1 <- col_order_clust[col_order_clust %in% c(4,7, 3, 1, 5)]
 bloc2 <- col_order_clust[col_order_clust ==8]
 bloc3 <- col_order_clust[col_order_clust %in% c(10,9,2,6)]
 new_order <- c(bloc1, bloc2, bloc3)
-tabl(unique(col_order) %in% unique(names(new_order))) # sanity check
+table(unique(col_order) %in% unique(names(new_order)), useNA="ifany") # sanity check
 col_dend_new <- dendextend::rotate(col_dend, order=names(new_order))
 
 
 # Re-plot pheatmap
-phtmap_reordered <- pheatmap(counts.correc.sig,
+phtmap_reordered <- pheatmap::pheatmap(counts.correc.sig,
          color = heat_colors,
          scale = "column", # z-score
          clustering_method="ward.D2",
@@ -550,3 +547,27 @@ ggsave("./data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Ba
 pdf("./data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/suppfigure_plots/heatmap_top1000genes_with_lowest_padj.pdf", width=10, height=10)
 phtmap_reordered
 dev.off()
+
+# Add nb of cells to heatmap
+row_order <- rownames(counts.correc.sig[phtmap$tree_row[["order"]],])
+ncells <- groups %>%
+  mutate(label=paste(cell_id, batch_id, cluster_id, sep="_")) %>%
+  group_by(label) %>%
+  count() %>%
+  ungroup()
+nrow(ncells)==nrow(counts.correc.sig) # should be TRUE
+
+ggplot(data=ncells,
+       aes(x=factor(label, levels=rev(row_order)), y=n))+
+  geom_bar(stat="identity", fill="#bdbdbd") +
+  scale_x_discrete(position="top") +
+  # scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+
+  labs(y="# cells")+ coord_flip() + theme_cowplot()+
+  theme(axis.text    = element_text(size=15),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank(),
+        axis.line  = element_blank(),
+        panel.border = element_rect(fill=NULL, colour="black", linewidth = 0.5),
+        legend.position = "none")
+ggsave("./data/human-thymus/HumanData_19_CellIdentity/LRT_BatchCellCluster_vs_Batch/suppfigure_plots/heatmap_top1000genes_with_lowest_padj_nbcells.pdf", height=15, width=3)

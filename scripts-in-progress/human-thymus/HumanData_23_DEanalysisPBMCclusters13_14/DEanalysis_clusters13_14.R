@@ -307,3 +307,64 @@ pheatmap::pheatmap(t(counts.correc.sig),
                    # title
                    main="All PBMCs: cytokine receptors")
 dev.off()
+
+
+
+# ************************************
+## 2.6. Identifying gene clusters ####
+
+# Tutorial: https://hbctraining.github.io/DGE_workshop/lessons/08_DGE_LRT.html
+
+# Obtain normalized values for significant genes
+genes.sig <- res %>%
+  data.frame() %>%
+  filter(padj<0.01)
+dim(genes.sig) # 79 genes
+counts.correc.sig <- counts_batchcorrect[rownames(genes.sig),]
+# counts.correc.sig[1:5,]
+
+# Use degPatterns function to show gene clusters across sample groups
+# BiocManager::install("DEGreport")
+library(DEGreport)
+all(rownames(metadf.deseq) == colnames(counts.correc.sig)) # sanity check
+metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
+clusters <- degPatterns(counts.correc.sig,
+                        metadata = metadf.deseq,
+                        minc=5, # minimum nb of genes per group
+                        time = "lineage_id",
+                        col=NULL)
+# ggsave(plot=clusters$plot, filename="./plots/degpatterns_clust13-14_padj0_01.jpeg", width=8, height=6)
+
+# Extract gene lists
+cluster_groups <- clusters$df
+# write.csv(cluster_groups, "./plots/degpatterns_clust13-14_padj0_01_listgenespergroup.csv")
+group1 <- clusters$df %>% filter(cluster==1)
+group5 <- clusters$df %>% filter(cluster %in% 5:6)
+
+# GENE SET ENRICHMENT ANALYSIS
+# Create list of DE genes
+isGeneSig <- rownames(res) %in% group5$genes
+isGeneSig <- as.integer(isGeneSig)
+# sum(isGeneSig)==nrow(group5)
+names(isGeneSig) <- rownames(res)
+isGeneSig[1:5]
+
+# Weigh gene vector by length of genes
+# BiocManager::install("goseq")
+library(goseq)
+pwf=nullp(isGeneSig,"hg19","geneSymbol")
+
+# GO enrichment: based on https://bioinformatics-core-shared-training.github.io/cruk-summer-school-2018/RNASeq2018/html/06_Gene_set_testing.nb.html#go-enrichment-analysis
+goResults <- goseq(pwf, "hg19","geneSymbol", test.cats=c("GO:CC", "GO:BP", "GO:MF"))
+goResults %>% 
+  top_n(20, wt=-over_represented_pvalue) %>% 
+  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
+  ggplot(aes(x=hitsPerc, 
+             y=reorder(term, hitsPerc), 
+             colour=over_represented_pvalue, 
+             size=numDEInCat)) +
+  geom_point() +
+  expand_limits(x=0) +
+  labs(x="Hits (%)", y="GO term", colour="pvalue", size="#DE genes", title="DE genes in groups 5-6")
+# ggsave("./plots/degpatterns_clust13-14_padj0_01_goenrich_groups5-6.jpeg", width=7, height=6)
+

@@ -97,15 +97,6 @@ all(rownames(metadf.deseq) == colnames(counts.deseq))
 
 
 # PREPARE COLOR SCALES
-# matcol <- metadf.deseq %>%
-#   select(lineage_id, batch_id, cluster_id) %>%
-#   relocate(batch_id) %>%
-#   mutate(cell_state=ifelse(cluster_id %in% c(3, 6, 9:11), "Tnaive",
-#                            ifelse(cluster_id==12, "Tcm",
-#                                   ifelse(cluster_id %in% 13:14, "Th17",
-#                                          ifelse(cluster_id %in% 15:17, "Temra",
-#                                                 ifelse(cluster_id==7, "Treg", "?"))))))
-# tabl(matcol$cell_state)
 cols_batchid <- brewer.pal(5, "Greys")
 names(cols_batchid) <- unique(metadf.deseq$batch_id)
 
@@ -126,15 +117,15 @@ rld <- rlog(dds, blind=TRUE)
 
 # Plot PCA
 # DESeq2::plotPCA(rld, intgroup = "sample_id")
-DESeq2::plotPCA(rld, intgroup = "batch_id")
-DESeq2::plotPCA(rld, intgroup = "lineage_id")
+# DESeq2::plotPCA(rld, intgroup = "batch_id")
+# DESeq2::plotPCA(rld, intgroup = "lineage_id")
 
 # Correct for batch effect
 counts_batchcorrect <- limma::removeBatchEffect(x=assay(rld),
                                                 batch=metadf.deseq$batch_id,
                                                 design=model.matrix(~ lineage_id, metadf.deseq))
 
-# Re-run PCA
+# Run PCA on batch-corrected counts
 rv <- matrixStats::rowVars(counts_batchcorrect) # variance of each gene
 select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
 pca <- prcomp(t(counts_batchcorrect[select_rv,])) # run pca on top 500 HVG
@@ -142,8 +133,6 @@ percentVar <- pca$sdev^2/sum(pca$sdev^2)
 counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
                          batch_id = metadf.deseq$batch_id,
                          lineage_id  = metadf.deseq$lineage_id)
-
-# Plot PCA on batch-corrected counts
 ggplot(counts_pca, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
   geom_point(size = 4) +
   xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
@@ -167,25 +156,23 @@ ggplot(counts_pca, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
 
 # Run DESeq2 differential expression analysis
 dds <- DESeq(dds, test="LRT", reduced=~batch_id)
-# dds <- DESeq(dds, test="Wald")
 plotDispEsts(dds) # Plot dispersion estimates
 
 
 # Output results for contrast batch_id + lineage_id VS batch_id
-res <- results(dds,
-               # contrast = c("lineage_id", "MAIT", "GD"),
-               alpha = 0.05)
-res <- lfcShrink(dds, type="ashr",
-                 # contrast = c("lineage_id", "MAIT", "GD"),
-                 res=res)
+res <- results(dds, alpha = 0.05) # alpha is FDR
+# Only need to shrink log2FC if thresholding on log2FC (but here we'll threshold on padj)
+# res <- lfcShrink(dds, type="ashr",
+#                  # contrast = c("lineage_id", "MAIT", "GD"),
+#                  res=res)
 print(res)
 
 # Keep only significant DE genes
 genes.sig <- res %>%
   data.frame() %>%
-  filter(padj<0.05)
+  filter(padj<0.01)
 dim(genes.sig) # 116 genes
-
+sum(res$padj[!is.na(res$padj)]<0.01) # 79 genes with padj<0.01
 
 
 # ***************************************
@@ -193,7 +180,7 @@ dim(genes.sig) # 116 genes
 
 # Get corrected counts (that we batch corrected with limma earlier)
 counts.correc.sig <- t(counts_batchcorrect[rownames(genes.sig),]) # keep only the genes of interest
-# counts.correc.sig <- counts.correc.sig[grep("GD|MAIT|NKT", rownames(counts.correc.sig), value=T),]
+# counts.correc.sig <- counts.correc.sig[grep("GD|MAIT|NKT", rownames(counts.correc.sig), value=T),] # if want to plot only innate T cells
 counts.correc.sig[,1:5]
 dim(counts.correc.sig)
 
@@ -202,13 +189,13 @@ heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 
 # Run pheatmap using the metadata data frame for the annotation
-pdf("./plots/All_heatmap_padj0_05.pdf", width=10, height=12)
+# pdf("./plots/All_heatmap_clust13-14_padj0_01.pdf", width=10, height=12)
 pheatmap::pheatmap(t(counts.correc.sig),
                              color = heat_colors,
                              scale = "row", # z-score
                              # clustering_method="ward.D2",
                              cluster_rows = T,
-                             cutree_rows = 5,
+                             # cutree_rows = 5,
                              cluster_cols = T,
                              border_color = NA,
                              # Columns (cell groups)
@@ -222,7 +209,7 @@ pheatmap::pheatmap(t(counts.correc.sig),
                              fontsize_row=8,
                              # title
                              main="PBMC clusters 13-14: DE genes btw all lineages")
-dev.off()
+# dev.off()
 
 
 ## Plot volcano plot on MAIT vs GDT ####
@@ -276,6 +263,8 @@ ggplot(df, aes(x=lineage, y=lognorm))+
   theme(panel.background = element_rect(fill="#f0f0f0"),
         title = element_text(size=10))
 # ggsave("./plots/il12rb2_gdmait.jpeg", width=5, height=6)
+
+
 
 
 # ************************************************

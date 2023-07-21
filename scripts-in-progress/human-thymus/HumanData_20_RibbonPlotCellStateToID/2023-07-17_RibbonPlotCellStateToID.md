@@ -34,5 +34,19 @@ AUCell will order the genes by expression level in each cell, and then draw a re
 
 <img src="plots/aucell_demo.png" height="300"/>
 
+Challenge: each GEP has a very different number of genes:
 
+- GEP1 504
+- GEP4 830
+- GEP5 1309
+- GEP6 950
+- GEP8 2346
+- GEP11 1778
+- GEP12 1702
 
+So if we look at the enrichment of GEP genes within the top 5% of expressed genes (aka 861 genes), at most GEP1 can only have 504 genes found in these top 861 genes (whereas other GEPs can have more genes in there, so higher AUC).
+
+Thresholds assignment:
+<img src="plots/maxrank504_thresholds1.jpeg" height="300"/>
+<img src="plots/maxrank504_thresholds2.jpeg" height="300"/>
+<img src="plots/maxrank504_thresholds3.jpeg" height="300"/>

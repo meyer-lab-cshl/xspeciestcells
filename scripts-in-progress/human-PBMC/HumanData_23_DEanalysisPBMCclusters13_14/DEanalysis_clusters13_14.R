@@ -1,5 +1,5 @@
 ###
-# Purpose: Perform DE analysis on PBMC data (group cells by lineage & cluster)
+# Purpose: Perform DE analysis btw lineages on T cells in clusters 13/14
 # Date: June 2023
 # Author: Salomé Carcy
 ###
@@ -46,8 +46,8 @@ counts   <- seur.human@assays$RNA@counts
 metadata <- seur.human@meta.data
 
 # Subset metadata only to information we're interested in (tissue, cell identity, batch, and clusters)
-metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters")]
-colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id")
+metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters", "Donor")]
+colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id", "donor_id")
 head(metadata) # sanity check
 
 # Create a "groups" df that will (1) keep only cells of interest; (2) keep the columns of interest (that will define how we group counts)
@@ -56,10 +56,12 @@ groups <- metadata %>%
   # keep only cells of interest
   filter(tissue_id=="PBMC") %>%
   filter(cluster_id %in% 13:14) %>%
+  filter(donor_id %in% c(5, 11)) %>%
+  filter(batch_id %in% c("E", "I")) %>%
   # filter(cell_id %in% c("MAIT", "GD")) %>%
   # keep only groups with at least 100 cells
   group_by(cell_id, batch_id) %>%
-  filter(n()>100) %>%
+  filter(n()>10) %>%
   ungroup() %>%
   # keep only columns of interest
   column_to_rownames("cell") %>%
@@ -74,7 +76,7 @@ count.agg <- Matrix.utils::aggregate.Matrix(count.agg, groupings = groups, fun =
 
 # Sanity checks
 dim(count.agg)[2] == nrow(seur.human) # same nb of genes in seurat object & count.agg
-count.agg[1:6, 1:6]
+count.agg[, 1:6]
 table(colSums(count.agg) == 0) # check if any gene has total count of 0
 
 # Final counts for DESeq (groups as columns, genes as rows)
@@ -97,7 +99,7 @@ all(rownames(metadf.deseq) == colnames(counts.deseq))
 
 
 # PREPARE COLOR SCALES
-cols_batchid <- brewer.pal(5, "Greys")
+cols_batchid <- brewer.pal(length(unique(metadf.deseq$batch_id)), "Greys")
 names(cols_batchid) <- unique(metadf.deseq$batch_id)
 
 
@@ -170,9 +172,10 @@ print(res)
 # Keep only significant DE genes
 genes.sig <- res %>%
   data.frame() %>%
-  filter(padj<0.01)
-dim(genes.sig) # 116 genes
-sum(res$padj[!is.na(res$padj)]<0.01) # 79 genes with padj<0.01
+  filter(padj<0.05)
+dim(genes.sig)
+sum(res$padj[!is.na(res$padj)]<0.01) # 50 genes with padj<0.01
+# write.csv(genes.sig %>% rownames_to_column("gene") %>% dplyr::select(gene, padj), "./plots/deg_clust13-14_batchE5I11_padj0_05.csv")
 
 
 # ***************************************
@@ -189,11 +192,12 @@ heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 
 # Run pheatmap using the metadata data frame for the annotation
-# pdf("./plots/All_heatmap_clust13-14_padj0_01.pdf", width=10, height=12)
+# setwd("./scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters13_14/")
+# pdf("./plots/All_heatmap_clust13-14_batchEI_padj0_05.pdf", width=10, height=12)
 pheatmap::pheatmap(t(counts.correc.sig),
                              color = heat_colors,
                              scale = "row", # z-score
-                             # clustering_method="ward.D2",
+                             clustering_method="ward.D2",
                              cluster_rows = T,
                              # cutree_rows = 5,
                              cluster_cols = T,
@@ -208,27 +212,27 @@ pheatmap::pheatmap(t(counts.correc.sig),
                              show_rownames=T,
                              fontsize_row=8,
                              # title
-                             main="PBMC clusters 13-14: DE genes btw all lineages")
+                             main="PBMC clusters 13-14 (batches E5, I11): DE genes btw all lineages")
 # dev.off()
 
 
 ## Plot volcano plot on MAIT vs GDT ####
-interesting_genes <- result.df %>%
-  # filter(gene %in% c("RUNX3", "ZBTB7B"))
-  filter(abs(log2FoldChange) >= 3)
-
-# Volcano plot
-res.df <- res %>%
-  data.frame()
-
-ggplot(data.frame(res), aes(x = log2FoldChange, y = -log10(padj))) +
-  geom_point(alpha=0.5) +
-  geom_text_repel(data = data.frame(res) %>% rownames_to_column("gene") %>% filter(padj<0.05 & abs(log2FoldChange)>0.1),
-                  aes(label = gene),
-                  force = 10, max.overlaps=50,
-                  nudge_y = 5) +
-  xlim(c(-6,6))+
-  ylim(c(0,55))
+# interesting_genes <- result.df %>%
+#   # filter(gene %in% c("RUNX3", "ZBTB7B"))
+#   filter(abs(log2FoldChange) >= 3)
+# 
+# # Volcano plot
+# res.df <- res %>%
+#   data.frame()
+# 
+# ggplot(data.frame(res), aes(x = log2FoldChange, y = -log10(padj))) +
+#   geom_point(alpha=0.5) +
+#   geom_text_repel(data = data.frame(res) %>% rownames_to_column("gene") %>% filter(padj<0.05 & abs(log2FoldChange)>0.1),
+#                   aes(label = gene),
+#                   force = 10, max.overlaps=50,
+#                   nudge_y = 5) +
+#   xlim(c(-6,6))+
+#   ylim(c(0,55))
   # scale_color_manual(values=c("grey", "orange"))+
   # labs(x="log2 fold change", y="-log10 adjusted p-value", title="Thymic CD4 vs CD8 cells") +
   # theme_cowplot()+
@@ -326,14 +330,15 @@ counts.correc.sig <- counts_batchcorrect[rownames(genes.sig),]
 # Use degPatterns function to show gene clusters across sample groups
 # BiocManager::install("DEGreport")
 library(DEGreport)
-all(rownames(metadf.deseq) == colnames(counts.correc.sig)) # sanity check
+all(rownames(metadf.deseq) == colnames(t(counts.correc.sig))) # sanity check
 metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
-clusters <- degPatterns(counts.correc.sig,
+clusters <- degPatterns(t(counts.correc.sig),
                         metadata = metadf.deseq,
                         minc=5, # minimum nb of genes per group
                         time = "lineage_id",
                         col=NULL)
-# ggsave(plot=clusters$plot, filename="./plots/degpatterns_clust13-14_padj0_01.jpeg", width=8, height=6)
+# ggsave(plot=clusters$plot + labs(title="PBMC clusters 13-14 (batches E5, I11): DE genes btw all lineages"),
+#        filename="./plots/degpatterns_clust13-14_batchEI_padj0_05.jpeg", width=8, height=6)
 
 # Extract gene lists
 cluster_groups <- clusters$df

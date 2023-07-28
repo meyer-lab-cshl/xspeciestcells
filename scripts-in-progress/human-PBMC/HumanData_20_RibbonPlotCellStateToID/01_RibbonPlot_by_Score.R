@@ -40,8 +40,8 @@ dim(gep_topgenes) # 12 GEPs
 gep_list <- list()
 for (i in 1:ncol(gep_topgenes)){
   print(paste0("GEP", i))
-  gep_allgenes <- gep_topgenes[1:200,i][!is.na(gep_topgenes[1:200,i])]
-  # gep_allgenes <- na.omit(gep_topgenes[,i])
+  # gep_allgenes <- gep_topgenes[1:200,i][!is.na(gep_topgenes[1:200,i])]
+  gep_allgenes <- gep_topgenes[,i][!is.na(gep_topgenes[,i])]
   print(length(gep_allgenes))
   gep_list[[colnames(gep_topgenes)[i]]] <- gep_allgenes
 }
@@ -53,7 +53,9 @@ seur.geps     <- AddModuleScore(seur, name = "GEP", features=gep_list)
 SCpubr::do_FeaturePlot(seur.geps, reduction="UMAP_50", features=paste0("GEP", 1:length(gep_list)), ncol=6,
                        viridis_color_map = "B", order=T)
 # ggsave("./scripts-in-progress/human-thymus/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes.jpeg", width=40, height=20)
-
+SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", features=gep_pbmc, ncol=3,
+                       viridis_color_map = "B", order=T)
+ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc.jpeg", width=17, height=15)
 
 
 
@@ -61,10 +63,10 @@ SCpubr::do_FeaturePlot(seur.geps, reduction="UMAP_50", features=paste0("GEP", 1:
 # 3. THRESHOLD CELLS BASED ON GEPs ####
 # *************************************
 
-gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP11", "GEP12")
+gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
 df <- as.data.frame(seur.geps@meta.data[seur.geps@meta.data$Tissue=="PBMC",gep_pbmc])
 # Check the distribution
-ggplot(pivot_longer(df, cols=gep_pbmc, names_to="gep", values_to="score"))+
+ggplot(pivot_longer(df, cols=all_of(gep_pbmc), names_to="gep", values_to="score"))+
   geom_histogram(aes(x=score), bins = 100)+
   facet_wrap(~gep, ncol=4)+
   # _______
@@ -81,28 +83,25 @@ dfraw <- df
 
 # Get the max
 dfraw$score_max <- apply(dfraw[,1:7], 1, max)
-dfraw$gep_max <- colnames(dfraw)[apply(dfraw, 1, which.max)]
+dfraw$gep_assign <- colnames(dfraw)[apply(dfraw, 1, which.max)]
 head(dfraw)
-tabl(dfraw$gep_max)
 tabl(dfraw$score_max<0) # 7 of them have negative score, which is not good
+dfraw[dfraw$score_max<0,"gep_assign"] <- "undefined"
+tabl(dfraw$gep_assign)
 
 # Look at distribution of max score
 ggplot(dfraw)+
-  geom_density(aes(x=score_max, color=gep_max))
+  geom_density(aes(x=score_max, color=gep_assign))
 
 # How many have a very little difference between the max score and 2nd max score?
 dfraw$score_2ndmax <- apply(dfraw[,1:7], 1, function(x) sort(x, decreasing = T)[2])
+tabl(dfraw$score_2ndmax<0)
 tabl(dfraw$score_max-dfraw$score_2ndmax<0.01) # 7% of the cells have less than 0.01 difference in score between top score and 2nd top score
 ggplot(dfraw)+
   geom_histogram(aes(x=score_max-score_2ndmax), bins=1000)+
   labs(y="# cells", title="Raw GEP score")+
   xlim(0,1) + ylim(0,400)
-
-# First look
-seur.gepsraw <- seur.geps
-table(rownames(seur.gepsraw@meta.data[seur.gepsraw$Tissue=="PBMC",]) == rownames(dfraw))
-seur.gepsraw@meta.data[seur.gepsraw$Tissue=="PBMC","gep_max"] <- dfraw$gep_max
-
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method1_rawscore_diff_btw_max_2ndmax.jpeg", width=6, height=4)
 
 # # Look at distribution of counts
 # hist(df$GEP1, breaks=1000) # 0.1
@@ -110,19 +109,21 @@ seur.gepsraw@meta.data[seur.gepsraw$Tissue=="PBMC","gep_max"] <- dfraw$gep_max
 # hist(df$GEP5, breaks=1000) # 0.1?...
 # hist(df$GEP6, breaks=1000) # 0.1?...
 # 
-# # Remove any score below 0.1
-# table(df$score_max < 0.05)
-# df[df$gep_max == "GEP1" & df$score_max < 0.05, "score_max"] <- 0.0
-# df[df$gep_max == "GEP4" & df$score_max < 0.05, "score_max"] <- 0.0
-# df[df$gep_max == "GEP5" & df$score_max < 0.05, "score_max"] <- 0.0
-# df[df$gep_max == "GEP6" & df$score_max < 0.05, "score_max"] <- 0.0
-# table(df$score_max == 0)
-# df[df$score_max == 0, "gep_max"]   <- "other"
+# Remove any score below 0.05
+tabl(dfraw$score_max < 0.05)
+dfraw[dfraw$score_max < 0.05, "score_max"] <- 0.0
+table(dfraw$score_max == 0)
+dfraw[dfraw$score_max == 0, "gep_assign"]   <- "undefined"
+
+# First look
+seur.gepsraw <- seur.geps
+table(rownames(seur.gepsraw@meta.data[seur.gepsraw$Tissue=="PBMC",]) == rownames(dfraw))
+seur.gepsraw@meta.data[seur.gepsraw$Tissue=="PBMC","gep_assign"] <- dfraw$gep_assign
 
 # Final look
-DimPlot(seur.gepsraw, group.by = "gep_max", repel=T, reduction="UMAP_50") + scale_color_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0"))
-# ggsave("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/method_comparison/umappreview_gepscomparisononrawscores.jpeg", width=7, height=6)
-VlnPlot(seur.gepsraw[,seur.gepsraw$Tissue=="PBMC"], group.by = "gep_max", features=gep_pbmc, same.y.lims=T)
+DimPlot(seur.gepsraw, group.by = "gep_assign", repel=T, reduction="UMAP_50") + scale_color_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0"))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method1_rawscore_umap.jpeg", width=6, height=6)
+VlnPlot(seur.gepsraw[,seur.gepsraw$Tissue=="PBMC"], group.by = "gep_assign", features=gep_pbmc, same.y.lims=T)
 # ggsave("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/method_comparison/vlnpreview_gepscomparisononrawscores.jpeg", width=10, height=10)
 
 # How many PBMCs are unassigned?
@@ -277,123 +278,112 @@ dfnorm2 <- dfnorm2 |>
   mutate(gep_assign=ifelse(score_max-score_2ndmax>0.01, gep_max, "undefined")) |>
   ungroup()
 
+# Quick visualization
 head(dfnorm2)
 tabl(dfnorm2[,c("gep_max", "gep_assign")])
+dfnorm2 %>% select(cellid, gep_assign) %>% distinct() %>% count(gep_assign)
 
-# Check distribution of normalized counts
+# Check distribution of normalized scores
 ggplot(dfnorm2)+
-  geom_histogram(aes(x=normscore, fill=gep_assign), bins = 100)+
-  facet_wrap(~gep, ncol=4)+
+  # geom_density(aes(x=normscore, color=factor(gep_assign, levels=c(gep_pbmc, "undefined"))))+
+  # facet_wrap(~factor(gep, levels=gep_pbmc), ncol=4, scales="free_y")+
+  # scale_color_manual(values=RColorBrewer::brewer.pal(8, "Paired"), name="Assigned to...")+
+  # labs(y="normalized positive GEP score", title="(1) remove negative GEP scores (2) normalize x/xmax")
   # _______
-  # geom_violin(aes(x=gep, y=score), width=1)+
-  # geom_boxplot(aes(x=gep, y=score), outlier.shape = NA, width=0.05)+
-  # geom_jitter(aes(x=gep, y=score), size=0.1, width = 0.05)+
-  # _______
-  labs(y="normalized positive GEP score", title="(1) remove negative GEP scores (2) normalize x/xmax")
+  geom_violin(aes(x=factor(gep_assign, levels=c(gep_pbmc, "undefined")), y=normscore), width=1)+
+  geom_jitter(aes(x=factor(gep_assign, levels=c(gep_pbmc, "undefined")), y=normscore, color=factor(gep_assign, levels=c(gep_pbmc, "undefined"))), size=0.1, width = 0.05)+
+  facet_wrap(~factor(gep, levels=gep_pbmc), ncol=4)+
+  scale_color_manual(values=RColorBrewer::brewer.pal(8, "Paired"), name="Assigned to...")+
+  theme(axis.text.x=element_text(angle=45, hjust=1))+
+  labs(y="normalized positive GEP score", x="Cells assigned to...")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4_%max_scoreassign.jpeg", width=10, height=8)
+
+
+# Check distribution of unassigned cells
+ggplot(dfnorm2 %>% filter(gep_assign=="undefined") %>% group_by(cellid) %>% filter(gep %in% c(gep_max, gep_2ndmax)) %>% ungroup(),
+       aes(x=factor(gep, levels=gep_pbmc), y=normscore))+
+  geom_violin(width=1)+
+  geom_jitter(size=0.1, width = 0.05)+
+  geom_line(aes(group=cellid), linewidth=0.1)+
+  # facet_wrap(~factor(gep, levels=gep_pbmc), ncol=4)+
+  # scale_color_manual(values=RColorBrewer::brewer.pal(8, "Paired"), name="Assigned to...")+
+  theme(axis.text.x=element_text(angle=45, hjust=1))+
+  labs(y="normalized positive GEP score", x="Cells assigned to...")
+
 # Check distribution of difference between max and 2nd max score
 ggplot(dfnorm2 %>% select(cellid, score_max, score_2ndmax) %>% distinct())+
   geom_histogram(aes(x=score_max-score_2ndmax), bins=1000)+
+  geom_vline(xintercept=0.01)+
   labs(y="# cells", title="(1) remove negative GEP scores (2) normalize x/xmax")+
   xlim(0,1) + ylim(0,400)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4_%max_diff_btw_max_2ndmax.jpeg", width=6, height=4)
 
-# Make ggpairs plot
-ggpairs(dfnorm2 %>% pivot_wider(),
-        columns=c(2,4), aes(color=gep_max, alpha=0.9), legend=c(1,1),
-        upper=list(continuous=wrap("points", size=0.05)),
-        lower=list(continuous=wrap("points", size=0.05)))+
-  scale_color_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0")) +
-  scale_fill_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0")) +
-  theme_cowplot()+
-  theme(legend.position="right")
-# ggsave("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/method_comparison/ggpairs_pbmc_allgeps_colorbygepcategory_onnormscores.jpeg", width=10, height=10)
-
-
-# Take a look at cells with low diff(max-2ndmax)
-dfnorm2 |>
-  group_by(cellid) |>
-  top_n(2, normscore) |>
-  ungroup() |>
-  filter(score_max-score_2ndmax < 0.01)
 
 # Quick look on UMAP
 seur.geps_norm2 <- seur.geps
-dfnorm2 <- dfnorm2 |>
+dfnorm2.temp <- dfnorm2 |>
   select(cellid, gep_assign) |>
   distinct()
-tabl(rownames(seur.geps_norm2@meta.data[dfnorm2$cellid,]) == dfnorm2$cellid)
-seur.geps_norm2@meta.data[dfnorm2$cellid,"gep_assign"] <- dfnorm2$gep_assign
+tabl(rownames(seur.geps_norm2@meta.data) %in% dfnorm2.temp$cellid)
+tabl(rownames(seur.geps_norm2@meta.data[dfnorm2.temp$cellid,]) == dfnorm2.temp$cellid)
+seur.geps_norm2@meta.data[dfnorm2.temp$cellid,"gep_assign"] <- dfnorm2.temp$gep_assign
 DimPlot(seur.geps_norm2, group.by = "gep_assign", repel=T, reduction="UMAP_50") +
-  scale_color_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0"))
+  scale_color_manual(values=c(brewer.pal(8, "Dark2"), "#f0f0f0"))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4_%max_umap.jpeg", width=6, height=6)
+
+# Plot it one at a time
+Idents(seur.geps_norm2) <- "gep_assign"
+DimPlot(seur.geps_norm2, cells.highlight =WhichCells(seur.geps_norm2, idents="GEP8"), repel=T, reduction="UMAP_50")
+
+# Potentially a good method ####
 
 
-## 3.5. Method 5: Use AUCell to do a gene set (GEP) enrichment ####
-# BiocManager::install("AUCell")
-library(AUCell)
+# 3.4bis. Method 4b ####
+ggplot(dfnorm2 %>% select(gep, normscore) %>% distinct())+
+  geom_histogram(aes(x=normscore), bins = 100)+
+  facet_wrap(~gep, ncol=4)+
+  labs(y="GEP score", title="Normalized GEP score (%max)")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4bis_normscore_distribution.jpeg", width=6, height=4)
+# ggplot(dfnorm2 %>% select(gep, normscore) %>% distinct() %>% filter(gep=="GEP5"))+
+#   geom_histogram(aes(x=normscore), bins = 500)+
+#   facet_wrap(~gep, ncol=4)+
+#   labs(y="GEP score", title="Normalized GEP score (%max)")
 
-# Get gene sets
-gep_fulllist <- list()
-for (i in 1:ncol(gep_topgenes)){
-  print(paste0("GEP", i))
-  gep_allgenes <- gep_topgenes[,i][!is.na(gep_topgenes[,i])]
-  print(length(gep_allgenes))
-  gep_fulllist[[colnames(gep_topgenes)[i]]] <- gep_allgenes
-}
+dfnorm2b <- dfnorm2 |>
+  # get back to wide
+  select(cellid, gep, normscore) |>
+  pivot_wider(names_from=gep, values_from = normscore, values_fill=0) |>
+  # thresholds
+  mutate(GEP1_threshold=ifelse(GEP1>0.2, T, F),
+         GEP4_threshold=ifelse(GEP4>0.2, T, F),
+         GEP5_threshold=ifelse(GEP5>0.35, T, F),
+         GEP6_threshold=ifelse(GEP6>0.35, T, F),
+         GEP8_threshold=ifelse(GEP8>0.4, T, F),
+         GEP11_threshold=ifelse(GEP11>0.4, T, F),
+         GEP12_threshold=ifelse(GEP12>0.1, T, F)) |>
+  # pivot longer
+  pivot_longer(cols=ends_with("threshold"), names_to="gep", values_to="pass") |>
+  mutate(pass=as.numeric(pass),
+         gep=gsub("_threshold", "", gep)) |>
+  # keep only lines with GEPs that passed threshold (1 gep assigned)
+  group_by(cellid) |>
+  filter(pass==1 & sum(pass)==1) |>
+  # keep only columns of interest
+  select(cellid, gep) |>
+  dplyr::rename(gep_assign=gep) |>
+  distinct()
+  
+# Quick look on UMAP
+seur.geps_norm2b <- seur.geps
+tabl(rownames(seur.geps_norm2b@meta.data) %in% dfnorm2b$cellid)
+tabl(rownames(seur.geps_norm2b@meta.data[dfnorm2b$cellid,]) == dfnorm2b$cellid)
+seur.geps_norm2b@meta.data[dfnorm2b$cellid,"gep_assign"] <- dfnorm2b$gep_assign
+seur.geps_norm2b@meta.data[seur.geps_norm2b$Tissue=="PBMC" & is.na(seur.geps_norm2b$gep_assign),"gep_assign"] <- "undefined"
+tabl(seur.geps_norm2b@meta.data[,c("Tissue", "gep_assign")]) # sanity check
+DimPlot(seur.geps_norm2b, group.by = "gep_assign", repel=T, reduction="UMAP_50") +
+  scale_color_manual(values=c(brewer.pal(8, "Dark2"), "#f0f0f0"))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4bis_umap.jpeg", width=6, height=6)
 
-# Define expression matrix (features as rows, cells as columns) and gene sets to score
-seur.pbmc <- subset(seur, subset=Tissue=="PBMC")
-exprMatrix <- seur.pbmc@assays$RNA@counts
-geneSets <- gep_fulllist[gsub("^(GEP)(.*)$", "\\1_\\2",  gep_pbmc)]
-# names(geneSets)
-# Add a "negative control" of 504 random genes
-set.seed(123)
-geneSets$random <- sample(rownames(exprMatrix), 504)
-# lapply(geneSets, function(x) length(x))
-
-# cells_rankings <- AUCell_buildRankings(exprMatrix, plotStats=TRUE) # there are at least 489 genes detected per cell
-
-# Calculate enrichment scores
-cells_AUC <- AUCell_run(exprMatrix, geneSets, aucMaxRank=504) # checking if genes from gene set are present within top 504 most expressed genes per cell
-
-# # Optional: Set the assignment thresholds
-par(mfrow=c(3,3))
-set.seed(123)
-cells_assignment <- AUCell_exploreThresholds(cells_AUC, plotHist=TRUE, nCores=4, assign=TRUE)
-
-# Optimize the thresholds
-cellsUMAP <- seur.pbmc[["UMAP_50"]]@cell.embeddings
-selectedThresholds <- getThresholdSelected(cells_assignment)
-jpeg("./scripts-in-progress/human-thymus/HumanData_20_RibbonPlotCellStateToID/plots/maxrank504_thresholds1.jpeg", width=2000, height=2000, res=250)
-par(mfrow=c(3,3))
-AUCell_plotTSNE(tSNE=cellsUMAP, exprMat=exprMatrix,
-                cellsAUC=cells_AUC[1:3,], thresholds=selectedThresholds)
-dev.off()
-selectedThresholds[1] <- 0.06 # GEP1 threshold
-selectedThresholds[2] <- 0.08 # GEP4 threshold
-selectedThresholds[3] <- 0.40 # GEP5 threshold
-selectedThresholds[4] <- 0.12 # GEP6 threshold
-selectedThresholds[5] <- 0.10 # GEP8 threshold
-selectedThresholds[6] <- 0.10 # GEP11 threshold
-
-# Update cell assignment
-cells_assignment_new <- AUCell_assignCells(cells_AUC, thresholds=selectedThresholds)
-# Check by heatmap cell assignment
-assignmentTable <- reshape2::melt(lapply(cells_assignment_new, function(x) x$assignment), value.name="cell")
-colnames(assignmentTable)[2] <- "geneSet"
-# head(assignmentTable)
-assignmentMat <- table(assignmentTable[,"geneSet"], assignmentTable[,"cell"])
-dim(assignmentMat) # 29438 cells
-table(colSums(assignmentMat))
-# assignmentMat[,1:2]
-# library(NMF)
-# aheatmap(assignmentMat, scale="none", color="black", legend=FALSE)
-
-
-
-# Get max AUC per cell
-auc_test <- data.frame("max"=apply(getAUC(cells_AUC), 2, max),
-                       "max2nd"= apply(getAUC(cells_AUC), 2, function(x) sort(x, decreasing=T)[2]))
-auc_test$maxdiff <- auc_test$max-auc_test$max2nd
-hist(auc_test$maxdiff, breaks=100)
 
 
 
@@ -402,11 +392,11 @@ hist(auc_test$maxdiff, breaks=100)
 # *******************
 
 # Format data
-counts <- seur.gepsraw@meta.data %>%
+counts <- seur.geps_norm2b@meta.data %>%
   as_tibble() %>%
   filter(Tissue=="PBMC") %>%
   # get nb of cells per gep assignment
-  group_by(cell.ident, gep_max) %>%
+  group_by(cell.ident, gep_assign) %>%
   summarise(ncells=n()) %>%
   # get %cells in each gep assignment
   ungroup() %>%
@@ -414,28 +404,42 @@ counts <- seur.gepsraw@meta.data %>%
   mutate(totalcells=sum(ncells),
          freq = ncells*100/totalcells) %>%
   ungroup() %>%
+  # rename to "other" for GEP8,11,12
+  mutate(gep_assign=replace(gep_assign, gep_assign%in%c("GEP8", "GEP11", "GEP12", "undefined"), "other"),
+         gep_assign = factor(gep_assign, levels=c(gep_pbmc[1:4], "other"))) %>%
+  # if no rename to "other"
+  # mutate(gep_assign=factor(gep_assign, levels=c(gep_pbmc, "undefined"))) %>%
   # rename
-  mutate(# gep_max = ifelse(gep_max=="GEP1", "Th17?\n(GEP1)",
-                          # ifelse(gep_max=="GEP4", "Temra\n(GEP4)",
-                          #        ifelse(gep_max=="GEP5", "Tnaive\n(GEP5)",
-                          #               ifelse(gep_max=="GEP6", "Tcm\n(GEP6)", "other")))),
-         gep_max = factor(gep_max, levels=gep_pbmc),
-         cell.ident=replace(cell.ident, cell.ident=="NKT", "iNKT"))
+  mutate(cell.ident=replace(cell.ident, cell.ident=="NKT", "iNKT"))
   
 
 # Plot
-ggplot(data=counts, aes(axis1=cell.ident, axis2=gep_max, y=freq)) +
+ggplot(data=counts, aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
   geom_alluvium(aes(fill=cell.ident))+
   geom_stratum()+
   geom_text(stat="stratum", aes(label=after_stat(stratum)))+
   scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"), name="cell type")+
   # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
-  theme_void()
-# ggsave("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/method_comparison/ribbon_cellstateproportions_rawscores.jpeg", width=6, height=6)
+  theme_void()+
+  labs(title="method4bis (threshold on distribution %max)")
+ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method4bis_ribbon.jpeg", width=6, height=6)
+
 
 # Sanity check
 # VlnPlot(subset(seur.geps, subset= Tissue=="PBMC"), group.by = "cell.ident", features=c("GEP1", "GEP4", "GEP5", "GEP6"),
 #         same.y.lims=T, ncol=4)+
 #   scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"))
 
+# dfplot.test <- seur.geps@meta.data[,c("Tissue", "cell.ident", gep_pbmc)] %>%
+#   filter(Tissue=="PBMC") %>%
+#   rownames_to_column("cellid") %>%
+#   as_tibble() %>%
+#   select(-Tissue) %>%
+#   pivot_longer(cols=starts_with("GEP"), names_to="gep", values_to="score")
+# 
+# ggplot(dfplot.test, aes(x=factor(gep, levels=gep_pbmc), y=score))+
+#   geom_violin()+
+#   geom_jitter(width=0.01, size=0.1)+
+#   facet_wrap(~cell.ident)+
+#   theme(axis.text.x = element_text(angle=45, hjust=1))
 

@@ -27,6 +27,8 @@ DimPlot(seur, group.by = "new_clusters", label=T, repel=T, reduction="UMAP_50")+
 # Import GEPs
 gep_topgenes <- read.csv("./data/human-thymus/HumanData_17_GEPsOnParkData/genes_per_GEP_df_2023-04-07.csv", row.names=1)
 dim(gep_topgenes) # 12 GEPs
+test <- read.csv("~/Downloads/genes_per_GEP_df.csv", row.names=1)
+
 
 # table(gep_topgenes$GEP_1[1:200] %in% gep_topgenes$GEP_5[1:200])
 
@@ -47,14 +49,14 @@ dim(gep_topgenes) # 12 GEPs
 # }
 # 
 # seur.geps     <- AddModuleScore(seur, name = "GEP", features=gep_list, seed=123)
-# # seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes.rds")
+# seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes.rds")
 # 
 # # Sanity check
 # gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
 # SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", features=gep_pbmc, ncol=3,
 #                        viridis_color_map = "B", order=T)
 # # ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc_orderTRUE.jpeg", width=17, height=15)
-# 
+
 
 
 

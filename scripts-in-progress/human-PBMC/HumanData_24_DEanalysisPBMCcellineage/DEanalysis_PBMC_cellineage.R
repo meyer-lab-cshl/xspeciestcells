@@ -151,14 +151,14 @@ counts_pca <- ddsPCA(counts.batchcorrect = counts_batchcorrect, metadf=metadf.de
 # Plot PCA on batch-corrected counts
 ggplot(counts_pca, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
   geom_point(size = 4) +
-  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
   coord_fixed(expand=TRUE)+
   scale_color_manual(values=cols_lineages)
 ggplot(counts_pca, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
   geom_point(size = 4) +
-  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
   coord_fixed(expand=TRUE)+
   scale_color_manual(values=cols_integrated)
 
@@ -281,14 +281,14 @@ cellTypeSignature <- function(cell.1, padj_max=0.05, log2FC_min=0.5, shrinkage=T
     # Plot PCA on batch-corrected counts
     ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
       geom_point(size = 4) +
-      xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-      ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+      # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+      # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
       coord_fixed(expand=TRUE)+
       scale_color_manual(values=cols_lineages)
     ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
       geom_point(size = 4) +
-      xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-      ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+      # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+      # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
       coord_fixed(expand=TRUE)+
       scale_color_manual(values=cols_integrated)
     

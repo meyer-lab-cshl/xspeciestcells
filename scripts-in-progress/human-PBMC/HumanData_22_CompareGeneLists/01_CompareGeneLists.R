@@ -275,16 +275,19 @@ names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
 ## 3.2. Bar plot ####
 
 # Define Jaccard function
-jaccard <- function(a, b) {
-  intersection = length(intersect(a, b))
-  union = length(a) + length(b) - intersection
-  return (intersection/union)
-}
-
-overlapcoef <- function(a, b) {
-  intersection = length(intersect(a, b))
-  denominator = min(length(a),length(b))
-  return (intersection/denominator)
+overlapcoef <- function(a, b, coef="overlapcoef") {
+  if(coef=="jaccard"){
+    # cat("\n- Computing jaccard -\n")
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    return (intersection/union)
+  }
+  else if(coef=="overlapcoef"){
+    # cat("\n- Computing overlap coefficient -\n")
+    intersection = length(intersect(a, b))
+    denominator = min(length(a),length(b))
+    return (intersection/denominator)
+  }
 }
 
 # Get all GEP genes
@@ -396,6 +399,7 @@ NullOverlap <- function(seuratobj=seur.pbmc,
                         df_geneprograms=longdf,
                         geneprograms_ref=unique(longdf[longdf$dataset=="gapin", "geneprogram"]), # by default GEPs
                         geneprograms_others=unique(longdf[longdf$dataset!="gapin", "geneprogram"]), # by default all others
+                        coefficient_to_compute="overlapcoef",
                         nbins=10,
                         nrandom=1000){
   
@@ -473,10 +477,10 @@ NullOverlap <- function(seuratobj=seur.pbmc,
       # cat(length(othergeneprogram_genes)) # sanity check
       # get % gene overlap for each random draw with the gene program (% of genes from random gene set that can be found in gene program X)
       # ctrlpercent <- sapply(ctrlgenelist, function(x) sum(x %in% othergeneprogram_genes)*100/length(x))
-      ctrlpercent <- sapply(ctrlgenelist, function(x) overlapcoef(x,othergeneprogram_genes) ) # get overlap coefficient
+      ctrlpercent <- sapply(ctrlgenelist, function(x) overlapcoef(x,othergeneprogram_genes, coef=coefficient_to_compute) ) # get overlap coefficient
       # get % gene overlap of GEP with the gene program (% of genes from GEP1 that can be found in gene program X)
       # observedpercent <- sum(refgeneset %in% othergeneprogram_genes)*100/length(refgeneset)
-      observedpercent <- overlapcoef(refgeneset, othergeneprogram_genes) # get overlap coefficient
+      observedpercent <- overlapcoef(refgeneset, othergeneprogram_genes, coef=coefficient_to_compute) # get overlap coefficient
       # print(observedpercent)
       df.temp <- data.frame("geneprogram"=geneprog, "randomoverlap"=ctrlpercent, "observedoverlap"=observedpercent)
       # add rows
@@ -520,6 +524,8 @@ NullOverlap <- function(seuratobj=seur.pbmc,
 genesets_overlap <- NullOverlap(seuratobj=seur.pbmc,
                                 df_geneprograms = longdf,
                                 geneprograms_ref=unique(longdf[longdf$dataset=="gapin","geneprogram"]),
+                                geneprograms_others=unique(longdf[longdf$dataset=="gapin","geneprogram"]),
+                                coefficient_to_compute="jaccard",
                                 nbins=25, nrandom=1000)
 # Sanity check
 table(genesets_overlap$refgeneprog) # should all be 24 (for the 24 gene programs)
@@ -547,7 +553,7 @@ ggplot(genesets_overlap %>%
 
 
 # Plot with only GEPs of interest
-df.facet2 <- genesets_overlap %>%
+genesets_overlap %>%
   left_join(cols_df, by="geneprogram") %>%
   group_by(refgeneprog) %>%
   top_n(10, observedoverlap) %>%
@@ -555,10 +561,9 @@ df.facet2 <- genesets_overlap %>%
   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
   filter(refgeneprog %in% c("GEP1", "GEP4", "GEP5", "GEP6", "GEP11")) %>%
-  filter(padj<0.05) %>%
-  distinct()
-ggplot(df.facet2,
-       aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=observedoverlap))+
+  # filter(padj<0.05) %>%
+  distinct() %>%
+ggplot(aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=observedoverlap))+
   # geom_hline(yintercept = 10, color="lightgrey", linetype=2)+
   geom_bar(stat="identity", aes(fill=geneprogram_cat))+
   facet_wrap(~factor(refgeneprog, levels=paste0("GEP", 1:12)), nrow=1, scales="free_x")+
@@ -573,8 +578,8 @@ ggplot(df.facet2,
         panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
         plot.margin=margin(10,10,10,70))+
   # labs(x="", y="% GEP genes found in each gene program")
-  labs(x="", y="Overlap coefficient")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_fullPoon_sig.jpeg", width=14, height=8)
+  labs(x="", y="Jaccard index")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_self_jaccard.jpeg", width=14, height=8)
 
 
 # Plot with only GEPs of interest and Poon only
@@ -739,6 +744,7 @@ overlap_poon <- NullOverlap(seuratobj=seur.pbmc,
                             df_geneprograms = longdf,
                             geneprograms_ref=unique(longdf[longdf$dataset=="poon","geneprogram"]),
                             geneprograms_others=unique(longdf[longdf$dataset!="poon", "geneprogram"]),
+                            coefficient_to_compute="jaccard",
                             nbins=25, nrandom=1000)
 
 # Sanity check
@@ -752,7 +758,7 @@ overlap_poon %>%
   ungroup() %>%
   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
-  filter(padj<0.05) %>%
+  # filter(padj<0.05) %>%
   distinct() %>%
 ggplot(aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=observedoverlap))+
   # geom_hline(yintercept = 10, color="lightgrey", linetype=2)+
@@ -769,8 +775,8 @@ ggplot(aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=obser
         panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
         plot.margin=margin(10,10,10,70))+
   # labs(x="", y="% GEP genes found in each gene program")
-  labs(x="", y="Overlap coefficient")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refPoon.jpeg", width=20, height=8)
+  labs(x="", y="Jaccard index")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refPoon_jaccard2.jpeg", width=20, height=8)
 
 
 # *************************
@@ -782,6 +788,7 @@ overlap_canogamez <- NullOverlap(seuratobj=seur.pbmc,
                                  df_geneprograms = longdf,
                                  geneprograms_ref=unique(longdf[longdf$dataset=="canogamez","geneprogram"]),
                                  geneprograms_others=unique(longdf[longdf$dataset!="canogamez", "geneprogram"]),
+                                 coefficient_to_compute="jaccard",
                                  nbins=25, nrandom=1000)
 
 # Sanity check
@@ -812,8 +819,8 @@ overlap_canogamez %>%
         panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
         plot.margin=margin(10,10,10,70))+
   # labs(x="", y="% GEP genes found in each gene program")
-  labs(x="", y="Overlap coefficient")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refCanoGamez.jpeg", width=14, height=8)
+  labs(x="", y="Jaccard index")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refCanoGamez_jaccard2.jpeg", width=14, height=8)
 
 
 
@@ -823,10 +830,11 @@ overlap_canogamez %>%
 # GET OVERLAP (RANDOM & OBSERVED)
 # df_geneprograms should contain 3 columns: dataset (gapin, rose, etc.); geneprogram (GEP1, GEP2, ... GEP12); gene
 overlap_rose <- NullOverlap(seuratobj=seur.pbmc,
-                                 df_geneprograms = longdf,
-                                 geneprograms_ref=unique(longdf[longdf$dataset=="rose","geneprogram"]),
-                                 geneprograms_others=unique(longdf[longdf$dataset!="rose", "geneprogram"]),
-                                 nbins=25, nrandom=1000)
+                            df_geneprograms = longdf,
+                            geneprograms_ref=unique(longdf[longdf$dataset=="rose","geneprogram"]),
+                            geneprograms_others=unique(longdf[longdf$dataset!="rose", "geneprogram"]),
+                            coefficient_to_compute="jaccard",
+                            nbins=25, nrandom=1000)
 
 # Sanity check
 table(overlap_rose$refgeneprog) # should all be 26 (for the 26 other gene programs)
@@ -839,7 +847,7 @@ overlap_rose %>%
   ungroup() %>%
   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
-  filter(padj<0.05) %>%
+  # filter(padj<0.05) %>%
   distinct() %>%
   ggplot(aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=observedoverlap))+
   # geom_hline(yintercept = 10, color="lightgrey", linetype=2)+
@@ -856,6 +864,6 @@ overlap_rose %>%
         panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
         plot.margin=margin(10,10,10,70))+
   # labs(x="", y="% GEP genes found in each gene program")
-  labs(x="", y="")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refRose.jpeg", width=16, height=16)
+  labs(x="", y="Jaccard")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_sig_refRose_jaccard2.jpeg", width=16, height=16)
 

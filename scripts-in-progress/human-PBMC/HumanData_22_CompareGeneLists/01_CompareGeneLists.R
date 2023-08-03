@@ -203,10 +203,11 @@ table(longdf$dataset, useNA="ifany")
 
 # Remove any genes that we don't have in seur.human anyway
 longdf <- longdf %>%
-  filter(gene %in% rownames(seur.pbmc))
+  filter(gene %in% rownames(seur.pbmc)) %>%
+  filter(geneprogram != "GEP7")
 table(longdf$dataset, useNA="ifany")
 # canogamez     gapin      poon      rose 
-#   341         19,407    22,246     1,542
+#   341         15,378    22,246     1,542
 # table(longdf$geneprogram)
 
 # Create a colors vector & dataframe
@@ -281,6 +282,12 @@ overlapcoef <- function(a, b, coef="overlapcoef") {
     intersection = length(intersect(a, b))
     union = length(a) + length(b) - intersection
     return (intersection/union)
+  }
+  else if(coef=="jaccardweight"){
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    maxj = min(length(a),length(b))/max(length(a), length(b))
+    return (intersection/(union*maxj))
   }
   else if(coef=="overlapcoef"){
     # cat("\n- Computing overlap coefficient -\n")
@@ -388,8 +395,55 @@ ggplot(df.facet, aes(x=reorder_within(geneprogram2, -overlap, geneprogram1), y=o
 ## end bar plot ####
 
 
+# ******************
+## 3.3. Heatmap ####
+
+df.heatmp <- data.frame()
+
+# Cycle through the gene sets (plot all jaccard index)
+for (geneset in unique(longdf$geneprogram)){
+  # get list of genes for specific geneset
+  print(geneset)
+  geneslist <- as.vector(longdf %>% filter(geneprogram==geneset) %>% pull(gene))
+  print(length(geneslist))
+  
+  # Plot overlap coefficient between GEP and other dataset gene set
+  df.heatmp <- rbind(df.heatmp,
+                     longdf %>%
+                       as_tibble() %>%
+                       group_by(geneprogram) %>%
+                       summarise(overlap=overlapcoef(a=geneslist, b=gene, coef="jaccardweight")) %>%
+                       rename(geneprogram2=geneprogram) %>%
+                       mutate(geneprogram1=geneset))
+}
+
+dim(df.heatmp)
+nrow(df.heatmp)==35*35
+table(df.heatmp$overlap==1) # should be 35 true
+
+# Get a matrix
+df.heatmp <- as.data.frame(pivot_wider(df.heatmp, names_from=geneprogram2, values_from=overlap))
+rownames(df.heatmp) <- df.heatmp$geneprogram1
+df.heatmp$geneprogram1 <- NULL
+df.heatmp <- df.heatmp[,rownames(df.heatmp)]
+df.heatmp <- as.matrix(df.heatmp)
+
+# replace 1 with NAs
+df.heatmp[df.heatmp==1] <- NA
+
+# Plot heatmap
+library(ComplexHeatmap)
+Heatmap(df.heatmp,
+        cluster_rows=F,
+        cluster_columns = F,
+        col=rev(colorRampPalette(RColorBrewer::brewer.pal(10, "Spectral"))(100)))
+
+## end heatmp ####
+
+
+
 # ****************************************
-## 3.3. Bar plot with null hypothesis ####
+## 3.4. Bar plot with null hypothesis ####
 
 # H0: any random list of 504 genes (length of GEP1) would have 60% overlap with Poon_CD8MAIT
 # H1: GEP1 genes are specifically overlapping with Poon_CD8MAIT, with a 60% overlap (more than random)
@@ -518,6 +572,113 @@ NullOverlap <- function(seuratobj=seur.pbmc,
   
   return(bigdf)
 }
+
+NullOverlap_double <- function(seuratobj=seur.pbmc,
+                               df_geneprograms=longdf,
+                               geneprograms_to_test=unique(longdf$geneprogram), # by default GEPs
+                               coefficient_to_compute="overlapcoef",
+                               nbins=25,
+                               nrandom=1000){
+  
+  # ___________________________________________________________
+  # -- 1. Get DF with all genes & binned by expression level --
+  cat("\n-- 1. GET ALL GENES & BIN THEM BY EXPRESSION LEVEL --\n")
+  allgenes_binned_DF <- data.frame("gene"=rownames(seuratobj),
+                                   "totalexpression"=rowSums(seuratobj@assays$RNA@data))
+  # nrow(allgenes_binned_DF) == nrow(seuratobj) # sanity check
+  # table(rownames(allgenes_binned_DF)==allgenes_binned_DF$gene) # sanity check
+  # hist(allgenes_binned_DF$totalexpression, breaks=100) # visualize distribution
+  
+  # Get the bins by percentiles
+  allgenes_binned_DF <- allgenes_binned_DF[order(allgenes_binned_DF$totalexpression),]
+  allgenes_binned_DF$bin <- ggplot2::cut_number(x = allgenes_binned_DF$totalexpression, n = nbins, labels = FALSE, right = FALSE)
+  cat("Number of genes in each bin, from bin 1 to bin", nbins, ":\n")
+  print(table(allgenes_binned_DF$bin))
+  # ggplot(allgenes_binned_DF)+
+  #   geom_density(aes(x=totalexpression, group=bin, color=factor(bin, levels=1:10))) # sanity check
+  
+  # _____________________________________________________
+  # -- 2. Draw random ctrl genes for each gene program --
+  cat("\n-- 2. DRAW RANDOM CTRL GENES FOR EACH GENE SET --\n")
+  randomgenesets_list <- list()
+  
+  for(refgeneprog in geneprograms_to_test){
+    cat("\n++ Drawing random ctrl genes for", refgeneprog, "\n")
+    # Find in which expression bins are our genes from the gene set
+    refgeneset <- df_geneprograms[df_geneprograms$geneprogram==refgeneprog, "gene"]
+    refgeneset_binned_DF <- allgenes_binned_DF[allgenes_binned_DF$gene %in% refgeneset,]
+    # table(nrow(refgeneset_binned_DF)==length(refgeneset))
+    
+    # ++++++++++++++++++++++++++++++++++
+    # Do 1000 random draws of gene lists
+    ctrlgenematrix <- matrix(nrow=length(refgeneset), ncol=nrandom)
+    for(i in 1:nrandom){
+      if(i%%100==0){cat(paste0("\nrandom draw #", i))} # progress bar
+      # Loop by expression bin & sample equal number of genes from each bin
+      ctrlgeneset <- c()
+      for(bin in unique(refgeneset_binned_DF$bin)){
+        # print(bin)
+        ngenes_to_sample <- sum(refgeneset_binned_DF$bin==bin)
+        # print(ngenes_to_sample)
+        ctrlgenes_in_same_bin <- sample(x=allgenes_binned_DF[allgenes_binned_DF$bin==bin,"gene"], size=ngenes_to_sample, replace=FALSE)
+        # print(length(ctrlgenes_in_same_bin))
+        ctrlgeneset <- c(ctrlgeneset, ctrlgenes_in_same_bin)
+      }
+      # Sanity check
+      if(length(ctrlgeneset)!=length(refgeneset)){cat("\nPROBLEM: control gene set of size", length(ctrlgeneset), "while gene program length is", length(refgeneset))}
+      
+      # Add ctrlgeneset to matrix
+      ctrlgenematrix[,i] <- ctrlgeneset
+    }
+    # Sanity check
+    cat("\n\n++ Selection of random ctrl genes over! ++\n")
+    cat("Length of reference gene set is", length(unique(refgeneset)), "and length of the random gene sets:", nrow(ctrlgenematrix), "\n")
+    # ++++++++++++++++++++++++++++++++++
+    
+    # Add to the list
+    randomgenesets_list[[refgeneprog]] <- ctrlgenematrix
+  }
+  
+  # _____________________________________________________________________________
+  # -- 3. Compute random & observed overlap between each pairwise gene program --
+  cat("\n-- 3. COMPUTE RANDOM AND OBSERVED OVERLAP --\n")
+  
+  combinations <- t(combn(geneprograms_to_test,2))
+  colnames(combinations) <- c("geneprogram1", "geneprogram2")
+  
+  # add self combinations
+  combinations <- rbind(combinations,
+                        t(matrix(rep(geneprograms_to_test, 2), nrow=2, byrow=T)))
+  combinations <- as.data.frame(combinations)
+  ncombinations <- nrow(combinations)
+  
+  for(i in 1:nrow(combinations)){
+    # cat("\n", combinations[i,1], "vs", combinations[i,2])
+    if(i%%25==0){cat(paste0("\ncomparison ", i, "/", ncombinations))} # progress bar
+    
+    # Get observed overlap
+    genesetA <- df_geneprograms %>% filter(geneprogram==combinations[i,"geneprogram1"]) %>% pull(gene)
+    genesetB <- df_geneprograms %>% filter(geneprogram==combinations[i,"geneprogram2"]) %>% pull(gene)
+    observedpercent <- overlapcoef(genesetA, genesetB, coef=coefficient_to_compute)
+    
+    # Get vector of random overlaps
+    randomgenesetA <- randomgenesets_list[[combinations[i,"geneprogram1"]]]
+    randomgenesetB <- randomgenesets_list[[combinations[i,"geneprogram2"]]]
+    ctrlpercent <- sapply(1:nrandom, function(x) overlapcoef(randomgenesetA[,x], randomgenesetB[,x], coef=coefficient_to_compute))
+    if(length(ctrlpercent) != nrandom){cat("\nPROBLEM: vector of random overlaps of length", length(ctrlpercent), "when there should be", nrandom, "random sets")}
+    
+    # save info
+    combinations[i,"observedoverlap"] <- observedpercent
+    combinations[i,"randomoverlap_mean"] <- mean(ctrlpercent)
+    combinations[i,"randomoverlap_min"] <- min(ctrlpercent)
+    combinations[i,"randomoverlap_max"] <- max(ctrlpercent)
+    combinations[i,"pval"] <- sum(ctrlpercent>observedpercent)/nrandom
+  }
+  
+  return(combinations)
+}
+
+
 
 # GET OVERLAP (RANDOM & OBSERVED)
 # df_geneprograms should contain 3 columns: dataset (gapin, rose, etc.); geneprogram (GEP1, GEP2, ... GEP12); gene

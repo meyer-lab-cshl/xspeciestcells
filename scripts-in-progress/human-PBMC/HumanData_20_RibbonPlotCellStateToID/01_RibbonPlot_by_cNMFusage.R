@@ -37,24 +37,24 @@ dim(gep_topgenes) # 12 GEPs
 # 2. COMPUTE GEPs ####
 # ********************
 
-gep_list <- list()
-for (i in 1:ncol(gep_topgenes)){
-  print(paste0("GEP", i))
-  # gep_allgenes <- gep_topgenes[1:200,i][!is.na(gep_topgenes[1:200,i])]
-  gep_allgenes <- gep_topgenes[,i][!is.na(gep_topgenes[,i])]
-  print(length(gep_allgenes))
-  gep_list[[colnames(gep_topgenes)[i]]] <- gep_allgenes
-}
-
-seur.geps     <- AddModuleScore(seur, name = "GEP", features=gep_list, seed=123)
-# seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes.rds")
-
-# Sanity check
-gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
-SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", features=gep_pbmc, ncol=3,
-                       viridis_color_map = "B", order=T)
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc_orderTRUE.jpeg", width=17, height=15)
-
+# gep_list <- list()
+# for (i in 1:ncol(gep_topgenes)){
+#   print(paste0("GEP", i))
+#   # gep_allgenes <- gep_topgenes[1:200,i][!is.na(gep_topgenes[1:200,i])]
+#   gep_allgenes <- gep_topgenes[,i][!is.na(gep_topgenes[,i])]
+#   print(length(gep_allgenes))
+#   gep_list[[colnames(gep_topgenes)[i]]] <- gep_allgenes
+# }
+# 
+# seur.geps     <- AddModuleScore(seur, name = "GEP", features=gep_list, seed=123)
+# # seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes.rds")
+# 
+# # Sanity check
+# gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
+# SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", features=gep_pbmc, ncol=3,
+#                        viridis_color_map = "B", order=T)
+# # ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc_orderTRUE.jpeg", width=17, height=15)
+# 
 
 
 
@@ -74,6 +74,7 @@ min(rowSums(gep_usage))
 max(rowSums(gep_usage))
 
 # Add to seurat object
+# seur.geps <- seur
 colnames(gep_usage) <- paste0("gep", 1:12, "_usage")
 table(rownames(gep_usage)==rownames(seur.geps@meta.data))
 seur.geps@meta.data <- cbind(seur.geps@meta.data, gep_usage)
@@ -91,7 +92,8 @@ SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", f
 # 4. ASSIGN CELLS TO GEPs ####
 # ****************************
 
-df <- gep_usage[grep("PBMC", rownames(gep_usage), value=T), gepusage_pbmc]
+# Keep only PBMCs and remove gep7 (because it's batch driven)
+df <- gep_usage[grep("PBMC", rownames(gep_usage), value=T), colnames(gep_usage)[!colnames(gep_usage) %in% "gep7_usage"] ]
 dim(df) # 41,238 cells
 
 # Get the max
@@ -102,8 +104,8 @@ tabl(df$score_max<0.5) # only ~8,000 cells have a max score below 0.5
 tabl(df$gep_assign)
 
 # Look at distribution of max score
-ggplot(df)+
-  geom_density(aes(x=score_max, color=gep_assign))
+# ggplot(df)+
+#   geom_density(aes(x=score_max, color=gep_assign))
 
 # How many have a very little difference between the max score and 2nd max score?
 df$score_2ndmax <- apply(df[,1:7], 1, function(x) sort(x, decreasing = T)[2])
@@ -144,26 +146,41 @@ counts <- seur.geps@meta.data %>%
   mutate(totalcells=sum(ncells),
          freq = ncells*100/totalcells) %>%
   ungroup() %>%
-  # rename to "other" for GEP8,11,12
+  # rename a few variables
   mutate(gep_assign=toupper(gep_assign),
-         gep_assign=replace(gep_assign, gep_assign%in%c("GEP8", "GEP11", "GEP12", "undefined"), "other"),
-         gep_assign = factor(gep_assign, levels=c(gep_pbmc[1:4], "other"))) %>%
-  # if no rename to "other"
-  # mutate(gep_assign=factor(gep_assign, levels=c(gep_pbmc, "undefined"))) %>%
-  # rename
-  mutate(cell.ident=replace(cell.ident, cell.ident=="NKT", "iNKT"))
+         cell.ident=replace(cell.ident, cell.ident=="NKT", "iNKT"))
 
 
-# Plot
-ggplot(data=counts, aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
+# Main figure
+counts %>%
+  mutate(gep_assign=replace(gep_assign, !gep_assign%in%c("GEP1", "GEP4", "GEP5", "GEP6"), "other"),
+         gep_assign = factor(gep_assign, levels=c("GEP1", "GEP4", "GEP5", "GEP6", "other"))) %>%
+  filter(gep_assign != "other") %>%
+ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
   geom_alluvium(aes(fill=cell.ident))+
   geom_stratum()+
-  geom_text(stat="stratum", aes(label=after_stat(stratum)))+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8)+
   scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"), name="cell type")+
   # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
   theme_void()+
-  labs(title="method5 (cNMF gep usage)")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method5_ribbon.jpeg", width=6, height=6)
+  theme(legend.position="none")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method5_ribbon.pdf", width=6, height=6)
 
 
+
+# Supp figure
+counts %>%
+  mutate(gep_assign = factor(gep_assign, levels=c("GEP1", "GEP3", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12"))) %>%
+ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
+  geom_alluvium(aes(fill=cell.ident))+
+  geom_stratum()+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)))+
+  # ggrepel::geom_text_repel(
+  #   aes(label = gep_assign),
+  #   stat = "stratum", size = 4, direction = "y", nudge_x = .3
+  # ) +
+  scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"), name="cell type")+
+  # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
+  theme_void()+
+  labs(title="")
 

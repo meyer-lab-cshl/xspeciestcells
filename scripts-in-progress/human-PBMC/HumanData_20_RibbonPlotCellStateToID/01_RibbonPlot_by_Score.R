@@ -55,7 +55,7 @@ SCpubr::do_FeaturePlot(seur.geps, reduction="UMAP_50", features=paste0("GEP", 1:
 # ggsave("./scripts-in-progress/human-thymus/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes.jpeg", width=40, height=20)
 SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", features=gep_pbmc, ncol=3,
                        viridis_color_map = "B", order=T)
-ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc.jpeg", width=17, height=15)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/gapin_cNMF_geps_allgenes_pbmc.jpeg", width=17, height=15)
 
 
 

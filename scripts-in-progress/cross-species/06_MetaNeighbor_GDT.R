@@ -12,7 +12,7 @@ library(tidyverse)
 # Import data
 seur.ms <- readRDS("./data/cross-species/00_Reproduce_UMAPs/ms_gdt_seurobj_lee.rds")
 # order_mouse <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD", "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
-# order_mouse <- c("Tγδp", "immature Tγδ1/17", "Tγδ1", "immature Tγδ17", "Tγδ17")
+order_mouse <- c("Tγδp", "immature Tγδ1/17", "Tγδ1", "immature Tγδ17", "Tγδ17")
 cols_gdt <- brewer.pal(length(unique(seur.ms$gd_clusters)), "Blues")
 names(cols_gdt) <- unique(seur.ms$gd_clusters)
 SCpubr::do_DimPlot(seur.ms, 
@@ -150,8 +150,8 @@ mtn <- MetaNeighborUS(var_genes=total.hvg,
                       study_id=seur.total$study,
                       cell_type=seur.total$clusters_GDT,
                       fast_version=FALSE)
-# saveRDS(mtn, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-07-10.rds")
-mtn <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_2023-07-10.rds")
+# saveRDS(mtn, "./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_2023-08-03.rds")
+mtn <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_2023-08-03.rds")
 
 # Heatmap
 mtn.sub <- mtn[1:5,6:13]
@@ -166,9 +166,9 @@ heatmap.2(mtn, # mtn.sub[,order(colnames(mtn.sub))],
           # trace
           trace="none",
           # dendrogram
-          Rowv=FALSE,
-          Colv=FALSE,
-          dendrogram="none",
+          # Rowv=FALSE,
+          # Colv=FALSE,
+          # dendrogram="none",
           # superimpose a density histogram on color key
           density.info="none",
           # color scale
@@ -212,7 +212,7 @@ mtn.df <- mtn.df %>%
   dplyr::rename(mouse=Var1, ncells_mouse=Freq) %>%
   mutate(totalcells_mouse = dim(seur.ms)[2],
          propcells_mouse = ncells_mouse*100/totalcells_mouse)
-# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF_2023-07-10.rds")
+# saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_DF_2023-08-03.rds")
 
 
 # PROPORTION OF HUMAN GDT CELLS IN EACH CLUSTER
@@ -232,8 +232,8 @@ bp.x <- ggplot(data=mtn.df %>% select(human,propcells_human) %>% distinct(),
 
 # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
 bp.y <- ggplot(data=mtn.df%>% select(mouse,propcells_mouse) %>% distinct(),
-               # aes(x=factor(mouse, levels=rev(order_mouse)), y=propcells_mouse))+
-               aes(x=factor(mouse, levels=sort(unique(seur.ms$gd_clusters), decreasing=T)), y=propcells_mouse))+
+               aes(x=factor(mouse, levels=rev(order_mouse)), y=propcells_mouse))+
+               # aes(x=factor(mouse, levels=sort(unique(seur.ms$gd_clusters), decreasing=T)), y=propcells_mouse))+
   geom_bar(stat="identity", fill="#bdbdbd") +
   scale_x_discrete(position="top") +
   scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+
@@ -248,8 +248,8 @@ bp.y <- ggplot(data=mtn.df%>% select(mouse,propcells_mouse) %>% distinct(),
 # BUBBLE PLOT
 # library(scales)
 hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
-                               # y=factor(mouse, levels=rev(order_mouse)))) +
-                               y=factor(mouse, levels=sort(unique(seur.ms$gd_clusters), decreasing=T)))) +
+                               y=factor(mouse, levels=rev(order_mouse)))) +
+                               # y=factor(mouse, levels=sort(unique(seur.ms$gd_clusters), decreasing=T)))) +
   geom_point(aes(size = auroc, color= auroc))+
   geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="black")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
@@ -262,5 +262,5 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_metaneighbor_bubbleplot3.jpeg", width=12, height=9)
+# ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_metaneighbor_bubbleplot3.jpeg", width=12, height=9)
 # ggsave("./data/cross-species/04_Metaneighbor_gdt/gd_hvg_test/bubbleplot_subclusters_hvg2000_intersect392.jpeg", width=12, height=9)

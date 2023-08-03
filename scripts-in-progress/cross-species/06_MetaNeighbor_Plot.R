@@ -17,7 +17,7 @@ library(patchwork)
 # Import data
 mtn.inkt <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion_DF.rds")
 mtn.mait <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion_DF.rds")
-mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF_2023-07-10.rds")
+mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_DF_2023-08-03.rds")
 
 
 
@@ -153,8 +153,9 @@ gdt.bpX <- ggplot(data=mtn.gdt %>% select(human,propcells_human) %>% distinct(),
 
 
 # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
-order_gdt <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD",
-               "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
+# order_gdt <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD",
+#                "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
+order_gdt <- c("Tγδp", "immature Tγδ1/17", "immature Tγδ17", "Tγδ1", "Tγδ17")
 gdt.bpY <- ggplot(data=mtn.gdt%>% select(mouse,propcells_mouse) %>% distinct(),
                    aes(x=factor(mouse, levels=rev(order_gdt)), y=propcells_mouse))+
   geom_bar(stat="identity", fill="#bdbdbd") +
@@ -194,4 +195,4 @@ gdt.tot <- (gdt.bpX+plot_spacer() + plot_layout(widths = c(5, 1))) / (gdt.hm + g
 
 ## 3. COMBINE EVERYTHING ####
 inkt.tot | mait.tot | gdt.tot
-ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot3.pdf", width=27, height=8)
+ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot5.pdf", width=25, height=8)

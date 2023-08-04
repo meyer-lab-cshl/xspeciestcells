@@ -10,13 +10,14 @@
 ## 1. IMPORT ####
 library(tidyverse)
 library(ggplot2)
+library(cowplot)
 library(patchwork)
 
 
 # Import data
 mtn.inkt <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion_DF.rds")
 mtn.mait <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion_DF.rds")
-mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mssagar-hu_mtnslowversion_DF.rds")
+mtn.gdt  <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_DF_2023-08-03.rds")
 
 
 
@@ -136,7 +137,7 @@ mait.tot <- (mait.bpX+plot_spacer() + plot_layout(widths = c(5, 1))) / (mait.hm 
 ## 4. GDT PLOT ####
 
 # PROPORTION OF HUMAN GDT CELLS IN EACH CLUSTER
-gdt.bpX <- ggplot(data=mtn.gdt%>% select(human,propcells_human) %>% distinct(),
+gdt.bpX <- ggplot(data=mtn.gdt %>% select(human,propcells_human) %>% distinct(),
                    aes(x=factor(human, levels=paste0("GD_c", 0:7)), y=propcells_human))+
   geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
   scale_x_discrete(position="top")+
@@ -152,8 +153,9 @@ gdt.bpX <- ggplot(data=mtn.gdt%>% select(human,propcells_human) %>% distinct(),
 
 
 # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
-order_gdt <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD",
-               "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
+# order_gdt <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD",
+#                "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
+order_gdt <- c("Tγδp", "immature Tγδ1/17", "immature Tγδ17", "Tγδ1", "Tγδ17")
 gdt.bpY <- ggplot(data=mtn.gdt%>% select(mouse,propcells_mouse) %>% distinct(),
                    aes(x=factor(mouse, levels=rev(order_gdt)), y=propcells_mouse))+
   geom_bar(stat="identity", fill="#bdbdbd") +
@@ -172,7 +174,7 @@ gdt.bpY <- ggplot(data=mtn.gdt%>% select(mouse,propcells_mouse) %>% distinct(),
 gdt.hm <- ggplot(mtn.gdt, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
                                 y=factor(mouse, levels=rev(order_gdt)))) +
   geom_point(aes(size=auroc, color=auroc))+
-  geom_text(data=mtn.inkt %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
+  geom_text(data=mtn.gdt %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
   scale_color_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
   labs(x="Human clusters", y="Mouse clusters", size="AUROC")+
@@ -193,4 +195,4 @@ gdt.tot <- (gdt.bpX+plot_spacer() + plot_layout(widths = c(5, 1))) / (gdt.hm + g
 
 ## 3. COMBINE EVERYTHING ####
 inkt.tot | mait.tot | gdt.tot
-# ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot1.svg", width=18, height=8)
+ggsave("./data/cross-species/nktmaitgdt_ms-hu_metaneighbor_bubbleplot5.pdf", width=25, height=8)

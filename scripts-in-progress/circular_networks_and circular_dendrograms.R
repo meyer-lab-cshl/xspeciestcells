@@ -165,26 +165,43 @@ legend("topleft",bty = "n",
 
 
 # plots circular dendrogram
+node_order <- atan((p$data$x/p$data$y))*180/pi
+node_order[is.na(node_order)] <- 0
 
+angles <- seq(0,360-360/121,360/121)
+angles <- angles[order(node_order)]
 
 lay <- create_layout(network, layout = 'dendrogram', circular = T)
-head(lay)
-ggraph(lay) +
+## internal nodes (inside circle radius of 1, rounding errors, so use smaller r)
+internal <- sqrt(lay$x^2 + lay$y^2) < 0.8
+leaves <- sqrt(lay$x^2 + lay$y^2) > 0.8
+  
+node_order <- atan((lay$y/lay$x))*180/pi
+node_order[is.na(node_order)] <- 0
+
+lay$angle[leaves] <- 90 - 360 * lay$.ggraph.orig_index[leaves] / sum(leaves)
+lay$angle[internal] <- 0
+#lay$hjust <- ifelse(lay$angle < -90, 1, 0)
+#lay$angle <- ifelse(lay$angle < -90, lay$angle+180, lay$angle)
+
+p <- ggraph(lay) +
   geom_edge_diagonal() +
   geom_node_point(aes(filter = leaf, color = group)) +
   scale_color_manual(limits = as.factor(unique(lay$group)), values = coul[unique(names(coul))]) +
   geom_node_label(aes(label = ifelse(leaf == FALSE, name, NA)), repel = TRUE) +
   #geom_node_label(aes(label = name), repel = TRUE) +
-  #geom_node_text(aes(label = name), repel = TRUE, check_overlap = TRUE, angle = 45, hjust = 1.5, vjust = 1.5) +  # Add this line for labels
+  geom_node_text(aes(label = ifelse(leaf == FALSE, NA, name)), angle = lay$angle, hjust=lay$hjust) +  # Add this line for labels
+  #geom_node_text(aes(label = ifelse(leaf == FALSE, NA, name)), repel = TRUE, check_overlap = TRUE, angle = 0, hjust = 1.5, vjust = 1.5) +  # Add this line for labels
   coord_fixed() +
   theme(panel.background = element_blank())
+p
 
-lay <- create_layout(network, layout = 'dendrogram', circular = T)
+  lay6 <- create_layout(network6, layout = 'dendrogram', circular = T)
 head(lay)
-ggraph(lay) +
+ggraph(lay6) +
   geom_edge_diagonal() +
   geom_node_point(aes(filter = leaf, color = group)) +
-  #scale_color_manual(limits = as.factor(unique(lay$group)), values = coul[unique(names(coul))]) +
+  scale_color_manual(limits = as.factor(unique(lay$group)), values = coul[unique(names(coul))]) +
   #geom_node_label(aes(label = ifelse(leaf == FALSE, name, NA)), repel = TRUE) +
   geom_node_label(aes(label = name), repel = TRUE) +
   #geom_node_text(aes(label = name), repel = TRUE, check_overlap = TRUE, angle = 45, hjust = 1.5, vjust = 1.5) +  # Add this line for labels

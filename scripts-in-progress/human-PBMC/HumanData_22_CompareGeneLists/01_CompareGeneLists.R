@@ -680,13 +680,13 @@ NullOverlap_double <- function(seuratobj=seur.pbmc,
 
 
 
-# GET OVERLAP (RANDOM & OBSERVED)
+### GET SINGLE OVERLAP (RANDOM & OBSERVED) ####
 # df_geneprograms should contain 3 columns: dataset (gapin, rose, etc.); geneprogram (GEP1, GEP2, ... GEP12); gene
-genesets_overlap <- NullOverlap(seuratobj=seur.pbmc,
+genesets_overlap_wjaccard <- NullOverlap(seuratobj=seur.pbmc,
                                 df_geneprograms = longdf,
                                 geneprograms_ref=unique(longdf[longdf$dataset=="gapin","geneprogram"]),
-                                geneprograms_others=unique(longdf[longdf$dataset=="gapin","geneprogram"]),
-                                coefficient_to_compute="jaccard",
+                                geneprograms_others=unique(longdf[longdf$dataset!="gapin","geneprogram"]),
+                                coefficient_to_compute="jaccardweight",
                                 nbins=25, nrandom=1000)
 # Sanity check
 table(genesets_overlap$refgeneprog) # should all be 24 (for the 24 gene programs)
@@ -714,7 +714,7 @@ ggplot(genesets_overlap %>%
 
 
 # Plot with only GEPs of interest
-genesets_overlap %>%
+genesets_overlap_wjaccard %>%
   left_join(cols_df, by="geneprogram") %>%
   group_by(refgeneprog) %>%
   top_n(10, observedoverlap) %>%
@@ -739,8 +739,8 @@ ggplot(aes(x=reorder_within(geneprogram, -observedoverlap, refgeneprog), y=obser
         panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
         plot.margin=margin(10,10,10,70))+
   # labs(x="", y="% GEP genes found in each gene program")
-  labs(x="", y="Jaccard index")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_self_jaccard.jpeg", width=14, height=8)
+  labs(x="", y="Weighted jaccard")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_jaccardweighted_singlerandom.jpeg", width=14, height=8)
 
 
 # Plot with only GEPs of interest and Poon only
@@ -772,6 +772,51 @@ ggplot(df.facet2bis,
   #       plot.margin=margin(10,10,10,70))+
   labs(x="", y="% GEP genes found in each Poon et al. gene program")
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlaptoGEP_bars_all_fullPoon_Poononly.jpeg", width=15, height=6)
+
+### end single overlap ####
+
+
+# GET DOUBLE OVERLAP (RANDOM & OBSERVED)
+genesets_overlap2_wjaccard <- NullOverlap_double(seuratobj=seur.pbmc,
+                                        df_geneprograms = longdf,
+                                        geneprograms_to_test=unique(longdf$geneprogram),
+                                        coefficient_to_compute="jaccardweight",
+                                        nbins=25, nrandom=1000)
+
+genesets_overlap2 %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% c("GEP1", "GEP4", "GEP5", "GEP6", "GEP11")) %>%
+  filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
+  # keep only top 10 overlaps and add padj
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2)) %>%
+  top_n(10, observedoverlap) %>%
+  ungroup() %>%
+  distinct() %>%
+  # last details (color, padj to plot)
+  left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  # filter(padj<0.05) %>%
+  # PLOT
+  ggplot(aes(x=reorder_within(geneprogram2, -observedoverlap, geneprogram1), y=observedoverlap))+
+    geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+    facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:12)), nrow=1, scales="free_x")+
+    geom_point(aes(y=randomoverlap_mean), shape="_", size=3)+
+    tidytext::scale_x_reordered() +
+    # ggrepel::geom_text_repel(aes(label=padj_toplot), size=4, direction="y", nudge_y=1, force=4) +
+    geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
+    ylim(c(0,1))+
+    scale_fill_manual(values=cols_geneprogcat, name="")+
+    theme_cowplot()+
+    theme(axis.text.x=element_text(angle=45, hjust=1, size=12), #legend.position="none",
+          panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
+          plot.margin=margin(10,10,10,70))+
+    # labs(x="", y="% GEP genes found in each gene program")
+    labs(x="", y="Jaccard index")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_jaccard_doublerandom2.jpeg", width=14, height=8)
+
+
 
 
 

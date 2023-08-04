@@ -26,7 +26,7 @@ library(SingleCellExperiment)
 
 ```{r import-data}
 # Import seurat object
-seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/filtered_seurat_harmony.11.22.22.RDS")
+seur.human <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
 
 # Sanity check
 print(seur.human) # 81,378 cells (it's the whole seurat object)

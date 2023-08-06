@@ -13,10 +13,11 @@ library(cowplot)
 library(ggplot2)
 library(tidyverse)
 library(tidytext)
-library(pheatmap)
+# library(pheatmap)
 
 # Import data
-genes.gep     <- read.csv("./data/human-thymus/HumanData_17_GEPsOnParkData/genes_per_GEP_df_2023-04-07.csv", row.names=1)
+setwd("~/Projects/HumanThymusProject/")
+genes.gep     <- read.csv("./data/human-PBMC/HumanData_22_CompareGeneLists/genes_per_gep_post_rank_threshold.csv", row.names=1)
 genes.cano    <- readxl::read_excel("./data/human-thymus/HumanData_17_GEPsOnCanogamezData/canogamez_supp.xlsx", skip=3, sheet=1)
 genesCD8.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD8.xlsx", sheet=1)
 genesCD4.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD4.xlsx", sheet=1)
@@ -66,12 +67,7 @@ genes.long <- list()
 head(genes.gep)
 gapindf <- gather(genes.gep, key=geneprogram, value=gene, colnames(genes.gep)) %>%
   filter(!is.na(gene)) %>%
-  mutate(geneprogram=sub("_", "", geneprogram)) # %>%
-  # filter(geneprogram %in% c("GEP_1", "GEP_4", "GEP_5", "GEP_6", "GEP_7")) %>%
-  # mutate(geneprogram=replace(geneprogram, geneprogram=="GEP1", "GEP1_MAIT"),
-  #        geneprogram=replace(geneprogram, geneprogram=="GEP4", "GEP4_Temra"),
-  #        geneprogram=replace(geneprogram, geneprogram=="GEP5", "GEP5_Tnaive"),
-  #        geneprogram=replace(geneprogram, geneprogram=="GEP6", "GEP6_Tcm"))
+  mutate(geneprogram=sub("_", "", geneprogram))
 head(gapindf)
 table(gapindf$geneprogram, useNA="ifany")
 table(is.na(gapindf$gene))
@@ -90,7 +86,7 @@ canodf <- genes.cano %>%
   mutate(cluster=gsub(" ", "", cluster),
          cluster=paste0("CanoGamez | CD4_", cluster)) %>%
   # keep only significant genes & with minimum log2FC
-  filter(p_val_adj < 0.05 & LFC > 0) %>% # lowest log2FC is 0.25
+  filter(p_val_adj < 0.05 & LFC > 0.25) %>% # lowest log2FC is 0.25
   # convert to long format
   select(cluster, gene) %>%
   rename(geneprogram=cluster)
@@ -199,7 +195,7 @@ cols_poon <- c("Poon | CyclingTRM"="#f1e2cc",
 longdf <- bind_rows(genes.long, .id="dataset")
 table(longdf$dataset, useNA="ifany")
 # canogamez     gapin      poon      rose 
-#   387         19,407    31,852     1,672
+#   387         8,105    31,852     1,672
 
 # Remove any genes that we don't have in seur.human anyway
 longdf <- longdf %>%
@@ -207,7 +203,7 @@ longdf <- longdf %>%
   filter(geneprogram != "GEP7")
 table(longdf$dataset, useNA="ifany")
 # canogamez     gapin      poon      rose 
-#   341         15,378    22,246     1,542
+#   341         7,434    22,246     1,542
 # table(longdf$geneprogram)
 
 # Create a colors vector & dataframe
@@ -783,7 +779,7 @@ genesets_overlap2_wjaccard <- NullOverlap_double(seuratobj=seur.pbmc,
                                         coefficient_to_compute="jaccardweight",
                                         nbins=25, nrandom=1000)
 
-genesets_overlap2 %>%
+genesets_overlap2_wjaccard %>%
   # keep geps of interest
   filter(geneprogram1 %in% c("GEP1", "GEP4", "GEP5", "GEP6", "GEP11")) %>%
   filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
@@ -815,6 +811,90 @@ genesets_overlap2 %>%
     # labs(x="", y="% GEP genes found in each gene program")
     labs(x="", y="Jaccard index")
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_jaccard_doublerandom2.jpeg", width=14, height=8)
+
+
+# Plot for figure
+order_programs <- c("Poon | CD8MAIT",
+                    cols_df %>% filter(geneprogram_cat %in% c("Tem")) %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat=="Temra") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat=="Tnaive") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat=="Tcm") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat=="Treg") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat=="Trm") %>% arrange(geneprogram) %>% pull(geneprogram))
+library(ggh4x)
+genesets_overlap2_wjaccard %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% c("GEP1", "GEP4", "GEP5", "GEP6")) %>%
+  filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
+  # add padj and keep only other dataset's programs that have at least one x% overlap
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2)) %>%
+  # mutate(max_observedoverlap=max(observedoverlap)) %>%
+  # top_n(10, observedoverlap) %>%
+  ungroup() %>%
+  # filter(max_observedoverlap>0.333) %>%
+  distinct() %>%
+  # last details (color, padj to plot)
+  left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  filter(!geneprogram_cat %in% c("Treg", "Trm")) %>%
+  # PLOT
+  ggplot(aes(x=factor(geneprogram1, levels=rev(paste0("GEP", 1:12))), y=observedoverlap))+
+    geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+    geom_point(aes(y=randomoverlap_mean), shape="|", size=3)+
+    tidytext::scale_x_reordered() +
+    geom_text(aes(label=padj_toplot), size=4, angle=0, hjust=-0.2)+
+    # facet_grid(geneprogram_cat~geneprogram2, space="free", scales="free")+
+    # facet_wrap(~factor(geneprogram2, levels=order_programs), ncol=6)+
+    facet_manual(~factor(geneprogram2, levels=order_programs), design=rbind(c(1:6), c(7:9,NA,NA,NA), c(10:15), c(16:19,NA,NA)), scales="free_x")+
+    ylim(c(0,1))+
+    coord_flip()+
+    theme_cowplot()+
+    scale_fill_manual(values=cols_geneprogcat, name="")+
+    labs(y="Weighted Jaccard Index", x="")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_top10_refGapin_jaccardweighted_doublerandom_figure3.pdf",
+#        width=20, height=10)
+
+
+# PLOT FOR SUPP FIGURE
+genesets_overlap2_wjaccard %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% grep("GEP", geneprogram1, value=T)) %>%
+  filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
+  # add padj
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2)) %>%
+  ungroup() %>%
+  distinct() %>%
+  # last details (color, padj to plot)
+  left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  # PLOT
+  ggplot(aes(x=reorder_within(geneprogram2, -observedoverlap, geneprogram1), y=observedoverlap))+
+    geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+    facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:12)), ncol=4, scales="free_x")+
+    geom_point(aes(y=randomoverlap_mean), shape="_", size=3)+
+    tidytext::scale_x_reordered() +
+    geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
+    ylim(c(0,1))+
+    scale_fill_manual(values=cols_geneprogcat, name="")+
+    theme_cowplot()+
+    theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=12), #legend.position="none",
+          axis.title.y=element_text(size=20),
+          strip.text.x=element_text(size=20),
+          legend.key.size = unit(1, 'cm'),
+          legend.text=element_text(size=20),
+          panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
+          plot.margin=margin(10,10,10,70))+
+    # labs(x="", y="% GEP genes found in each gene program")
+    labs(x="", y="Weighted Jaccard Index")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_jaccardweighted_doublerandom_allGEPs.pdf", width=18, height=20)
+
+
+
+
 
 
 

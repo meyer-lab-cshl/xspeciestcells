@@ -16,12 +16,17 @@ library(tidytext)
 library(pheatmap)
 
 # Import data
-genes.gep     <- read.csv("./data/human-thymus/HumanData_17_GEPsOnParkData/genes_per_GEP_df_2023-04-07.csv", row.names=1)
+setwd("~/Projects/HumanThymusProject/")
+genes.gep     <- read.csv("./data/human-PBMC/HumanData_22_CompareGeneLists/genes_per_gep_post_rank_threshold.csv", row.names=1)
 genes.cano    <- readxl::read_excel("./data/human-thymus/HumanData_17_GEPsOnCanogamezData/canogamez_supp.xlsx", skip=3, sheet=1)
 genesCD8.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD8.xlsx", sheet=1)
 genesCD4.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD4.xlsx", sheet=1)
 genes.poon    <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/poon_supp.xlsx", sheet=6)[,-1]
 
+seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
+print(seur.human) # 78,607 cells (it's the whole seurat object)
+source("./scripts-final/colors_universal.R")
+# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_integrated)
 
 # Sanity check: reproduce Rose heatmaps
 htmp <- function(rosedf, lineage){
@@ -62,12 +67,7 @@ genes.long <- list()
 head(genes.gep)
 gapindf <- gather(genes.gep, key=geneprogram, value=gene, colnames(genes.gep)) %>%
   filter(!is.na(gene)) %>%
-  mutate(geneprogram=sub("_", "", geneprogram)) # %>%
-# filter(geneprogram %in% c("GEP_1", "GEP_4", "GEP_5", "GEP_6", "GEP_7")) %>%
-# mutate(geneprogram=replace(geneprogram, geneprogram=="GEP1", "GEP1_MAIT"),
-#        geneprogram=replace(geneprogram, geneprogram=="GEP4", "GEP4_Temra"),
-#        geneprogram=replace(geneprogram, geneprogram=="GEP5", "GEP5_Tnaive"),
-#        geneprogram=replace(geneprogram, geneprogram=="GEP6", "GEP6_Tcm"))
+  mutate(geneprogram=sub("_", "", geneprogram))
 head(gapindf)
 table(gapindf$geneprogram, useNA="ifany")
 table(is.na(gapindf$gene))
@@ -86,7 +86,7 @@ canodf <- genes.cano %>%
   mutate(cluster=gsub(" ", "", cluster),
          cluster=paste0("CanoGamez | CD4_", cluster)) %>%
   # keep only significant genes & with minimum log2FC
-  filter(p_val_adj < 0.05 & LFC > 0) %>%
+  filter(p_val_adj < 0.05 & LFC > 0.25) %>%
   # convert to long format
   select(cluster, gene) %>%
   rename(geneprogram=cluster)
@@ -157,9 +157,10 @@ for (i in seq(1,ncol(genes.poon), 3)){
   geneprogram <- sub("_.*", "",colnames(subdf)[1])
   colnames(subdf) <- c("gene", "padj", "logFC")
   subdf <- subdf %>%
-    filter(padj<0.01 & logFC>0) %>%
-    slice_head(n=500) # take 500 top genes
-  # slice_max(logFC, n=200)
+    # OPTION 1: full list of Poon genes
+    filter(padj<0.01 & logFC>0.25)
+    # OPTION 2: short list of Poon genes
+    # slice_head(n=500) # take 500 top genes
   subdf$geneprogram <- paste0("Poon | ", geneprogram) # add column with the name of the geneprogram
   poondf <- rbind(poondf, subdf)
 }
@@ -185,6 +186,16 @@ cols_poon <- c("Poon | CyclingTRM"="#f1e2cc",
 ## 2.5. Get it all in one df ####
 longdf <- bind_rows(genes.long, .id="dataset")
 table(longdf$dataset, useNA="ifany")
+# canogamez     gapin      poon      rose 
+#   387         8,105    31,852     1,672
+
+# Remove any genes that we don't have in seur.human anyway
+longdf <- longdf %>%
+  filter(gene %in% rownames(seur.human))
+table(longdf$dataset, useNA="ifany")
+# canogamez     gapin      poon      rose 
+#   341         8,105    22,246     1,542
+# table(longdf$geneprogram)
 
 # Create a colors vector & dataframe
 cols_alldatasets <- c(cols_cano, cols_rose, cols_poon)
@@ -202,10 +213,7 @@ cols_df <- cols_df %>%
                                                     ifelse(geneprogram_cat=="Trm", "#4292c6", "#8c6bb1")))))))
 cols_geneprogcat <- unique(cols_df$color)
 names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
-
-
-
-
+  
 
 
 
@@ -213,11 +221,6 @@ names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
 # ********************************
 # 3. GENE SCORES COEXPRESSION ####
 # ********************************
-
-seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
-print(seur.human) # 78,607 cells (it's the whole seurat object)
-source("./scripts-final/colors_universal.R")
-# DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_integrated)
 
 
 # clean-up useless columns
@@ -236,7 +239,7 @@ for(gp in unique(longdf$geneprogram)){
   print(gp)
   genes_in_program <- longdf %>%
     filter(geneprogram==gp & gene %in% rownames(seur.human)) %>%
-    slice_head(n=200) %>%
+    # slice_head(n=200) %>%
     pull(gene)
   print(length(genes_in_program))
   geneprograms.list[[gp]] <- genes_in_program
@@ -244,7 +247,8 @@ for(gp in unique(longdf$geneprogram)){
 # print(lengths(geneprograms.list))
 # Compute cell scores
 names(geneprograms.list) <- gsub(" \\| ", "_", names(geneprograms.list))
-seur.human <- AddModuleScore(seur.human, name = names(geneprograms.list), features=geneprograms.list)
+names(geneprograms.list) <- gsub("\\/", "_", names(geneprograms.list))
+seur.human <- AddModuleScore(seur.human, name = names(geneprograms.list), features=geneprograms.list, seed=1)
 
 # Remove the annoying numbers that are being added
 colnames(seur.human@meta.data)[14:22] <- stringr::str_sub(colnames(seur.human@meta.data)[14:22], end=-2)
@@ -252,11 +256,43 @@ colnames(seur.human@meta.data)[23:49] <- stringr::str_sub(colnames(seur.human@me
 
 # Sanity check GEPs
 SCpubr::do_FeaturePlot(seur.human, features=colnames(seur.human@meta.data)[14:25], reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=3)
-# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/umap_allgeps.jpeg", width=20, height=30)
+# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/umap_allgeps2.jpeg", width=20, height=30)
+
+# GEP7 for supp figure
+SCpubr::do_FeaturePlot(seur.human, features="GEP7", split.by="Batch", reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=5)
+# ggsave("./data/human-thymus/HumanData_23_GEPsPerBatch/GEP7.jpeg", width=20, height=10)
 
 # Checkpoint save
-# saveRDS(seur.human, "./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_top200genes.rds")
+# saveRDS(seur.human, "./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-08-04.rds")
 # seur.human <- readRDS("./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_top200genes.rds")
+
+# UMAPs other datasets for supp figure
+for(genesig in names(geneprograms.list)[13:36]){
+  print(genesig)
+  filen <- paste0("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig_umaps/suppfig5_umap_", tolower(genesig), ".jpeg")
+  if(grepl("CanoGamez", genesig)==T){
+    scalemin <- -1
+    scalemax <- 2
+  }
+  else if(grepl("Rose", genesig)==T){
+    scalemin <- -0.4
+    scalemax <- 0.7
+  }
+  else if(grepl("Poon", genesig)==T){
+    scalemin <- -0.1
+    scalemax <- 0.5
+  }
+  ggsave(filename=filen,
+         plot=SCpubr::do_FeaturePlot(seur.human, features=genesig, split.by="Tissue", reduction="UMAP_50",
+                                     viridis_color_map = "B", order=T, ncol=2),
+         width=10, height=7)
+}
+
+ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig5_umap_canogamez_CD4Tnaive.jpeg",
+       SCpubr::do_FeaturePlot(seur.human, features=c("CanoGamez_CD4_Tnaive","CanoGamez_CD4_TCM"), split.by="Tissue", reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=2,
+                              min.cutoff = rep(-0.5, 2), max.cutoff=rep(2, 2)),
+       width=10, height=14)
+
 
 
 # ********************************************
@@ -275,7 +311,7 @@ ggplot(test,
   geom_point(aes(color=new_clusters), size=0.1)+
   scale_color_manual(values=cols_integrated)+
   theme_classic()
-ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/ggpairs_scatters/all_scatters.jpeg", width=20, height=50)
+# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/ggpairs_scatters/all_scatters.jpeg", width=20, height=50)
 
 
 ggplot(seur.human@meta.data, aes(x=GEP1_MAIT, y=Poon_CD8MAIT))+
@@ -447,7 +483,7 @@ PlotCoexpression <- function(seuratobj,
                              pwithmatrix=T,
                              rasterdpi=300,
                              nlevels=100,
-                             cols.neg="#bdbdbd", cols.pos=c("#74c476", "#fd8d3c"), col.threshold=0.5, colmatrix_stepsize=10,
+                             cols.neg="#969696", cols.pos=c("#74c476", "#fd8d3c"), col.threshold=0.5, colmatrix_stepsize=10,
                              order=T){
   # GET COLOR MATRIX
   cat("\n-> Getting color matrix\n")
@@ -567,9 +603,9 @@ for(gep in gepsall[gepsall!="GEP6_Tcm"]){
 
 
 # UMAPs of interest
-colnames(seur.human@meta.data)[14] <- "GEP1"
-colnames(seur.human@meta.data)[17] <- "GEP4"
-colnames(seur.human@meta.data)[19] <- "GEP6"
+# colnames(seur.human@meta.data)[14] <- "GEP1"
+# colnames(seur.human@meta.data)[17] <- "GEP4"
+# colnames(seur.human@meta.data)[19] <- "GEP6"
 
 # GEP1 (row1)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "CanoGamez_CD4_TEM"), nlevels=100, colmatrix_stepsize=0),
@@ -580,8 +616,8 @@ colnames(seur.human@meta.data)[19] <- "GEP6"
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_poon_CD8mait.pdf", width=9, height=8)
 p11 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "CanoGamez_CD4_TEM")) +
   draw_label("CD4 Tem", hjust=0.5, y=0.98, size=30)
-p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Rose_CD8_modul3_Tem.emra")) +
-  draw_label("CD8 Tem/emra (module 3)", hjust=0.5, y=0.98, size=30)
+p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Rose_CD4_modul4_Tem")) +
+  draw_label("CD4 Tem (module 4)", hjust=0.5, y=0.98, size=30)
 p13 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Poon_CD8MAIT")) +
   draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
 
@@ -621,4 +657,5 @@ plot_grid(plot_grid(p11,p12,p13, nrow = 1, scale=0.95),
           plot_grid(p21,p22,p23, nrow = 1, scale=0.95),
           plot_grid(p31,p32,p33, nrow = 1, scale=0.95),
           nrow=3, scale=0.95)
-ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid3.pdf", width=23, height=20)
+# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid2bis.pdf", width=23, height=20)
+ggsave("./data/human-thymus/HumanData_17_GEPsOnPoonData/plots_figure/combined_grid2bis.pdf", width=23, height=20)

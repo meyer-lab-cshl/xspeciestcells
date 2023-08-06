@@ -55,14 +55,14 @@ groups <- metadata %>%
   rownames_to_column("cell") %>%
   # keep only cells of interest
   filter(tissue_id=="PBMC") %>%
-  filter(batch_id %in% c("E", "I") & donor_id %in% c("5", "11")) %>%
-  # filter(batch_id %in% c("E", "F", "I")) %>%
+  # filter(batch_id %in% c("E", "I") & donor_id %in% c("5", "11")) %>%
+  filter(batch_id %in% c("E", "F", "I")) %>%
   # create new variable that integrates batch and donor
   mutate(batchdonor_id=paste0(batch_id, donor_id)) %>%
   # keep only groups with at least 100 cells
   # group_by(cell_id, batch_id, cluster_id, donor_id) %>%
   group_by(cell_id, batchdonor_id, cluster_id) %>%
-  filter(n()>50) %>%
+  filter(n()>10) %>%
   ungroup() %>%
   # keep only columns of interest
   column_to_rownames("cell") %>%
@@ -105,10 +105,10 @@ all(rownames(metadf.deseq) == colnames(counts.deseq))
 # tabl(matcol$cell_state)
 cols_batchid <- brewer.pal(5, "Greys")
 names(cols_batchid) <- unique(metadf.deseq$batch_id)
-# cols_batchdonorid <- pals::brewer.greys(12)
-# names(cols_batchdonorid) <- unique(metadf.deseq$batchdonor_id)
-cols_batchdonorid <- c("#BFBFBF", "#393939")
+cols_batchdonorid <- pals::brewer.greys(12)
 names(cols_batchdonorid) <- unique(metadf.deseq$batchdonor_id)
+# cols_batchdonorid <- c("#BFBFBF", "#393939")
+# names(cols_batchdonorid) <- unique(metadf.deseq$batchdonor_id)
 
 
 # CREATE DESEQ2 OBJECT
@@ -122,6 +122,7 @@ dds <- DESeqDataSetFromMatrix(counts.deseq,
 
 # Transform counts for data visualization
 rld <- rlog(dds, blind=TRUE)
+rld <- vst(dds)
 # head(assay(rld))
 
 # Plot PCA
@@ -173,76 +174,76 @@ ggplot(counts_pca, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
 
 
 
-# ***************************
-## 2.3. Run DESeq2 (LRT) ####
-
-# Run DESeq2 differential expression analysis
-dds <- DESeq(dds, test="LRT", reduced=~batchdonor_id+cluster_id)
-# dds <- DESeq(dds, test="Wald")
-plotDispEsts(dds) # Plot dispersion estimates
-
-
-# Output results for contrast batch_id + lineage_id VS batch_id
-res <- results(dds,
-               # contrast = c("lineage_id", "MAIT", "GD"),
-               alpha = 0.05)
-print(res)
-
-# Keep only significant DE genes
-genes.sig <- res %>%
-  data.frame() %>%
-  filter(padj<0.01)
-dim(genes.sig) # 209 genes (FDR 0.05), 122 genes (FDR 0.01)
-
-
-
-# ***************************************
-## 2.4. Plot heatmap on all lineages ####
-
-# Get corrected counts (that we batch corrected with limma earlier)
-counts.correc.sig <- t(counts_batchcorrect[rownames(genes.sig),]) # keep only the genes of interest
-# counts.correc.sig <- counts.correc.sig[grep("GD|MAIT|NKT", rownames(counts.correc.sig), value=T),]
-counts.correc.sig[,1:5]
-dim(counts.correc.sig)
-
-# Set a color palette
-heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
-
-
-# Run pheatmap using the metadata data frame for the annotation
-# pdf("./plots/allPBMCs_batchE-I_heatmap_padj0_01.pdf", width=12, height=10)
-pheatmap::pheatmap(t(counts.correc.sig),
-                   color = heat_colors,
-                   scale = "row", # z-score
-                   clustering_method="ward.D2",
-                   cluster_rows = T,
-                   cluster_cols = T,
-                   border_color = NA,
-                   # Columns (cell groups)
-                   show_colnames = T,
-                   fontsize_col = 10,
-                   annotation_col = metadf.deseq %>% dplyr::select(c(lineage_id, batchdonor_id, cluster_id)),
-                   annotation_colors = list(lineage_id = cols_lineages,
-                                            batchdonor_id=cols_batchdonorid,
-                                            cluster_id=cols_integrated[names(cols_integrated) %in% unique(metadf.deseq$cluster_id)]),
-                   # Rows (genes)
-                   show_rownames=T,
-                   fontsize_row=6,
-                   # title
-                   main="PBMC: DE genes btw all lineages")
-# dev.off()
-
-
-# Use degPatterns function to show gene clusters across sample groups
-library(DEGreport)
-all(rownames(metadf.deseq) == colnames(t(counts.correc.sig))) # sanity check
-metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
-clusters <- degPatterns(t(counts.correc.sig),
-                        metadata = metadf.deseq,
-                        minc=5, # minimum nb of genes per group
-                        time = "lineage_id",
-                        col=NULL)
-# ggsave("./plots/allPBMCs_batchE-I_DEgenescluster_padj0_01.jpeg", clusters$plot + labs(title="Batches E-I | padj<0.01"), width=8, height=8)
+# # ***************************
+# ## 2.3. Run DESeq2 (LRT) ####
+# 
+# # Run DESeq2 differential expression analysis
+# dds <- DESeq(dds, test="LRT", reduced=~batchdonor_id+cluster_id)
+# # dds <- DESeq(dds, test="Wald")
+# plotDispEsts(dds) # Plot dispersion estimates
+# 
+# 
+# # Output results for contrast batch_id + lineage_id VS batch_id
+# res <- results(dds,
+#                # contrast = c("lineage_id", "MAIT", "GD"),
+#                alpha = 0.05)
+# print(res)
+# 
+# # Keep only significant DE genes
+# genes.sig <- res %>%
+#   data.frame() %>%
+#   filter(padj<0.01)
+# dim(genes.sig) # 209 genes (FDR 0.05), 122 genes (FDR 0.01)
+# 
+# 
+# 
+# # ***************************************
+# ## 2.4. Plot heatmap on all lineages ####
+# 
+# # Get corrected counts (that we batch corrected with limma earlier)
+# counts.correc.sig <- t(counts_batchcorrect[rownames(genes.sig),]) # keep only the genes of interest
+# # counts.correc.sig <- counts.correc.sig[grep("GD|MAIT|NKT", rownames(counts.correc.sig), value=T),]
+# counts.correc.sig[,1:5]
+# dim(counts.correc.sig)
+# 
+# # Set a color palette
+# heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
+# 
+# 
+# # Run pheatmap using the metadata data frame for the annotation
+# # pdf("./plots/allPBMCs_batchE-I_heatmap_padj0_01.pdf", width=12, height=10)
+# pheatmap::pheatmap(t(counts.correc.sig),
+#                    color = heat_colors,
+#                    scale = "row", # z-score
+#                    clustering_method="ward.D2",
+#                    cluster_rows = T,
+#                    cluster_cols = T,
+#                    border_color = NA,
+#                    # Columns (cell groups)
+#                    show_colnames = T,
+#                    fontsize_col = 10,
+#                    annotation_col = metadf.deseq %>% dplyr::select(c(lineage_id, batchdonor_id, cluster_id)),
+#                    annotation_colors = list(lineage_id = cols_lineages,
+#                                             batchdonor_id=cols_batchdonorid,
+#                                             cluster_id=cols_integrated[names(cols_integrated) %in% unique(metadf.deseq$cluster_id)]),
+#                    # Rows (genes)
+#                    show_rownames=T,
+#                    fontsize_row=6,
+#                    # title
+#                    main="PBMC: DE genes btw all lineages")
+# # dev.off()
+# 
+# 
+# # Use degPatterns function to show gene clusters across sample groups
+# library(DEGreport)
+# all(rownames(metadf.deseq) == colnames(t(counts.correc.sig))) # sanity check
+# metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
+# clusters <- degPatterns(t(counts.correc.sig),
+#                         metadata = metadf.deseq,
+#                         minc=5, # minimum nb of genes per group
+#                         time = "lineage_id",
+#                         col=NULL)
+# # ggsave("./plots/allPBMCs_batchE-I_DEgenescluster_padj0_01.jpeg", clusters$plot + labs(title="Batches E-I | padj<0.01"), width=8, height=8)
 
 
 
@@ -253,7 +254,7 @@ clusters <- degPatterns(t(counts.correc.sig),
 
 # *******************
 ## 3.1. Function ####
-cellTypeSignature <- function(cell.1, padj_max=0.05, log2FC_min=0.5, shrinkage=T, DEmethod="LRT"){
+cellTypeSignature <- function(cell.1, norm="rlog", padj_max=0.05, log2FC_min=0.5, shrinkage=F, DEmethod="LRT"){
   
   # All cell lineages
   allcells <- c("CD8", "CD4", "MAIT", "NKT", "GD")
@@ -273,24 +274,25 @@ cellTypeSignature <- function(cell.1, padj_max=0.05, log2FC_min=0.5, shrinkage=T
     dds.temp <- DESeqDataSetFromMatrix(counts.temp, colData = metadf.temp, design = ~ batchdonor_id + lineage_id + cluster_id)
     
     # 2. Normalize, batch-correct counts and plot PCA
-    rld.temp <- rlog(dds.temp, blind=TRUE)
+    if(norm=="rlog"){rld.temp <- rlog(dds.temp, blind=TRUE)}
+    else if(norm=="vst"){rld.temp <- vst(dds.temp, blind=TRUE)}
     counts_batchcorrect.temp <- limma::removeBatchEffect(x=assay(rld.temp),
                                                          batch=metadf.temp$batchdonor_id,
                                                          design=model.matrix(~ lineage_id + cluster_id, metadf.temp))
-    counts_pca.temp <- ddsPCA(counts.batchcorrect = counts_batchcorrect.temp, metadf=metadf.temp)
+    # counts_pca.temp <- ddsPCA(counts.batchcorrect = counts_batchcorrect.temp, metadf=metadf.temp)
     # Plot PCA on batch-corrected counts
-    ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
-      geom_point(size = 4) +
-      # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-      # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
-      coord_fixed(expand=TRUE)+
-      scale_color_manual(values=cols_lineages)
-    ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
-      geom_point(size = 4) +
-      # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
-      # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
-      coord_fixed(expand=TRUE)+
-      scale_color_manual(values=cols_integrated)
+    # ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = lineage_id, shape=batch_id)) +
+    #   geom_point(size = 4) +
+    #   # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+    #   # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+    #   coord_fixed(expand=TRUE)+
+    #   scale_color_manual(values=cols_lineages)
+    # ggplot(counts_pca.temp, aes(x = PC1, y = PC2, color = cluster_id, shape=batch_id)) +
+    #   geom_point(size = 4) +
+    #   # xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+    #   # ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+    #   coord_fixed(expand=TRUE)+
+    #   scale_color_manual(values=cols_integrated)
     
     # 3. Run DESeq2 (LRT test): parameters based on recommendations
     # https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#recommendations-for-single-cell-analysis
@@ -317,33 +319,56 @@ cellTypeSignature <- function(cell.1, padj_max=0.05, log2FC_min=0.5, shrinkage=T
 # *************************************************
 ## 3.2. Get lineage-specific upregulated genes ####
 
-# Get upregulated genes
-cd4up  <- cellTypeSignature(cell.1="CD4",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F)
-cd8up  <- cellTypeSignature(cell.1="CD8",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F)
-maitup <- cellTypeSignature(cell.1="MAIT", padj_max=0.05, log2FC_min = 0.1, shrinkage=F)
-nktup  <- cellTypeSignature(cell.1="NKT",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F)
-gdtup  <- cellTypeSignature(cell.1="GD",   padj_max=0.05, log2FC_min = 0.1, shrinkage=F)
+# Get upregulated genes (note: shrinkage if Wald test, but LRT recommended for scRNAseq data)
+cd4up2  <- cellTypeSignature(cell.1="CD4",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F, norm="vst")
+cd8up2  <- cellTypeSignature(cell.1="CD8",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F, norm="vst")
+maitup2 <- cellTypeSignature(cell.1="MAIT", padj_max=0.05, log2FC_min = 0.1, shrinkage=F, norm="vst")
+nktup2  <- cellTypeSignature(cell.1="NKT",  padj_max=0.05, log2FC_min = 0.1, shrinkage=F, norm="vst")
+gdtup2  <- cellTypeSignature(cell.1="GD",   padj_max=0.05, log2FC_min = 0.1, shrinkage=F, norm="vst")
 
 # Look at genes that are upregulated in at least 2 contrasts
-plyr::count(Reduce(c, cd4up))  %>% filter(freq>=2) %>% pull(x) # 13Wald 11LRT
-plyr::count(Reduce(c, cd8up))  %>% filter(freq>=3) %>% pull(x) # 24Wald 21LRT
-plyr::count(Reduce(c, maitup)) %>% filter(freq>=2) %>% pull(x) # 17Wald 28LRT
-plyr::count(Reduce(c, nktup))  %>% filter(freq>=2) %>% pull(x) # 6Wald  7LRT
-plyr::count(Reduce(c, gdtup))  %>% filter(freq>=2) %>% pull(x) # 11Wald 12LRT
+# plyr::count(Reduce(c, cd4up))  %>% filter(freq>=2) %>% pull(x) # 13Wald 11LRT (batches E5-I11)
+# plyr::count(Reduce(c, cd8up))  %>% filter(freq>=3) %>% pull(x) # 24Wald 21LRT (batches E5-I11)
+# plyr::count(Reduce(c, maitup)) %>% filter(freq>=2) %>% pull(x) # 17Wald 28LRT (batches E5-I11)
+# plyr::count(Reduce(c, nktup))  %>% filter(freq>=2) %>% pull(x) # 6Wald  7LRT (batches E5-I11)
+# plyr::count(Reduce(c, gdtup))  %>% filter(freq>=2) %>% pull(x) # 11Wald 12LRT (batches E5-I11)
+
+# plyr::count(Reduce(c, cd4up))  %>% filter(freq>=3) %>% pull(x) # 9LRT (batches E-F-I with ncells>50)
+# plyr::count(Reduce(c, cd8up))  %>% filter(freq>=3) %>% pull(x) # 24LRT (batches E-F-I with ncells>50)
+# plyr::count(Reduce(c, maitup)) %>% filter(freq>=3) %>% pull(x) # 40LRT (batches E-F-I with ncells>50)
+# plyr::count(Reduce(c, nktup))  %>% filter(freq>=2) %>% pull(x) # 19LRT (batches E-F-I with ncells>50)
+# plyr::count(Reduce(c, gdtup))  %>% filter(freq>=3) %>% pull(x) # 11LRT (batches E-F-I with ncells>50)
+
+plyr::count(Reduce(c, cd4up2))  %>% filter(freq>=3) %>% pull(x) # 22LRT (batches E-F-I with ncells>10)
+plyr::count(Reduce(c, cd8up2))  %>% filter(freq>=3) %>% pull(x) # 25LRT (batches E-F-I with ncells>10)
+plyr::count(Reduce(c, maitup2)) %>% filter(freq>=3) %>% pull(x) # 33LRT (batches E-F-I with ncells>10)
+plyr::count(Reduce(c, nktup2))  %>% filter(freq>=2) %>% pull(x) # 29LRT (batches E-F-I with ncells>10)
+plyr::count(Reduce(c, gdtup2))  %>% filter(freq>=3) %>% pull(x) # 13LRT (batches E-F-I with ncells>10)
+
+intersect(plyr::count(Reduce(c, cd4up2))  %>% filter(freq>=3) %>% pull(x),
+          plyr::count(Reduce(c, cd4up))  %>% filter(freq>=3) %>% pull(x)) # 8 common
+intersect(plyr::count(Reduce(c, cd8up2))  %>% filter(freq>=3) %>% pull(x),
+          plyr::count(Reduce(c, cd8up))  %>% filter(freq>=3) %>% pull(x)) # 16 common
+intersect(plyr::count(Reduce(c, maitup2))  %>% filter(freq>=3) %>% pull(x),
+          plyr::count(Reduce(c, maitup))  %>% filter(freq>=3) %>% pull(x)) # 20 common
+intersect(plyr::count(Reduce(c, nktup2))  %>% filter(freq>=2) %>% pull(x),
+          plyr::count(Reduce(c, nktup))  %>% filter(freq>=2) %>% pull(x)) # 11 common
+intersect(plyr::count(Reduce(c, gdtup2))  %>% filter(freq>=3) %>% pull(x),
+          plyr::count(Reduce(c, gdtup))  %>% filter(freq>=3) %>% pull(x))  # 10 common
 
 # Bind them
-genes.lineage <- unique(c(plyr::count(Reduce(c, cd4up))  %>% filter(freq>=3) %>% pull(x),
-                        plyr::count(Reduce(c, cd8up))  %>% filter(freq>=3) %>% pull(x),
-                        plyr::count(Reduce(c, maitup)) %>% filter(freq>=3) %>% pull(x),
-                        plyr::count(Reduce(c, nktup))  %>% filter(freq>=2) %>% pull(x),
-                        plyr::count(Reduce(c, gdtup))  %>% filter(freq>=3) %>% pull(x)))
+genes.lineage2 <- unique(c(plyr::count(Reduce(c, cd4up2))  %>% filter(freq>=3) %>% pull(x),
+                        plyr::count(Reduce(c, cd8up2))  %>% filter(freq>=3) %>% pull(x),
+                        plyr::count(Reduce(c, maitup2)) %>% filter(freq>=3) %>% pull(x),
+                        plyr::count(Reduce(c, nktup2))  %>% filter(freq>=2) %>% pull(x),
+                        plyr::count(Reduce(c, gdtup2))  %>% filter(freq>=3) %>% pull(x))) # 95LRT (batches E-F-I with ncells>50), 111LRT (with ncells>10)
 
 
 # ************************
 ## 3.3. Plot heatmap ####
 
 # Get corrected counts (that we batch corrected with limma earlier)
-counts.correc.sig <- t(counts_batchcorrect[genes.lineage,]) # keep only the genes of interest
+counts.correc.sig <- t(counts_batchcorrect[genes.lineage2,]) # keep only the genes of interest
 counts.correc.sig[,1:5]
 dim(counts.correc.sig)
 
@@ -353,7 +378,7 @@ cols_batchdonorid <- pals::brewer.greys(length(unique(metadf.deseq$batchdonor_id
 names(cols_batchdonorid) <- unique(metadf.deseq$batchdonor_id)
 
 # Run pheatmap using the metadata data frame for the annotation
-# pdf("./plots/allPBMCs_batchE-F-I_lineagespecific_upregulatedgenes_heatmap_padj0_05.pdf", width=12, height=10)
+# pdf("./plots/allPBMCs_batchE-F-I_groupsmin10cells_lineagespecific_upregulatedgenes_heatmap_padj0_05.pdf", width=15, height=10)
 pheatmap::pheatmap(t(counts.correc.sig),
                    color = heat_colors,
                    scale = "row", # z-score
@@ -362,9 +387,10 @@ pheatmap::pheatmap(t(counts.correc.sig),
                    cluster_cols = F,
                    border_color = NA,
                    # Columns (cell groups)
-                   gaps_col=c(17,36,54,69),
+                   # gaps_col=c(17,36,54,69),
+                   gaps_col=c(35,63,95,123),
                    show_colnames = T,
-                   fontsize_col = 10,
+                   fontsize_col = 6,
                    annotation_col = metadf.deseq %>% dplyr::select(c(lineage_id, batchdonor_id, cluster_id)),
                    annotation_colors = list(lineage_id = cols_lineages,
                                             batchdonor_id=cols_batchdonorid,
@@ -373,6 +399,6 @@ pheatmap::pheatmap(t(counts.correc.sig),
                    show_rownames=T,
                    fontsize_row=6,
                    # title
-                   main="PBMC: DE genes btw all lineages")
+                   main="PBMC: DE genes btw all lineages (groups containing minimum 10 cells)")
 # dev.off()
 

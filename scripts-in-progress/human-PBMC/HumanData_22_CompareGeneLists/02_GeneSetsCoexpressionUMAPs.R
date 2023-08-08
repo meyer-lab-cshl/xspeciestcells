@@ -264,35 +264,43 @@ SCpubr::do_FeaturePlot(seur.human, features="GEP7", split.by="Batch", reduction=
 
 # Checkpoint save
 # saveRDS(seur.human, "./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-08-04.rds")
-# seur.human <- readRDS("./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_top200genes.rds")
+seur.human <- readRDS("./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-08-04.rds")
 
 # UMAPs other datasets for supp figure
-for(genesig in names(geneprograms.list)[13:36]){
+# for(genesig in names(geneprograms.list)[13:36]){
+for(genesig in colnames(seur.human@meta.data)[43]){
   print(genesig)
-  filen <- paste0("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig_umaps/suppfig5_umap_", tolower(genesig), ".jpeg")
+  filen <- paste0("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig_umaps_scaled/suppfig5_umap_", tolower(genesig), ".jpeg")
   if(grepl("CanoGamez", genesig)==T){
-    scalemin <- -1
+    scalemin <- 0
     scalemax <- 2
   }
-  else if(grepl("Rose", genesig)==T){
-    scalemin <- -0.4
+  else if(grepl("Rose_CD4", genesig)==T){
+    scalemin <- 0
     scalemax <- 0.7
   }
-  else if(grepl("Poon", genesig)==T){
-    scalemin <- -0.1
-    scalemax <- 0.5
+  else if(grepl("Rose_CD8", genesig)==T){
+    scalemin <- 0
+    scalemax <- 0.55
+  }
+  else if(grepl("Poon_CD4", genesig)==T){
+    scalemin <- 0
+    scalemax <- 0.22
+  }
+  else if(grepl("Poon_CD8", genesig)==T){
+    scalemin <- 0
+    scalemax <- 0.25
   }
   ggsave(filename=filen,
          plot=SCpubr::do_FeaturePlot(seur.human, features=genesig, split.by="Tissue", reduction="UMAP_50",
-                                     viridis_color_map = "B", order=T, ncol=2),
-         width=10, height=7)
+                                     min.cutoff=scalemin, #max.cutoff=scalemax,
+                                     viridis_color_map = "B", order=T, ncol=2, legend.position="left"),
+         width=15, height=7)
 }
 
-ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig5_umap_canogamez_CD4Tnaive.jpeg",
-       SCpubr::do_FeaturePlot(seur.human, features=c("CanoGamez_CD4_Tnaive","CanoGamez_CD4_TCM"), split.by="Tissue", reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=2,
-                              min.cutoff = rep(-0.5, 2), max.cutoff=rep(2, 2)),
-       width=10, height=14)
-
+# test <- SCpubr::do_FeaturePlot(seur.human, features="Poon_CD8MAIT", split.by="Tissue", reduction="UMAP_50",
+#                        viridis_color_map = "B", order=T, ncol=2, min.cutoff=0, max.cutoff=0.2)
+# test$patches$plots[[1]]$patches$plots[[1]] + labs(x="", y="")
 
 
 # ********************************************

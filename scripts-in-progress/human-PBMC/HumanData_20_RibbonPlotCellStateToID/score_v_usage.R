@@ -28,29 +28,32 @@ combined <- df %>%
   left_join(usages, by=c("cellid", "name")) %>%
   as_tibble
 
-combined <- combined %>% 
+combined <- combined %>%
+  filter(name %in% paste0("GEP", c(1,4,5,6))) %>% 
   group_by(name) %>%
   mutate(score_nn = ifelse(score < 0, 0, score),
          score_pmax = score_nn/max(score_nn)) %>%
   group_by(cellid) %>%
-  mutate(score_assigned = max(score_pmax)) %>%
-  filter(name %in% paste0("GEP", c(1,4,5,6)))
+  mutate(score_assigned = max(score_pmax))
 
 ggplot(combined) +
-  geom_density(aes(usage)) +
+  geom_density(aes(usage,  color=usage_assigned==name)) +
     facet_wrap(~name, scales="free")
 
 tt <- combined %>%
-  arrange(name, usage) %>%
-  mutate(cellid=fct_inorder(cellid))
+  arrange(name, usage)
 
-ggplot(tt) +
+ggplot(combined) +
   geom_point(aes(x=cellid, y=usage, color=usage_assigned==name)) +
   facet_wrap(~name, scales="free")+
   theme(axis.text.x = element_blank())
 
 ggplot(combined) +
   geom_density(aes(score_pmax)) +
+  facet_wrap(~name, scales="free") 
+
+ggplot(combined) +
+  geom_density(aes(score)) +
   facet_wrap(~name, scales="free") 
 
 ggplot(combined) +

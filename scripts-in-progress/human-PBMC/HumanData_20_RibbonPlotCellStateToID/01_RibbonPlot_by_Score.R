@@ -47,8 +47,10 @@ for (i in 1:ncol(gep_topgenes)){
 }
 
 seur.geps     <- AddModuleScore(seur, name = "GEP", features=gep_list)
-# seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes.rds")
+# seur.geps <- readRDS("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/seuratobj_gepscores_allgenes_2023-08-04.rds")
 
+
+gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
 # Sanity check
 SCpubr::do_FeaturePlot(seur.geps, reduction="UMAP_50", features=paste0("GEP", 1:length(gep_list)), ncol=6,
                        viridis_color_map = "B", order=T)
@@ -63,10 +65,11 @@ SCpubr::do_FeaturePlot(subset(seur.geps, Tissue=="PBMC"), reduction="UMAP_50", f
 # 3. THRESHOLD CELLS BASED ON GEPs ####
 # *************************************
 
-gep_pbmc <- c("GEP1", "GEP4", "GEP5", "GEP6", "GEP8", "GEP12")
+
 df <- as.data.frame(seur.geps@meta.data[seur.geps@meta.data$Tissue=="PBMC",gep_pbmc])
 # Check the distribution
-ggplot(pivot_longer(df, cols=all_of(gep_pbmc), names_to="gep", values_to="score"))+
+ggplot(pivot_longer(df, cols=all_of(gep_pbmc), 
+                    names_to="gep", values_to="score"))+
   geom_histogram(aes(x=score), bins = 100)+
   facet_wrap(~gep, ncol=4)+
   # _______
@@ -82,12 +85,12 @@ ggplot(pivot_longer(df, cols=all_of(gep_pbmc), names_to="gep", values_to="score"
 dfraw <- df
 
 # Get the max
-dfraw$score_max <- apply(dfraw[,1:7], 1, max)
+dfraw$score_max <- apply(dfraw[,1:6], 1, max)
 dfraw$gep_assign <- colnames(dfraw)[apply(dfraw, 1, which.max)]
 head(dfraw)
-tabl(dfraw$score_max<0) # 7 of them have negative score, which is not good
-dfraw[dfraw$score_max<0,"gep_assign"] <- "undefined"
-tabl(dfraw$gep_assign)
+#table(dfraw$score_max<0) # 7 of them have negative score, which is not good
+#dfraw[dfraw$score_max<0,"gep_assign"] <- "undefined"
+table(dfraw$gep_assign)
 
 # Look at distribution of max score
 ggplot(dfraw)+
@@ -137,7 +140,7 @@ VlnPlot(seur.gepsraw[,seur.gepsraw$Tissue=="PBMC"], group.by = "gep_assign", fea
 #             reduction="UMAP_50")
 
 # Look in 2D scatter plot
-ggpairs(dfraw, columns=1:4, aes(color=gep_max, alpha=0.9), legend=c(1,1),
+ggpairs(dfraw, columns=1:4, aes(color=score_max, alpha=0.9), legend=c(1,1),
         upper=list(continuous=wrap("points", size=0.05)),
         lower=list(continuous=wrap("points", size=0.05)))+
   scale_color_manual(values=c(brewer.pal(7, "Dark2"), "#f0f0f0")) +
@@ -359,7 +362,7 @@ dfnorm2b <- dfnorm2 |>
          GEP5_threshold=ifelse(GEP5>0.35, T, F),
          GEP6_threshold=ifelse(GEP6>0.35, T, F),
          GEP8_threshold=ifelse(GEP8>0.4, T, F),
-         GEP11_threshold=ifelse(GEP11>0.4, T, F),
+         #GEP11_threshold=ifelse(GEP11>0.4, T, F),
          GEP12_threshold=ifelse(GEP12>0.1, T, F)) |>
   # pivot longer
   pivot_longer(cols=ends_with("threshold"), names_to="gep", values_to="pass") |>

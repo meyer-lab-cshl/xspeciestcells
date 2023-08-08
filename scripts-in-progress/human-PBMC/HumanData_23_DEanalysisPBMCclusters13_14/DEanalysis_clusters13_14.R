@@ -61,7 +61,7 @@ groups <- metadata %>%
   # filter(cell_id %in% c("MAIT", "GD")) %>%
   # keep only groups with at least 100 cells
   group_by(cell_id, batch_id) %>%
-  filter(n()>10) %>%
+  filter(n()>40) %>%
   ungroup() %>%
   # keep only columns of interest
   column_to_rownames("cell") %>%
@@ -174,7 +174,7 @@ genes.sig <- res %>%
   data.frame() %>%
   filter(padj<0.05)
 dim(genes.sig)
-sum(res$padj[!is.na(res$padj)]<0.01) # 50 genes with padj<0.01
+# sum(res$padj[!is.na(res$padj)]<0.01) # 50 genes with padj<0.01 (and with min cells >10)
 # write.csv(genes.sig %>% rownames_to_column("gene") %>% dplyr::select(gene, padj), "./plots/deg_clust13-14_batchE5I11_padj0_05.csv")
 
 
@@ -192,8 +192,8 @@ heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 
 # Run pheatmap using the metadata data frame for the annotation
-# setwd("./scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters13_14/")
-# pdf("./plots/All_heatmap_clust13-14_batchEI_padj0_05.pdf", width=10, height=12)
+# setwd("~/Projects/HumanThymusProject/scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters13_14/")
+# pdf("./plots/All_heatmap_clust13-14_batchE5I11_min40cells_padj0_05.pdf", width=10, height=12)
 pheatmap::pheatmap(t(counts.correc.sig),
                              color = heat_colors,
                              scale = "row", # z-score
@@ -212,8 +212,9 @@ pheatmap::pheatmap(t(counts.correc.sig),
                              show_rownames=T,
                              fontsize_row=8,
                              # title
-                             main="PBMC clusters 13-14 (batches E5, I11): DE genes btw all lineages")
+                             main="PBMC clusters 13-14 (batches E5, I11, >40 cells per group)")
 # dev.off()
+
 
 
 ## Plot volcano plot on MAIT vs GDT ####
@@ -255,121 +256,121 @@ pheatmap::pheatmap(t(counts.correc.sig),
 #   geom_jitter(width=0.1)
   
 
-df <- data.frame("lognorm"=counts_batchcorrect["IL12RB2", grep("MAIT|GD", colnames(counts_batchcorrect), value=T)],
-                 "lineage"=c(rep("GD",4), rep("MAIT", 3)),
-                 "batch" = c("E", "G", "H", "I", "E", "F", "I"))
-ggplot(df, aes(x=lineage, y=lognorm))+
-  geom_boxplot()+
-  geom_point(aes(color=batch), size=4)+
-  scale_color_manual(values=RColorBrewer::brewer.pal(5, "Set2"))+
-  labs(x="", title="IL12RB2 expression in PBMCs in clusters 13-14")+
-  theme_cowplot()+
-  theme(panel.background = element_rect(fill="#f0f0f0"),
-        title = element_text(size=10))
-# ggsave("./plots/il12rb2_gdmait.jpeg", width=5, height=6)
-
-
-
-
-# ************************************************
-## 2.5. Plot heatmap on receptors of interest ####
-
-# Plot heatmap on receptors of interest
-# Check for IL12, IL18, IL15, and IL17 receptors
-receptors <- c("IL18R1", "IL18RAP", "IL18BP", #IL18BP is a neutralizer of IL18
-               "IL23R", # dimerizes with IL12BR1
-               "IL12RB1", "IL12RB2",
-               "IL17RE", "IL17RC", "IL17RA",
-               "IFNGR1", "IFNGR2",
-               "IL2RA",
-               "IL6R")
-res %>%
-  data.frame() %>%
-  rownames_to_column("gene") %>%
-  as_tibble() %>%
-  filter(gene %in% receptors)
-
-counts.correc.sig <- t(counts_batchcorrect[receptors,]) # keep only the genes of interest
-# counts.correc.sig[,1:5]
-pdf("./plots/MAITvsGDT_heatmap_allPBMC_cytokinereceptors.pdf", width=8, height=7)
-pheatmap::pheatmap(t(counts.correc.sig),
-                   color = heat_colors,
-                   scale = "row", # z-score
-                   # clustering_method="ward.D2",
-                   cluster_rows = T,
-                   cluster_cols = F,
-                   border_color = NA,
-                   # Columns (cell groups)
-                   show_colnames = T,
-                   fontsize_col = 10,
-                   annotation_col =metadf.deseq %>% select(c(lineage_id, batch_id)),
-                   annotation_colors = list(lineage_id = cols_lineages,
-                                            batch_id=cols_batchid),
-                   # Rows (genes)
-                   show_rownames=T,
-                   fontsize_row=8,
-                   # title
-                   main="All PBMCs: cytokine receptors")
-dev.off()
-
-
-
-# ************************************
-## 2.6. Identifying gene clusters ####
-
-# Tutorial: https://hbctraining.github.io/DGE_workshop/lessons/08_DGE_LRT.html
-
-# Obtain normalized values for significant genes
-genes.sig <- res %>%
-  data.frame() %>%
-  filter(padj<0.01)
-dim(genes.sig) # 79 genes
-counts.correc.sig <- counts_batchcorrect[rownames(genes.sig),]
-# counts.correc.sig[1:5,]
-
-# Use degPatterns function to show gene clusters across sample groups
-# BiocManager::install("DEGreport")
-library(DEGreport)
-all(rownames(metadf.deseq) == colnames(t(counts.correc.sig))) # sanity check
-metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
-clusters <- degPatterns(t(counts.correc.sig),
-                        metadata = metadf.deseq,
-                        minc=5, # minimum nb of genes per group
-                        time = "lineage_id",
-                        col=NULL)
-# ggsave(plot=clusters$plot + labs(title="PBMC clusters 13-14 (batches E5, I11): DE genes btw all lineages"),
-#        filename="./plots/degpatterns_clust13-14_batchEI_padj0_05.jpeg", width=8, height=6)
-
-# Extract gene lists
-cluster_groups <- clusters$df
-# write.csv(cluster_groups, "./plots/degpatterns_clust13-14_padj0_01_listgenespergroup.csv")
-group1 <- clusters$df %>% filter(cluster==1)
-group5 <- clusters$df %>% filter(cluster %in% 5:6)
-
-# GENE SET ENRICHMENT ANALYSIS
-# Create list of DE genes
-isGeneSig <- rownames(res) %in% group5$genes
-isGeneSig <- as.integer(isGeneSig)
-# sum(isGeneSig)==nrow(group5)
-names(isGeneSig) <- rownames(res)
-isGeneSig[1:5]
-
-# Weigh gene vector by length of genes
-# BiocManager::install("goseq")
-library(goseq)
-pwf=nullp(isGeneSig,"hg19","geneSymbol")
-
-# GO enrichment: based on https://bioinformatics-core-shared-training.github.io/cruk-summer-school-2018/RNASeq2018/html/06_Gene_set_testing.nb.html#go-enrichment-analysis
-goResults <- goseq(pwf, "hg19","geneSymbol", test.cats=c("GO:CC", "GO:BP", "GO:MF"))
-goResults %>% 
-  top_n(20, wt=-over_represented_pvalue) %>% 
-  mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
-  ggplot(aes(x=hitsPerc, 
-             y=reorder(term, hitsPerc), 
-             colour=over_represented_pvalue, 
-             size=numDEInCat)) +
-  geom_point() +
-  expand_limits(x=0) +
-  labs(x="Hits (%)", y="GO term", colour="pvalue", size="#DE genes", title="DE genes in groups 5-6")
-# ggsave("./plots/degpatterns_clust13-14_padj0_01_goenrich_groups5-6.jpeg", width=7, height=6)
+# df <- data.frame("lognorm"=counts_batchcorrect["IL12RB2", grep("MAIT|GD", colnames(counts_batchcorrect), value=T)],
+#                  "lineage"=c(rep("GD",4), rep("MAIT", 3)),
+#                  "batch" = c("E", "G", "H", "I", "E", "F", "I"))
+# ggplot(df, aes(x=lineage, y=lognorm))+
+#   geom_boxplot()+
+#   geom_point(aes(color=batch), size=4)+
+#   scale_color_manual(values=RColorBrewer::brewer.pal(5, "Set2"))+
+#   labs(x="", title="IL12RB2 expression in PBMCs in clusters 13-14")+
+#   theme_cowplot()+
+#   theme(panel.background = element_rect(fill="#f0f0f0"),
+#         title = element_text(size=10))
+# # ggsave("./plots/il12rb2_gdmait.jpeg", width=5, height=6)
+# 
+# 
+# 
+# 
+# # ************************************************
+# ## 2.5. Plot heatmap on receptors of interest ####
+# 
+# # Plot heatmap on receptors of interest
+# # Check for IL12, IL18, IL15, and IL17 receptors
+# receptors <- c("IL18R1", "IL18RAP", "IL18BP", #IL18BP is a neutralizer of IL18
+#                "IL23R", # dimerizes with IL12BR1
+#                "IL12RB1", "IL12RB2",
+#                "IL17RE", "IL17RC", "IL17RA",
+#                "IFNGR1", "IFNGR2",
+#                "IL2RA",
+#                "IL6R")
+# res %>%
+#   data.frame() %>%
+#   rownames_to_column("gene") %>%
+#   as_tibble() %>%
+#   filter(gene %in% receptors)
+# 
+# counts.correc.sig <- t(counts_batchcorrect[receptors,]) # keep only the genes of interest
+# # counts.correc.sig[,1:5]
+# pdf("./plots/MAITvsGDT_heatmap_allPBMC_cytokinereceptors.pdf", width=8, height=7)
+# pheatmap::pheatmap(t(counts.correc.sig),
+#                    color = heat_colors,
+#                    scale = "row", # z-score
+#                    # clustering_method="ward.D2",
+#                    cluster_rows = T,
+#                    cluster_cols = F,
+#                    border_color = NA,
+#                    # Columns (cell groups)
+#                    show_colnames = T,
+#                    fontsize_col = 10,
+#                    annotation_col =metadf.deseq %>% select(c(lineage_id, batch_id)),
+#                    annotation_colors = list(lineage_id = cols_lineages,
+#                                             batch_id=cols_batchid),
+#                    # Rows (genes)
+#                    show_rownames=T,
+#                    fontsize_row=8,
+#                    # title
+#                    main="All PBMCs: cytokine receptors")
+# dev.off()
+# 
+# 
+# 
+# # ************************************
+# ## 2.6. Identifying gene clusters ####
+# 
+# # Tutorial: https://hbctraining.github.io/DGE_workshop/lessons/08_DGE_LRT.html
+# 
+# # Obtain normalized values for significant genes
+# genes.sig <- res %>%
+#   data.frame() %>%
+#   filter(padj<0.01)
+# dim(genes.sig) # 79 genes
+# counts.correc.sig <- counts_batchcorrect[rownames(genes.sig),]
+# # counts.correc.sig[1:5,]
+# 
+# # Use degPatterns function to show gene clusters across sample groups
+# # BiocManager::install("DEGreport")
+# library(DEGreport)
+# all(rownames(metadf.deseq) == colnames(t(counts.correc.sig))) # sanity check
+# metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
+# clusters <- degPatterns(t(counts.correc.sig),
+#                         metadata = metadf.deseq,
+#                         minc=5, # minimum nb of genes per group
+#                         time = "lineage_id",
+#                         col=NULL)
+# # ggsave(plot=clusters$plot + labs(title="PBMC clusters 13-14 (batches E5, I11): DE genes btw all lineages"),
+# #        filename="./plots/degpatterns_clust13-14_batchEI_padj0_05.jpeg", width=8, height=6)
+# 
+# # Extract gene lists
+# cluster_groups <- clusters$df
+# # write.csv(cluster_groups, "./plots/degpatterns_clust13-14_padj0_01_listgenespergroup.csv")
+# group1 <- clusters$df %>% filter(cluster==1)
+# group5 <- clusters$df %>% filter(cluster %in% 5:6)
+# 
+# # GENE SET ENRICHMENT ANALYSIS
+# # Create list of DE genes
+# isGeneSig <- rownames(res) %in% group5$genes
+# isGeneSig <- as.integer(isGeneSig)
+# # sum(isGeneSig)==nrow(group5)
+# names(isGeneSig) <- rownames(res)
+# isGeneSig[1:5]
+# 
+# # Weigh gene vector by length of genes
+# # BiocManager::install("goseq")
+# library(goseq)
+# pwf=nullp(isGeneSig,"hg19","geneSymbol")
+# 
+# # GO enrichment: based on https://bioinformatics-core-shared-training.github.io/cruk-summer-school-2018/RNASeq2018/html/06_Gene_set_testing.nb.html#go-enrichment-analysis
+# goResults <- goseq(pwf, "hg19","geneSymbol", test.cats=c("GO:CC", "GO:BP", "GO:MF"))
+# goResults %>% 
+#   top_n(20, wt=-over_represented_pvalue) %>% 
+#   mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
+#   ggplot(aes(x=hitsPerc, 
+#              y=reorder(term, hitsPerc), 
+#              colour=over_represented_pvalue, 
+#              size=numDEInCat)) +
+#   geom_point() +
+#   expand_limits(x=0) +
+#   labs(x="Hits (%)", y="GO term", colour="pvalue", size="#DE genes", title="DE genes in groups 5-6")
+# # ggsave("./plots/degpatterns_clust13-14_padj0_01_goenrich_groups5-6.jpeg", width=7, height=6)
 

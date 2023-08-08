@@ -34,7 +34,9 @@ combined <- combined %>%
   mutate(score_nn = ifelse(score < 0, 0, score),
          score_pmax = score_nn/max(score_nn)) %>%
   group_by(cellid) %>%
-  mutate(score_assigned = max(score_pmax))
+  mutate(score_assigned = max(score_pmax),
+         assign_TRUE = usage_assigned == name) %>%
+  ungroup
 
 ggplot(combined) +
   geom_density(aes(usage,  color=usage_assigned==name)) +
@@ -61,4 +63,9 @@ ggplot(combined) +
   scale_color_brewer(type="qual") +
   facet_wrap(usage_assigned==name~name, nrow=2)
 
+
+combined %>%
+  filter(name== "GEP1") %>%
+  select(usage, assign_TRUE) %>%
+  pivot_wider(values_from="usage", names_from="assign_TRUE")
              

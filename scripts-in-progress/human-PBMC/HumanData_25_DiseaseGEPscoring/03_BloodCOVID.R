@@ -17,18 +17,19 @@ library(dplyr)
 library(RColorBrewer)
 library(ggrepel)
 library(cowplot)
-source("~/Projects/HumanThymusProject/scripts-final/colors_universal.R") # get color palettes
+library(ggh4x)
+source("scripts-final/colors_universal.R") # get color palettes
 
 ## 1.2. Data ####
-df <- read.csv("~/Projects/HumanThymusProject/data/human-PBMC/HumanData_25_DiseaseGEPscoring/covid_metadata_withGEPs.csv", row.names=1)
+df <- read_csv("data/human-PBMC/HumanData_25_DiseaseGEPscoring/covid_metadata_withGEPs.csv")
+colnames(df)[1] <- "cellid"
 
+intsec_percentile <- read_csv("data/human-thymus/HumanData_20_RibbonPlotCellStateToID/score_percentile_thr.csv") %>%
+  filter(name %in% paste0("GEP", c(1,4,5,6)))
 
 # Remove data we're not interested in
 df <- df %>%
   filter(Annotation_minor_subset != "nan")
-
-
-
 
 # ********************
 # 2. CLEANUP DATA ####
@@ -54,6 +55,62 @@ df <- df %>%
 # "SARSCoV2PCR" - 0 or 1
 # "Tissue" - all blood
 
+df <- df %>% 
+  select(cellid, Annotation_major_subset, Annotation_minor_subset,
+         Annotation_cluster_name, 
+         COMBAT_participant_timepoint_ID, Source, DiseaseClassification, 
+         Age, Sex, BMI, Hospitalstay, starts_with("GEP"))
+
+## Analyse GEPs ####
+df_gep <- df %>%
+  select(cellid, starts_with("GEP")) %>%
+    pivot_longer(starts_with("GEP"), names_to="name", values_to="score") %>%
+  filter(name %in% paste0("GEP", c(1,4,5,6)))
+
+intsec_score <- df_gep %>%
+  inner_join(intsec_percentile, by="name") %>%
+  group_by(name) %>%
+  summarise(intersection_score=quantile(score, unique(intersection_percentile)))
+  
+ggplot() +
+  geom_histogram(data=df_gep, aes(x=score), bins = 100)+ 
+  geom_vline(data=intsec_score, aes(xintercept = intersection_score)) +
+  facet_wrap(~name, scales="free",  ncol=2) 
+
+df <- df_gep %>%
+  # get back to wide
+  select(cellid, name, score) %>%
+  pivot_wider(names_from=name, values_from = score, values_fill=0) %>%
+  # thresholds
+  mutate(GEP1_threshold=ifelse(GEP1 > intsec_score$intersection_score[intsec_score$name=="GEP1"], T, F),
+         GEP4_threshold=ifelse(GEP4 > intsec_score$intersection_score[intsec_score$name=="GEP4"], T, F),
+         GEP5_threshold=ifelse(GEP5 > intsec_score$intersection_score[intsec_score$name=="GEP5"], T, F),
+         GEP6_threshold=ifelse(GEP6 > intsec_score$intersection_score[intsec_score$name=="GEP6"], T, F)) %>%
+  # pivot longer
+  pivot_longer(cols=ends_with("threshold"), names_to="name", values_to="pass") %>%
+  mutate(pass=as.numeric(pass),
+         name=gsub("_threshold", "", name)) %>%
+  # keep only lines with GEPs that passed threshold (1 gep assigned)
+  group_by(cellid) %>%
+  filter(pass==1 & sum(pass)==1) %>%
+  # keep only columns of interest
+  select(cellid, name) %>%
+  dplyr::rename(score_assigned=name) %>%
+  distinct() %>%
+  inner_join(df, by="cellid")
+
+tp <- df %>%
+  filter(grepl("NAIVE", Annotation_minor_subset)) %>% 
+  mutate(corr = grepl("NAIVE", Annotation_minor_subset) & score_assigned == "GEP5")
+tp <- sum(tp$corr)/nrow(tp)
+
+fp <- df %>%
+  filter(!grepl("NAIVE", Annotation_minor_subset), score_assigned == "GEP5")
+fp <- nrow(fp)/nrow(df)
+
+
+
+
 # look up some stuff
 # table(df[, c("Source", "DiseaseClassification")], useNA="ifany") %>%
 #   as_tibble() %>%
@@ -66,19 +123,23 @@ df <- df %>%
 #   group_by(Source) %>%
 #   count()
 
-
-
 # Get average proportions of each cell cluster per person & time point
 df_plot <- df %>%
   # total nb of cells per sample
+  filter(!Annotation_minor_subset %in% c("DN", "DP", "CD8.TREG")) %>%
   group_by(COMBAT_participant_timepoint_ID) %>%
   mutate(totalcells_per_participantimept=n()) %>%
   # freq of each cluster per sample
   group_by(COMBAT_participant_timepoint_ID, Annotation_minor_subset) %>%
-  mutate(cluster_freq = n()/totalcells_per_participantimept) %>%
+  mutate(cluster_freq = n()/totalcells_per_participantimept,
+         GEP1_freq = sum(score_assigned == "GEP1")/n(),
+         GEP4_freq = sum(score_assigned == "GEP4")/n(),
+         GEP5_freq = sum(score_assigned == "GEP5")/n(),
+         GEP6_freq = sum(score_assigned == "GEP6")/n()) %>%
   ungroup() %>%
   # keep only rows/columns of interest
-  select(Annotation_major_subset, Annotation_minor_subset, COMBAT_participant_timepoint_ID, Source, cluster_freq) %>%
+  select(cellid, Annotation_major_subset, Annotation_minor_subset,
+         COMBAT_participant_timepoint_ID, Source, cluster_freq, starts_with("GEP")) %>%
   distinct() %>%
   # mean+sd freq of each cluster in each disease
   group_by(Source, Annotation_minor_subset) %>%
@@ -91,10 +152,70 @@ df_plot <- df %>%
   # summarise(sumfreq = sum(cluster_freq_mean), .by=Source) # pb withinfluenza
 
 
+minor_anno <- c("CD4.NAIVE", "CD8.NAIVE",
+                "CD4.TEFF", "CD4.TEFF.prolif","CD8.TEFF", "CD8.TEFF.prolif",
+                "CD4.TCM", "CD8.TCM",
+                "CD4.TEM/TEMRA","CD8.TEM","CD8.TEMRA",
+                "iNKT", "MAIT", "GDT.VD2", "GDT.VD2neg")
 
+df_anno <- df %>%
+  # total nb of cells per sample
+  filter(!Annotation_minor_subset %in% c("DN", "DP", "CD8.TREG", "CD8.mitohi", 
+                                         "CD4.TREG", "CD8.TCM.CCL5")) %>%
+  # freq of each cluster per sample
+  group_by(COMBAT_participant_timepoint_ID) %>%
+  #group_by(COMBAT_participant_timepoint_ID, Annotation_minor_subset) %>%
+  summarise(GEP1 = sum(score_assigned == "GEP1")/n(),
+         GEP4 = sum(score_assigned == "GEP4")/n(),
+         GEP5 = sum(score_assigned == "GEP5")/n(),
+         GEP6= sum(score_assigned == "GEP6")/n(),
+         Source=unique(Source)) %>%
+  ungroup %>%
+  pivot_longer(starts_with("GEP"), names_to="name", values_to="freq") %>%
+  mutate(Annotation_minor_subset = factor(Annotation_minor_subset, levels=minor_anno))
+
+design <- rbind(c(1:2, NA, NA), c(3:6), c(7:8,NA,NA), c(9:11, NA), c(12:15))
+
+p_flu <- df_anno %>%
+  filter(Source %in% c("HV", "Flu")) %>%
+  ggplot(aes(x=name, y=freq, fill=factor(Source, levels=c("HV", "Flu")))) +
+  geom_boxplot(outlier.shape = NA) +
+  #facet_manual(~Annotation_minor_subset, design, scales = "free") + 
+  geom_point(position=position_jitterdodge(jitter.width = 0, dodge.width = 0.7), size=0.5) +
+  scale_fill_brewer(type = "qual", name="Condition", direction=-1)+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))+
+  labs(x="", y="Proportion of cells/GEP")
+
+p_sepsis <- df_anno %>%
+  filter(Source %in% c("HV", "Sepsis")) %>%
+  ggplot(aes(x=name, y=freq, fill=factor(Source, levels=c("HV", "Sepsis")))) +
+  geom_boxplot(outlier.shape = NA) +
+  #facet_manual(~Annotation_minor_subset, design, scales = "free") + 
+  geom_point(position=position_jitterdodge(jitter.width = 0, dodge.width = 0.7), size=0.5) +
+  scale_fill_brewer(type = "qual", name="Condition", direction=-1)+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))+
+  labs(x="", y="Proportion of cells/GEP")
+
+p_covid <- df_anno %>%
+  filter(Source %in%c("HV", "COVID_MILD", "COVID_SEV", "COVID_CRIT")) %>%
+  ggplot(aes(x=name, y=freq,
+             fill=factor(Source, levels=c("HV", "COVID_MILD", "COVID_SEV", "COVID_CRIT")))) +
+  geom_boxplot(outlier.shape = NA) +
+  #facet_manual(~Annotation_minor_subset, design, scales = "free") + 
+  geom_point(position=position_jitterdodge(jitter.width = 0, dodge.width = 0.7), size=0.5) +
+  scale_fill_brewer(type = "qual", name="Condition")+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5))+
+  labs(x="", y="Proportion of cells/GEP")
+
+ggsave(plot=p_flu, "data/human-PBMC/HumanData_25_DiseaseGEPscoring/proportion_cells_gep_flu.pdf")
+ggsave(plot=p_sepsis, "data/human-PBMC/HumanData_25_DiseaseGEPscoring/proportion_cells_gep_sepsis.pdf")
+ggsave(plot=p_covid, "data/human-PBMC/HumanData_25_DiseaseGEPscoring/proportion_cells_gep_covid.pdf")
 
 # *********************************************
-# 3. PLOT ALL GEPs PER CLUSTER AND DISEASE ####
+## 3. PLOT ALL GEPs PER CLUSTER AND DISEASE ####
 # *********************************************
 
 # FLU
@@ -297,10 +418,8 @@ plot_grid(
 # end plot by gep and disease ####
 
 
-
-
 # **************************
-# 4. COMBINE CELL TYPES ####
+## 4. COMBINE CELL TYPES ####
 # **************************
 
 # Function for easier plotting
@@ -308,7 +427,6 @@ vlnplot_gep <- function(xvar, yvar, disease=c("HV", "Flu"), colors=c("#b2abd2", 
   # if plotting proportions
   if(yvar=="prop"){
     p <- df_plot %>%
-      filter(!Annotation_minor_subset %in% c("DN", "DP", "CD8.TREG")) %>%
       filter(Source%in% disease) %>%
       ggplot(aes(x=.data[[xvar]], y=cluster_freq, fill=factor(Source, levels=disease)))+
         geom_boxplot(outlier.shape = NA)+
@@ -321,7 +439,6 @@ vlnplot_gep <- function(xvar, yvar, disease=c("HV", "Flu"), colors=c("#b2abd2", 
   # if plotting gep score
   else if(grepl("GEP", yvar) == TRUE){
   p <- df %>%
-    filter(!Annotation_minor_subset %in% c("DN", "DP", "CD8.TREG")) %>%
     filter(Source%in% disease) %>%
     # plot
     ggplot(aes(x=.data[[xvar]], y=.data[[yvar]], fill=factor(Source, levels=disease)))+

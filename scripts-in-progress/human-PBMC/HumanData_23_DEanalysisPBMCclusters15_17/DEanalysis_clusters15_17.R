@@ -37,7 +37,7 @@ DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_in
 # *******************
 
 # Question: Is there any DE genes between NKT/MAIT/GDT in clusters 15-17 (GEP4)?
-setwd("./scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters15_17/")
+setwd("~/Projects/HumanThymusProject/scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters15_17/")
 
 # ********************************
 ## 2.1. Prepare DESeq2 object ####
@@ -61,7 +61,7 @@ groups <- metadata %>%
   filter(batch_id %in% c("E", "I")) %>%
   # keep only groups with at least 10 cells (with higher threshold we lose a lot of groups)
   group_by(cell_id, batch_id) %>%
-  filter(n()>10) %>%
+  filter(n()>40) %>%
   ungroup() %>%
   # keep only columns of interest
   column_to_rownames("cell") %>%
@@ -174,11 +174,11 @@ genes.sig <- res %>%
   data.frame() %>%
   filter(padj<0.05)
 dim(genes.sig)
-sum(res$padj[!is.na(res$padj)]<0.01) # 39 genes with padj<0.01
+# sum(res$padj[!is.na(res$padj)]<0.01) # 39 genes with padj<0.01 (and with min cells >10)
 
 # Compare nb genes in common with the clusters 13-14 comparison
-genes.sig.1314 <- read.csv("~/Projects/HumanThymusProject/scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters13_14/plots/deg_clust13-14_batchE5I11_padj0_05.csv", row.names = 1)
-table(rownames(genes.sig) %in% genes.sig.1314$gene, useNA="ifany") # 23 common, 29 different
+# genes.sig.1314 <- read.csv("~/Projects/HumanThymusProject/scripts-in-progress/human-PBMC/HumanData_23_DEanalysisPBMCclusters13_14/plots/deg_clust13-14_batchE5I11_padj0_05.csv", row.names = 1)
+# table(rownames(genes.sig) %in% genes.sig.1314$gene, useNA="ifany") # 23 common, 29 different
 
 
 # ***************************************
@@ -195,7 +195,7 @@ heat_colors <- rev(colorRampPalette(brewer.pal(10, "RdBu"))(100))
 
 
 # Run pheatmap using the metadata data frame for the annotation
-# pdf("./plots/All_heatmap_clust15-17_batchEI_padj0_05_2.pdf", width=10, height=12)
+# pdf("./plots/All_heatmap_clust15-17_batchE5I11_min40cells_padj0_05.pdf", width=10, height=12)
 pheatmap::pheatmap(t(counts.correc.sig),
                    color = heat_colors,
                    scale = "row", # z-score
@@ -214,38 +214,38 @@ pheatmap::pheatmap(t(counts.correc.sig),
                    show_rownames=T,
                    fontsize_row=8,
                    # title
-                   main="PBMC clusters 15-17 (batches E5, I11): DE genes btw all lineages")
+                   main="PBMC clusters 15-17 (batches E5, I11, >40cells)")
 # dev.off()
 
 
-# ************************************
-## 2.5. Identifying gene clusters ####
-
-# Tutorial: https://hbctraining.github.io/DGE_workshop/lessons/08_DGE_LRT.html
-
-# Use degPatterns function to show gene clusters across sample groups
-# BiocManager::install("DEGreport")
-library(DEGreport)
-all(rownames(metadf.deseq) == rownames(counts.correc.sig)) # sanity check
-metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
-clusters <- degPatterns(t(counts.correc.sig),
-                        metadata = metadf.deseq,
-                        minc=5, # minimum nb of genes per group
-                        time = "lineage_id",
-                        col=NULL)
-# ggsave(plot=clusters$plot + labs(title="PBMC clusters 15-17 (batches E5, I11): DE genes btw all lineages"),
-       # filename="./plots/degpatterns_clust15-17_batchEI_padj0_05.jpeg", width=8, height=6)
-
-# Extract gene lists
-cluster_groups <- clusters$df
-# write.csv(cluster_groups, "./plots/degpatterns_clust13-14_padj0_01_listgenespergroup.csv")
-clusters$df %>% filter(cluster==1) # CD4 and NKT group
-clusters$df %>% filter(cluster==3) # CD8-GD-MAIT group
-clusters$df %>% filter(cluster==5) # CD8-MAIT group
-
-write.csv(genes.sig %>%
-            rownames_to_column("gene") %>%
-            dplyr::select(gene, padj) %>%
-            left_join(cluster_groups, by=join_by("gene"=="genes")) %>%
-            dplyr::rename(degPatterns_group=cluster),
-          "./plots/deg_clust15-17_batchE5I11_padj0_05.csv")
+# # ************************************
+# ## 2.5. Identifying gene clusters ####
+# 
+# # Tutorial: https://hbctraining.github.io/DGE_workshop/lessons/08_DGE_LRT.html
+# 
+# # Use degPatterns function to show gene clusters across sample groups
+# # BiocManager::install("DEGreport")
+# library(DEGreport)
+# all(rownames(metadf.deseq) == rownames(counts.correc.sig)) # sanity check
+# metadf.deseq$lineage_id <- factor(metadf.deseq$lineage_id, levels=unique(metadf.deseq$lineage_id))
+# clusters <- degPatterns(t(counts.correc.sig),
+#                         metadata = metadf.deseq,
+#                         minc=5, # minimum nb of genes per group
+#                         time = "lineage_id",
+#                         col=NULL)
+# # ggsave(plot=clusters$plot + labs(title="PBMC clusters 15-17 (batches E5, I11): DE genes btw all lineages"),
+#        # filename="./plots/degpatterns_clust15-17_batchEI_padj0_05.jpeg", width=8, height=6)
+# 
+# # Extract gene lists
+# cluster_groups <- clusters$df
+# # write.csv(cluster_groups, "./plots/degpatterns_clust13-14_padj0_01_listgenespergroup.csv")
+# clusters$df %>% filter(cluster==1) # CD4 and NKT group
+# clusters$df %>% filter(cluster==3) # CD8-GD-MAIT group
+# clusters$df %>% filter(cluster==5) # CD8-MAIT group
+# 
+# write.csv(genes.sig %>%
+#             rownames_to_column("gene") %>%
+#             dplyr::select(gene, padj) %>%
+#             left_join(cluster_groups, by=join_by("gene"=="genes")) %>%
+#             dplyr::rename(degPatterns_group=cluster),
+#           "./plots/deg_clust15-17_batchE5I11_padj0_05.csv")

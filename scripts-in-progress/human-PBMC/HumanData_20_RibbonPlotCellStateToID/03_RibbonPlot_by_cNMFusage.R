@@ -186,3 +186,42 @@ ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
   theme_void()+
   labs(title="")
 
+
+# GEP usage for each donor
+gepperdonor <- function(d, age){
+  seur.geps@meta.data %>%
+    as_tibble() %>%
+    filter(Tissue=="PBMC" & Donor==d) %>%
+    # get nb of cells per gep assignment
+    group_by(cell.ident, gep_assign) %>%
+    summarise(ncells=n()) %>%
+    # get %cells in each gep assignment
+    ungroup() %>%
+    group_by(cell.ident) %>%
+    mutate(totalcells=sum(ncells),
+           freq = ncells*100/totalcells) %>%
+    ungroup() %>%
+    # remove a lineage if less than 100 cells
+    filter(totalcells > 100) %>%
+    # rename a few variables
+    mutate(gep_assign=toupper(gep_assign),
+           cell.ident=replace(cell.ident, cell.ident=="NKT", "iNKT")) %>%
+    # keep only GEP1,4,5,6
+    mutate(gep_assign=replace(gep_assign, !gep_assign%in%c("GEP1", "GEP4", "GEP5", "GEP6"), "other"),
+           gep_assign = factor(gep_assign, levels=c("GEP1", "GEP4", "GEP5", "GEP6", "other"))) %>%
+    filter(gep_assign != "other") %>%
+    # Plot
+    ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
+    geom_alluvium(aes(fill=cell.ident))+
+    geom_stratum()+
+    geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8)+
+    scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"), name="cell type")+
+    labs(title=paste0("Donor ", d, " (", age, "y.o.)"))+
+    theme_void()+
+    theme(legend.position="none", title=element_text(size=20))
+}
+
+gepperdonor(d=5, age="24")
+gepperdonor(d=6, age="41")
+gepperdonor(d=7, age="68")
+gepperdonor(d=11, age="38")

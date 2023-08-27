@@ -40,13 +40,87 @@ seur <- AddModuleScore(seur, features=list("effectorscore"=effectorness_genes, "
 SCpubr::do_FeaturePlot(seur,
                        split.by="group.ident",
                        order=T,
+                       min.cutoff=0,
+                       max.cutoff=1,
                        features="effectorscore1",
                        viridis_color_map = "B")
-ggsave("./data/human-thymus/HumanData_12_AnalysisByLineage/umap_effectorscore_pergroup2.jpeg", width=20, height=18)
+# ggsave("./data/human-thymus/HumanData_12_AnalysisByLineage/umap_effectorscore_pergroup2.jpeg", width=20, height=18)
+ggsave("./data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_effectorscore_pergroup2.jpeg", width=20, height=18)
 
 SCpubr::do_FeaturePlot(seur,
                        split.by="group.ident",
                        order=T,
+                       min.cutoff=0,
                        features="naivescore2",
                        viridis_color_map = "B")
-ggsave("./data/human-thymus/HumanData_12_AnalysisByLineage/umap_naivescore_pergroup.jpeg", width=20, height=18)
+# ggsave("./data/human-thymus/HumanData_12_AnalysisByLineage/umap_naivescore_pergroup.jpeg", width=20, height=18)
+ggsave("./data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_naivescore_pergroup.jpeg", width=20, height=18)
+
+
+
+
+# ******************************
+# 3. PLOT GENES OF INTEREST ####
+# ******************************
+
+SCpubr::do_FeaturePlot(seur,
+                       split.by="group.ident",
+                       order=T,
+                       features="TBX21",
+                       ncol=5,
+                       viridis_color_map = "B")
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_tbx21.jpeg", width=15, height=8)
+
+
+SCpubr::do_DimPlot(seur,
+                   cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Beta_Delta_V_gene_Dominant == "TRDV1*01" &
+                                                               !is.na(seur@meta.data$TCR_Beta_Delta_V_gene_Dominant),]))
+
+
+
+# GEP USAGE GD
+
+# Import GEP usage
+gep_usage <- read.table("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/cNMF_output/imputed_cNMF.usages.k_12.dt_0_02.consensus.txt", header=T)
+dim(gep_usage)
+nrow(gep_usage)==ncol(seur) # rows are cells
+colnames(gep_usage) <- paste0("gep", 1:12, "_usage")
+table(rownames(gep_usage)==rownames(seur@meta.data), useNA="ifany")
+seur@meta.data <- cbind(seur@meta.data, gep_usage)
+
+# VD2 VG9
+# SCpubr::do_DimPlot(seur,
+#                    cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Beta_Delta_V_gene_Dominant %in% c("TRDV2*01", "TRDV2*02", "TRDV2*03") &
+#                                                                !is.na(seur@meta.data$TCR_Beta_Delta_V_gene_Dominant),]))
+SCpubr::do_FeaturePlot(seur,
+                   cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Beta_Delta_V_gene_Dominant %in% c("TRDV2*01", "TRDV2*02", "TRDV2*03") &
+                                                               !is.na(seur@meta.data$TCR_Beta_Delta_V_gene_Dominant),]),
+                   features="gep4_usage", order=T, viridis_color_map = "B", plot.title="TRDV2", min.cutoff = 0, max.cutoff = 0.8)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_trdv2_gep4usage.jpeg", width=6, height=7)
+
+
+SCpubr::do_FeaturePlot(seur,
+                   cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Alpha_Gamma_V_gene_Dominant %in% c("TRGV9*01", "TRGV9*02") &
+                                                               !is.na(seur@meta.data$TCR_Alpha_Gamma_V_gene_Dominant),]),
+                   features="gep4_usage", order=T, viridis_color_map = "B", plot.title="TRGV9", min.cutoff = 0, max.cutoff = 0.8)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_trgv9_gep4usage.jpeg", width=6, height=7)
+
+SCpubr::do_FeaturePlot(seur,
+                       cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Beta_Delta_V_gene_Dominant %in% c("TRDV2*01", "TRDV2*02", "TRDV2*03") &
+                                                                   !is.na(seur@meta.data$TCR_Beta_Delta_V_gene_Dominant) &
+                                                                 seur@meta.data$TCR_Alpha_Gamma_V_gene_Dominant %in% c("TRGV9*01", "TRGV9*02") &
+                                                                   !is.na(seur@meta.data$TCR_Alpha_Gamma_V_gene_Dominant),]),
+                       features="gep4_usage", order=T, viridis_color_map = "B", plot.title="VD2-VG9", min.cutoff = 0, max.cutoff = 0.8)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_trdv2_trvg9_gep4usage.jpeg", width=6, height=7)
+
+
+# VD1
+SCpubr::do_FeaturePlot(seur,
+                       cells.highlight = rownames(seur@meta.data[seur@meta.data$TCR_Beta_Delta_V_gene_Dominant == "TRDV1*01" &
+                                                                   !is.na(seur@meta.data$TCR_Beta_Delta_V_gene_Dominant),]),
+                       features="gep1_usage", order=T, viridis_color_map = "B", plot.title="TRDV1", min.cutoff = 0, max.cutoff = 0.8)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_24_PlotsForFOCISconf/umap_trdv1_gep1usage.jpeg", width=6, height=7)
+
+
+
+

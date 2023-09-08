@@ -129,11 +129,12 @@ colors <- tibble::tibble(attribute=c("TF", "Cytokine", "Chemokine", "Other",
                                      "Cytokine Receptor", "Cytotoxicity",
                                      "Chemokine Receptor", "Integrin",
                                      "NK receptor"),
-                         color=c("#FFD382", "#964A35", "#964A35", "gray",
+                         color=c("#ec7014", "#964A35", "#964A35", "gray",
                                  "#8EB63B", "#C7B354", "#001959", "#45204C",
                                  "#FFACAC"))
 
-colors_list <- as.list(colors$colors)
+#"#FFD382"
+colors_list <- as.list(colors$color)
 names(colors_list) <- colors$attribute
 
 

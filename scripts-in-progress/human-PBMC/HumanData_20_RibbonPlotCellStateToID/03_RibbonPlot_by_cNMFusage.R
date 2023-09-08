@@ -24,6 +24,8 @@ DimPlot(seur, group.by = "new_clusters", label=T, repel=T, reduction="UMAP_50")+
   scale_color_manual(values=cols_integrated)
 
 
+# test test change
+
 # Import GEPs
 gep_topgenes <- read.csv("./data/human-thymus/HumanData_17_GEPsOnParkData/genes_per_GEP_df_2023-04-07.csv", row.names=1)
 dim(gep_topgenes) # 12 GEPs

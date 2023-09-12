@@ -24,7 +24,7 @@ df <- df_wide %>%
   rownames_to_column("cellid") %>%
   pivot_longer(cols=all_of(gep_pbmc), 
                names_to="name", values_to="score")
-<<<<<<< HEAD
+
 # Check the distribution
 ggplot(df)+
   geom_histogram(aes(x=score), bins = 100) +
@@ -35,9 +35,6 @@ ggplot(df)+
   # geom_jitter(aes(x=gep, y=score), size=0.1, width = 0.05)+
   # _______
   labs(y="GEP score", title="Raw GEP score")
-
-=======
->>>>>>> ca5fb1539a8a2eabb7f9f25b9e04f9f4a0f623c9
 
 
 combined <- df %>%
@@ -60,15 +57,12 @@ ggsave(plot=p_usagevscore , "data/human-thymus/HumanData_20_RibbonPlotCellStateT
 
 ## Remove GEP12 as only 1 cell assigned
 combined <- combined %>%
-<<<<<<< HEAD
   filter(name %in% paste0("GEP", c(1,4,5,6))) %>% 
   filter(usage_assigned %in% paste0("GEP", c(1,4,5,6))) %>%
   group_by(cellid) %>%
   mutate(assign_TRUE = usage_assigned == name) %>%
   ungroup
-=======
-  filter(name != "GEP12")
->>>>>>> ca5fb1539a8a2eabb7f9f25b9e04f9f4a0f623c9
+
 
 ## find usage thresholds ####
 assigned_true <- combined %>%
@@ -148,7 +142,7 @@ p_corr <- ggplot(filter(combined,name!="GEP8")) +
   scale_fill_continuous(type = "viridis") +
   facet_wrap(usage_assigned==score_assigned~name, nrow=2)
 
-<<<<<<< HEAD
+
 combined %>%
   filter(name== "GEP1") %>%
   select(usage, assign_TRUE) %>%
@@ -218,6 +212,5 @@ ggpairs(usages_wide[,1:4])
 ggplot(usages_wide) +
   geom_bar(aes(score_2ndmax)) +
   facet_wrap(~gep_assign, scales="free")
-=======
+
 ggsave(plot=p_corr, "data/human-thymus/HumanData_20_RibbonPlotCellStateToID/usage_score_thr_correspondence.pdf")
->>>>>>> ca5fb1539a8a2eabb7f9f25b9e04f9f4a0f623c9

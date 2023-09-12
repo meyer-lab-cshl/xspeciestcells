@@ -92,7 +92,8 @@ thymus.nkt@meta.data$cell_annot <- case_when(
   thymus.nkt@meta.data$seurat_clusters == 2 ~ "NKT_c1", #thyNKT_ccr9
   thymus.nkt@meta.data$seurat_clusters == 3 ~ "NKT_c0", #thyNKT_cd8aa
   thymus.nkt@meta.data$seurat_clusters == 4 ~ "NKT_c6", #thyNKT_effector
-  TRUE ~ thymus.nkt@meta.data$seurat_clusters  #thyNKT_IFNsig
+  thymus.nkt@meta.data$seurat_clusters == 5 ~ "NKT_c3", #thyNKT_effector
+  thymus.nkt@meta.data$seurat_clusters == 6 ~ "NKT_c4" #thyNKT_effector
 )
 
 p_nkt <- DimPlot(thymus.nkt, group.by="cell_annot", label=T, repel=T) +
@@ -155,6 +156,45 @@ markers.mait <- markers.mait %>%
   relocate(gene, cell_annot)
 
 saveRDS(thymus.mait, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.mait.RDS")
+
+## GD CELLS ####
+thymus.gd <- preprocess(seurobj = subset(thymus.filt,
+                                         subset=group.ident=="GD_Thymus"),
+                        celltype = "GDthy", ndim=10, res=0.4)
+# Annotate
+thymus.gd@meta.data$cell_annot <- case_when(
+  thymus.gd@meta.data$seurat_clusters == 0 ~ "GDT_c5", #thyGDT_IFNsig
+  thymus.gd@meta.data$seurat_clusters == 1 ~ "GDT_c1", #thyGDT_immat
+  thymus.gd@meta.data$seurat_clusters == 2 ~ "GDT_c2", #thyGDT_ccr9
+  thymus.gd@meta.data$seurat_clusters == 3 ~ "GDT_c6", #thyGDT_effector
+  thymus.gd@meta.data$seurat_clusters == 4 ~ "GDT_c3", #thyGDT_immat_cycl
+  thymus.gd@meta.data$seurat_clusters == 5 ~ "GDT_c7", #thyGDT_DP
+  thymus.gd@meta.data$seurat_clusters == 6 ~ "GDT_c4", #thyGDT_DP
+  thymus.gd@meta.data$seurat_clusters == 7 ~ "GDT_c0" #thyGDT_DP
+)
+
+p_gd <- DimPlot(thymus.gd, group.by="cell_annot", label=TRUE, repel=TRUE) +
+  theme(legend.position="none") + 
+  scale_color_manual(values=colvalues) +
+  labs(title="Thymic GDT")
+
+# Markers GDT
+markers.gd <- FindAllMarkers(thymus.gd, only.pos=TRUE, min.pct=0.25,
+                             logfc.threshold=0.5) %>%
+  group_by(cluster) %>%
+  slice_max(n=20, order_by=avg_log2FC)
+
+markers.gd <- markers.gd %>%
+  select(avg_log2FC, p_val_adj, cluster, gene) %>%
+  left_join(thymus.gd@meta.data %>%
+              select(cell_annot, RNA_snn_res.0.4) %>%
+              dplyr::rename(cluster=RNA_snn_res.0.4) %>%
+              distinct(),
+            by="cluster") %>%
+  relocate(gene, cell_annot)
+
+saveRDS(thymus.gd, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+
 
 ## CD4 CELLS ####
 thymus.cd4 <- preprocess(seurobj = subset(thymus.filt,
@@ -232,41 +272,6 @@ markers.cd8 <- markers.cd8 %>%
 
 saveRDS(thymus.cd8, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS")
 
-## GD CELLS ####
-thymus.gd <- preprocess(seurobj = subset(thymus.filt,
-                                       subset=group.ident=="GD_Thymus"),
-                      celltype = "GDthy", ndim=10, res=0.2)
-# Annotate
-thymus.gd@meta.data$cell_annot <- case_when(
-  thymus.gd@meta.data$seurat_clusters == 0 ~ "GDT_c5", #thyGDT_IFNsig
-  thymus.gd@meta.data$seurat_clusters == 1 ~ "GDT_c2", #thyGDT_immat
-  thymus.gd@meta.data$seurat_clusters == 2 ~ "GDT_c1", #thyGDT_ccr9
-  thymus.gd@meta.data$seurat_clusters == 3 ~ "GDT_c7", #thyGDT_effector
-  thymus.gd@meta.data$seurat_clusters == 4 ~ "GDT_c4", #thyGDT_immat_cycl
-  thymus.gd@meta.data$seurat_clusters == 5 ~ "GDT_c0" #thyGDT_DP
-)
-
-p_gd <- DimPlot(thymus.gd, group.by="cell_annot", label=TRUE, repel=TRUE) +
-  theme(legend.position="none") + 
-  scale_color_manual(values=colvalues) +
-  labs(title="Thymic GDT")
-
-# Markers GDT
-markers.gd <- FindAllMarkers(thymus.gd, only.pos=TRUE, min.pct=0.25,
-                              logfc.threshold=0.5) %>%
-  group_by(cluster) %>%
-  slice_max(n=20, order_by=avg_log2FC)
-
-markers.gd <- markers.gd %>%
-  select(avg_log2FC, p_val_adj, cluster, gene) %>%
-  left_join(thymus.gd@meta.data %>%
-              select(cell_annot, RNA_snn_res.0.2) %>%
-              dplyr::rename(cluster=RNA_snn_res.0.2) %>%
-              distinct(),
-            by="cluster") %>%
-  relocate(gene, cell_annot)
-
-saveRDS(thymus.gd, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
 
 # Annotate integrated  based on clusters derived here
 # combine all metadata:
@@ -274,12 +279,18 @@ subset_annotations <- c(thymus.nkt$cell_annot, thymus.mait$cell_annot,
                 thymus.cd4$cell_annot, thymus.cd8$cell_annot,
                 thymus.gd$cell_annot)
 
-subset_annotations <- subset_annotations[match(colnames(thymus),
-                                               names(subset_annotations))]
-# check: sum(names(subset_annotations) == colnames(thymus)) == ncol(thymus)
+subset_annotations <- tibble(cellid=names(subset_annotations), 
+             anno=subset_annotations) %>%
+  full_join(data.frame(cellid=colnames(all_cells))) %>%
+  mutate(anno = case_when(is.na(anno) ~ "PBMC", 
+                          TRUE ~ anno))
 
-thymus@meta.data$subset_annotations <- subset_annotations
-saveRDS(thymus, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+subset_annotations <- subset_annotations[match(colnames(all_cells), 
+                                               subset_annotations$cellid),]
+# check: sum(subset_annotations$cellid == colnames(all_cells)) == ncol(all_cells)
+
+all_cells@meta.data$subset_annotations <- subset_annotations$anno
+saveRDS(all_cells, "data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
 
 
 # combine hvg:
@@ -302,9 +313,9 @@ readr::write_csv(subset_hvgs, "results/hvgs_thymic_populations.csv")
 p_all <- cowplot::plot_grid(p_cd4, p_cd8, p_nkt, p_gd, p_mait)
 ggsave("results/plots/thymic_subsets.pdf", plot=p_all, width=9, height=6)
 
-# Combine MAIT and NKT markers and export as .csv file
-markers.subsets <- rbind(markers.nkt, markers.mait, markers.cd4, markers.cd8,
-                           markers.gd) %>%
+# Combine cell type markers and export as .csv file
+markers.subsets <- rbind(markers.nkt, markers.mait, markers.gd, 
+                         markers.cd4, markers.cd8) %>%
   ungroup() %>%
   select(-cluster)
 table(markers.subsets$cell_annot)

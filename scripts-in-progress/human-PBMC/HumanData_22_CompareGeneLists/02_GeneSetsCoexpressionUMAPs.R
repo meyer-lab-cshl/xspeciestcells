@@ -645,6 +645,15 @@ p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=30
   draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
 
 
+# GEP5
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP5", "CanoGamez_CD4_Tnaive"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep5_canogamez_CD4Tnaive.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP5", "Rose_CD8_modul4_Tnaive"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep5_rose_CD8modul4.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP5", "Poon_CD8Naive"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep5_poon_CD8tnaive.pdf", width=9, height=8)
+
+
 # GEP6
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "CanoGamez_CD4_TCM"), nlevels=100, colmatrix_stepsize=0),
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_canogamez_CD4Tcm.pdf", width=9, height=8)

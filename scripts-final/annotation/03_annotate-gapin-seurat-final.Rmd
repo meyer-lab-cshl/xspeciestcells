@@ -44,6 +44,7 @@ cols_park <- c("DN(early)" = "#78c679", "DN(P)" = "#41ab5d",
 ```
 
 ### 1.2. Import data
+
 ```{R}
 # Import our seurat object (low quality cells removed)
 # generated in: 01_annotate_thymic_celltypes-gapin.R

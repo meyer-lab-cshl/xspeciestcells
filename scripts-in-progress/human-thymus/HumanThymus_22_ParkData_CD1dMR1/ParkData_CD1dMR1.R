@@ -9,7 +9,7 @@
 
 library(Seurat)
 library(ggplot2)
-# library(tidyverse)
+library(tidyverse)
 # library(dplyr)
 library(cowplot)
 library(RColorBrewer)
@@ -34,16 +34,22 @@ seur.park@meta.data <- cbind(seur.park@meta.data, seur_metadata)
 
 # Clusters
 # colnames(seur.park@meta.data)
+table(seur.park@meta.data$Anno_level_3, useNA="ifany")
+seur.park@meta.data[seur.park@meta.data$Anno_level_3=="TEC(neuro)", "Anno_level_3"] <- "mTEC"
+seur.park@meta.data[seur.park@meta.data$Anno_level_3=="TEC(myo)", "Anno_level_3"] <- "mTEC"
+table(seur.park@meta.data$Anno_level_3=="mTEC", useNA="ifany") # should have 6928 mTEC
+
+
 Idents(seur.park) <- "Anno_level_3"
 p1 <- SCpubr::do_DimPlot(seur.park,
                    reduction="UMAP",
                    # group.by="Anno_level_fig1",
                    # group.by="Anno_level_3",
                    # cells.highlight = rownames(seur.park@meta.data[seur.park@meta.data$Anno_level_3 %in% c("cTEC", "DN", "DP"),]),
-                   idents.keep=c("cTEC", "DN", "DP", "CD8αα(I)", "Mono", "T_naive", "γδT", "B_naive", "B_memory"),
+                   idents.keep=c("cTEC", "mTEC", "DN", "DP", "CD8αα(I)", "Mono", "T_naive", "γδT", "B_naive", "B_memory"),
                    na.value="grey90",
                    legend.position="right", legend.ncol=1, font.size=30, legend.icon.size=10)+
-  scale_color_manual(values=grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Accent"))(10))
+  scale_color_manual(values=grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Accent"))(11))
   # scale_color_manual(values=RColorBrewer::brewer.pal(8, "Accent"))
 # ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_clusters_level3_highlight.jpeg", width=10, height=8)
 

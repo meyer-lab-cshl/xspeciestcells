@@ -1,8 +1,6 @@
-data/
+*
+!scripts-final
+!scripts-in-progress
+!README.md
+!.gitignore
 .Rproj.user
-*.Rproj
-.DS_Store
-scripts-in-progress/cross-species/*.nb.html
-scripts-in-progress/human-thymus/*.nb.html
-scripts-in-progress/.DS_Store
-shinyApp*

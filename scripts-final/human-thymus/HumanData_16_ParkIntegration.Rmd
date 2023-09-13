@@ -78,6 +78,10 @@ seur.park <- seur.park[common_genes,]
 ```{r}
 seur.combined <- merge(seur.gapin, seur.park)
 
+seur.combined@meta.data <- seur.combined@meta.data %>%
+  mutate(subset_annotations = case_when(is.na(subset_annotations) ~ Anno_level_5,
+                                        TRUE ~ subset_annotations))      
+
 # Sanity checks
 sum(ncol(seur.gapin), ncol(seur.park)) # sanity check number of cells
 seur.gapin@assays[["RNA"]]@data[5:10,1:5]

@@ -19,14 +19,14 @@ source("./scripts-final/colors_universal.R")
 
 
 # Import data
-seur.cd4  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.CD4_03_16_23.RDS")
-seur.cd8  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.CD8_03_16_23.RDS")
+# seur.cd4  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.CD4_03_16_23.RDS")
+# seur.cd8  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.CD8_03_16_23.RDS")
 seur.gdt  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.GD_03_16_23.RDS")
 seur.mait <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.MAIT_03_16_23.RDS")
 seur.nkt  <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.nkt_03_16_23.RDS")
 
-DimPlot(seur.cd4,  group.by = "new_clusters_CD4", label=T, repel=T,  reduction="umap")
-DimPlot(seur.cd8,  group.by = "new_clusters_CD8", label=T, repel=T,  reduction="umap")
+# DimPlot(seur.cd4,  group.by = "new_clusters_CD4", label=T, repel=T,  reduction="umap")
+# DimPlot(seur.cd8,  group.by = "new_clusters_CD8", label=T, repel=T,  reduction="umap")
 DimPlot(seur.gdt,  group.by = "new_clusters_GD", label=T, repel=T,   reduction="umap")
 DimPlot(seur.mait, group.by = "new_clusters_MAIT", label=T, repel=T, reduction="umap")
 DimPlot(seur.nkt,  group.by = "new_clusters_NKT", label=T, repel=T,  reduction="umap")
@@ -41,9 +41,9 @@ DimPlot(seur.nkt,  group.by = "new_clusters_NKT", label=T, repel=T,  reduction="
 # ******************************
 
 # Import GEP usage
-gep_usage <- read.table("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/cNMF_output/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
+gep_usage <- read.table("./data/human-PBMC/HumanData_20_RibbonPlotCellStateToID/cNMF_output/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
 dim(gep_usage)
-colnames(gep_usage) <- paste0("gep", c(2,5,3,1,4,12,6,7,8,10,9,11), "_usage") # rename column names
+colnames(gep_usage) <- paste0("GEP", c(2,5,3,1,4,12,6,7,8,10,9,11), "_usage") # rename column names
 head(gep_usage)
 
 # Check that every row sums to 1
@@ -52,7 +52,7 @@ min(rowSums(gep_usage))
 max(rowSums(gep_usage))
 
 # Remove GEP12 that's batch-driven
-gep_usage <- gep_usage[,paste0("gep", 1:11, "_usage")]
+gep_usage <- gep_usage[,paste0("GEP", 1:11, "_usage")]
 
 # Get the gep with max usage per cell
 gep_usage$score_max <- apply(gep_usage, 1, max)
@@ -85,7 +85,7 @@ seur.nkt@meta.data <- cbind(seur.nkt@meta.data, gep_usage_nkt)
 # Plot on seurat object GEP usage
 SCpubr::do_FeaturePlot(seur.nkt,
                        reduction="umap",
-                       features=paste0("gep", 1:11, "_usage"),
+                       features=paste0("GEP", 1:11, "_usage"),
                        ncol=3, viridis_color_map = "B", order=F)
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/nkt_cNMFnonimput_geps_usage_orderFALSE.jpeg", width=17, height=20)
 
@@ -172,7 +172,7 @@ seur.gdt@meta.data <- cbind(seur.gdt@meta.data, gep_usage_gdt)
 # Plot on seurat object GEP usage
 SCpubr::do_FeaturePlot(seur.gdt,
                        reduction="umap",
-                       features=paste0("gep", 1:11, "_usage"),
+                       features=paste0("GEP", 1:11, "_usage"),
                        ncol=3, viridis_color_map = "B", order=F)
 
 # Plot GEP usage per cluster
@@ -301,11 +301,17 @@ nkt_counts %>%
                                      ifelse(CD4>0 & CD8A>0, "DP", "other"))))) %>%
   group_by(gep_assign, status) %>%
   count() %>%
-  ggplot(aes(x=factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), y=n, fill=gep_assign))+
-  geom_bar(position="stack", stat="identity")+
+  # plot
+  ggplot(aes(x=gep_assign, y=n, fill=gep_assign))+
+  geom_bar(stat="identity")+
+  facet_wrap(~factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), nrow=1)+
   labs(x="", y="# cells", title="iNKT")+
-  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Purples"), name="GEP with max usage")+
-  theme_cowplot()
+  scale_fill_manual(values=c("gold", "#a40000", "#72bcd5", "#0a2e57"), name="GEP with max usage")+
+  theme_cowplot()+
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=45, hjust=1))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/nkt_cd4cd8_per_gep.jpeg", width=8, height=4)
+
 
 ## end NKT ####
 
@@ -320,18 +326,23 @@ table(mait_counts$gep_assign, useNA="ifany")
 mait_counts %>%
   rownames_to_column("cellid") %>%
   as_tibble() %>%
-  filter(!gep_assign %in% c("gep7", "gep11")) %>%
+  filter(!gep_assign %in% c("GEP7", "GEP11")) %>%
   mutate(status=ifelse(CD4==0 & CD8A==0, "DN",
                        ifelse(CD4>0 & CD8A==0, "CD4+",
                               ifelse(CD4==0 & CD8A>0, "CD8+",
                                      ifelse(CD4>0 & CD8A>0, "DP", "other"))))) %>%
   group_by(gep_assign, status) %>%
   count() %>%
-  ggplot(aes(x=factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), y=n, fill=gep_assign))+
-  geom_bar(position="stack", stat="identity")+
+  ggplot(aes(x=gep_assign, y=n, fill=gep_assign))+
+  geom_bar(stat="identity")+
+  facet_wrap(~factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), nrow=1)+
   labs(x="", y="# cells", title="MAIT")+
-  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Blues"), name="GEP with max usage")+
-  theme_cowplot()
+  scale_fill_manual(values=c("gold", "#a40000", "#72bcd5", "#0a2e57"), name="GEP with max usage")+
+  theme_cowplot()+
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=45, hjust=1))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/mait_cd4cd8_per_gep.jpeg", width=8, height=4)
+
 
 ## end MAIT ####
 
@@ -346,17 +357,21 @@ table(gdt_counts$gep_assign, useNA="ifany")
 gdt_counts %>%
   rownames_to_column("cellid") %>%
   as_tibble() %>%
-  filter(!gep_assign %in% c("gep2", "gep7", "gep11")) %>%
+  filter(!gep_assign %in% c("GEP2", "GEP7", "GEP11")) %>%
   mutate(status=ifelse(CD4==0 & CD8A==0, "DN",
                        ifelse(CD4>0 & CD8A==0, "CD4+",
                               ifelse(CD4==0 & CD8A>0, "CD8+",
                                      ifelse(CD4>0 & CD8A>0, "DP", "other"))))) %>%
   group_by(gep_assign, status) %>%
   count() %>%
-  ggplot(aes(x=factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), y=n, fill=gep_assign))+
-  geom_bar(position="stack", stat="identity")+
+  ggplot(aes(x=gep_assign, y=n, fill=gep_assign))+
+  geom_bar(stat="identity")+
+  facet_wrap(~factor(status, levels=c("DN", "CD4+", "CD8+", "DP")), nrow=1)+
   labs(x="", y="# cells", title="GD")+
-  scale_fill_manual(values=RColorBrewer::brewer.pal(4, "Blues"), name="GEP with max usage")+
-  theme_cowplot()
+  scale_fill_manual(values=c("gold", "#a40000", "#72bcd5", "#0a2e57"), name="GEP with max usage")+
+  theme_cowplot()+
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=45, hjust=1))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/gdt_cd4cd8_per_gep.jpeg", width=8, height=4)
 
-## end MAIT ####
+## end GDT ####

@@ -28,7 +28,7 @@ print(seur.pbmc) # 17,204 genes and 40,986 cells
 
 seur.garner <- readRDS("./data/human-PBMC/HumanData_27_ComparisonGEPsGarner/GSE238138_20h_seurat.rds")
 SCpubr::do_DimPlot(seur.garner, reduction="umap", group.by="stimulation", label=T, legend.position="none")
-ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_stim.jpeg", width=8, height=7)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_stim.jpeg", width=8, height=7)
 
 
 
@@ -497,7 +497,26 @@ geps_overlap_wjaccard %>%
   # scale_fill_manual(values=cols_geneprogcat, name="")+
   labs(y="Weighted Jaccard Index", x="")
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/genelists_comparison_wjaccard.jpeg", width=10, height=4)
+ 
 
+## 3.3. Get list of common genes between GEP5 and mait one
+genes_common_gep5_gep1garner <- intersect(dflong[dflong$geneprogram=="GEP5_gapin","gene"], dflong[dflong$geneprogram=="GEP1_garner", "gene"])
+length(genes_common_gep5_gep1garner) # 38
+genes_common_gep5_gep3garner <- intersect(dflong[dflong$geneprogram=="GEP5_gapin","gene"], dflong[dflong$geneprogram=="GEP3_garner", "gene"])
+length(genes_common_gep5_gep3garner) # 35
+intersect(genes_common_gep5_gep1garner, genes_common_gep5_gep3garner)
+
+seur.human <- AddModuleScore(seur.human, name=c("maitcommongenes_unstim", "maitcommongenes_cytok"),
+                             features=list("maitcommongenes_unstim"=genes_common_gep5_gep1garner,
+                                           "maitcommongenes_cytok"=genes_common_gep5_gep3garner),
+                             seed=1)
+colnames(seur.human@meta.data)[66:67] <- c("maitcommongenes_unstim", "maitcommongenes_cytok")
+SCpubr::do_FeaturePlot(seur.human,  features=c("maitcommongenes_unstim", "maitcommongenes_cytok"), reduction="UMAP_50", order=T, ncol=2)
+VlnPlot(seur.human, features="maitcommongenes_unstim", group.by="new_clusters")+
+  labs(x="", y="gene list score", title="Score of common genes btw GEP5_gapin & unstim GEP1_garner") |
+VlnPlot(subset(seur.human, subset= new_clusters %in% 13:14), features="maitcommongenes_unstim", group.by="group.ident")+
+  labs(x="", y="gene list score", title="Cells in clusters 13-14 only")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/commongenes_gep5gapin_gep1garner_scoring.pdf", width=15, height=6)
 
 
 
@@ -520,15 +539,35 @@ for(gp in unique(dflong$geneprogram)){
 }
 print(lengths(geneprograms_list))
 
+# Keep only genes that are among HVGs
+geneprograms_gapinhvg_list <- lapply(geneprograms_list, function(x) x[x %in% VariableFeatures(seur.human)])
+names(geneprograms_gapinhvg_list) <- gsub("_", "hvg_", names(geneprograms_gapinhvg_list))
+print(lengths(geneprograms_gapinhvg_list))
+
+DefaultAssay(seur.garner) <- "RNA"
+seur.garner <- FindVariableFeatures(seur.garner)
+hvg_garner_RNA <- VariableFeatures(seur.garner)
+geneprograms_garnerhvgRNA_list <- lapply(geneprograms_list, function(x) x[x %in% hvg_garner_RNA])
+names(geneprograms_garnerhvgRNA_list) <- gsub("_", "hvg_", names(geneprograms_garnerhvgRNA_list))
+print(lengths(geneprograms_garnerhvgRNA_list))
+
 # Compute cell scores
 seur.human  <- AddModuleScore(seur.human,  name = names(geneprograms_list), features=geneprograms_list, seed=1)
 seur.garner <- AddModuleScore(seur.garner, name = names(geneprograms_list), features=geneprograms_list, seed=1, assay="SCT")
+# seur.garner <- AddModuleScore(seur.garner, name = paste0(names(geneprograms_list), "_RNA"), features=geneprograms_list, seed=1, assay="RNA")
+seur.human  <- AddModuleScore(seur.human,  name = names(geneprograms_gapinhvg_list), features=geneprograms_gapinhvg_list, seed=1)
+seur.garner <- AddModuleScore(seur.garner, name = paste0(names(geneprograms_garnerhvgRNA_list), "_RNA"), features=geneprograms_garnerhvgRNA_list, seed=1, assay="RNA")
 
 # Remove the annoying numbers that are being added
 colnames(seur.human@meta.data)[50:58] <- stringr::str_sub(colnames(seur.human@meta.data)[50:58], end=-2)
 colnames(seur.human@meta.data)[59:65] <- stringr::str_sub(colnames(seur.human@meta.data)[59:65], end=-3)
 colnames(seur.garner@meta.data)[36:44] <- stringr::str_sub(colnames(seur.garner@meta.data)[36:44], end=-2)
 colnames(seur.garner@meta.data)[45:51] <- stringr::str_sub(colnames(seur.garner@meta.data)[45:51], end=-3)
+
+colnames(seur.human@meta.data)[68:76] <- stringr::str_sub(colnames(seur.human@meta.data)[68:76], end=-2)
+colnames(seur.human@meta.data)[77:83] <- stringr::str_sub(colnames(seur.human@meta.data)[77:83], end=-3)
+colnames(seur.garner@meta.data)[68:76] <- stringr::str_sub(colnames(seur.garner@meta.data)[68:76], end=-2)
+colnames(seur.garner@meta.data)[77:83] <- stringr::str_sub(colnames(seur.garner@meta.data)[77:83], end=-3)
 
 # Sanity check GEPs
 SCpubr::do_FeaturePlot(seur.human,  features=colnames(seur.human@meta.data)[50:60],  reduction="UMAP_50", order=T, ncol=3)
@@ -538,8 +577,10 @@ SCpubr::do_FeaturePlot(seur.garner, features=colnames(seur.garner@meta.data)[48:
 # *****************************************************
 ## 4.2. Plot GEP coexpression on garner seurat obj ####
 
-SCpubr::do_FeaturePlot(seur.garner, features=c("GEP1_garner", "GEP2_garner", "GEP3_garner", "GEP4_garner"), reduction="umap", order=T, ncol=2)
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_GEPsgarner.jpeg", width=12, height=14)
+SCpubr::do_FeaturePlot(seur.garner, features=paste0("GEP", 1:11, "_gapin_RNA"), reduction="umap", order=T, ncol=3)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_GEPsgapin_RNAscore.jpeg", width=20, height=28)
+SCpubr::do_FeaturePlot(seur.garner, features=paste0("GEP", 1:11, "hvg_gapin_RNA"), reduction="umap", order=T, ncol=3, plot.title = "HVG only within GEPs")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_GEPsgapin_RNAscore_hvg.jpeg", width=20, height=28)
 
 # GEP3_gapin (naive) & GEP1_garner (unstim MAIT blood)
 SCpubr::do_FeaturePlot(seur.garner, features=c("GEP3_gapin", "GEP1_garner"), reduction="umap", order=T, ncol=2)
@@ -558,6 +599,135 @@ PlotCoexpression(seuratobj=seur.garner, dataset="garner", colmatrix_stepsize=0, 
 # *****************************************************
 ## 4.3. Plot GEP coexpression on gapin seurat obj ####
 
+SCpubr::do_FeaturePlot(seur.human, features=paste0("GEP", 1:4, "hvg_garner"), reduction="UMAP_50", order=T, ncol=2, plot.title = "HVG only within GEPs")
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_gapin_GEPsgarner_hvg.jpeg", width=12, height=14)
+
 # GEP5_gapin (Th1/Th17) & GEP1_garner (unstim MAIT blood) & GEP3_garner (cytokine stim MAIT)
 SCpubr::do_FeaturePlot(seur.human, features=c("GEP5_gapin", "GEP1_garner", "GEP3_garner"), reduction="UMAP_50", order=T, ncol=3)
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_gapin_GEP5gapin_GEP1garner_GEP3garner.jpeg", width=18, height=7)
+
+
+
+
+# ********************
+# 5. METANEIGHBOR ####
+# ********************
+
+# ***********************
+## 5.1. Prepare data ####
+
+# Counts gapin: keep only PBMC MAITs & the clusters
+seur.mait <- readRDS("./data/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/blood.MAIT_03_16_23.RDS")
+table(seur.mait$group.ident, useNA="ifany")
+table(seur.mait$new_clusters, useNA="ifany")
+table(seur.mait$new_clusters_MAIT, useNA="ifany")
+gapin.counts <- seur.mait@assays$RNA@counts
+# gapin.counts[11:15,1:5] # sanity check raw counts
+gapin.metadata <- seur.mait@meta.data[,c("new_clusters", "new_clusters_MAIT")]
+colnames(gapin.metadata) <- c("mait_clusters_highres", "mait_clusters_lowres")
+gapin.metadata$mait_clusters_highres <- paste0("gapin_", gapin.metadata$mait_clusters_highres)
+gapin.metadata$study <- "gapin"
+head(gapin.metadata)
+
+
+# Counts garner
+garner.counts <- seur.garner@assays$RNA@counts
+# garner.counts[16:20,1:5] # sanity check raw counts
+garner.metadata <- seur.garner@meta.data[,c("snn_30_res.0.3", "stimulation")]
+colnames(garner.metadata) <- c("mait_clusters_highres", "mait_clusters_lowres")
+garner.metadata$mait_clusters_highres <- paste0("garner_", garner.metadata$mait_clusters_highres)
+garner.metadata$study <- "garner"
+head(garner.metadata)
+
+
+# Get HVGs
+gapin.hvg <- VariableFeatures(seur.mait)
+DefaultAssay(seur.garner) <- "RNA"
+seur.garner[["RNA"]]@meta.features <- data.frame(row.names = rownames(seur.garner[["RNA"]]))
+seur.garner <- FindVariableFeatures(seur.garner)
+garner.hvg <- VariableFeatures(seur.garner)
+hvg.mait <- union(gapin.hvg, garner.hvg)
+length(hvg.mait) # 288 (intersect), 3712 (union)
+
+# Subset counts to common genes to both
+allgenes <- intersect(rownames(gapin.counts), rownames(garner.counts))
+length(allgenes) # 16,058
+gapin.counts  <- gapin.counts[allgenes,]
+garner.counts <- garner.counts[allgenes,]
+
+# Merge everything into one
+seur.total <- merge(CreateSeuratObject(counts=gapin.counts, meta.data=gapin.metadata),
+                    CreateSeuratObject(counts=garner.counts, meta.data=garner.metadata)) # 16,058 genes
+
+# Sanity checks
+head(seur.total@meta.data)
+table(seur.total$mait_clusters_lowres, useNA="ifany")
+table(seur.total$mait_clusters_highres, useNA="ifany")
+table(seur.total$study, useNA="ifany")
+
+
+# Convert seurat count matrix to SummarizedExperiment object
+library(SummarizedExperiment)
+se.total <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
+                                 colData=seur.total$mait_clusters_lowres)
+
+
+# _______________________
+# METANEIGHBOR
+# Run metaneighbor
+library(MetaNeighbor)
+mtn <- MetaNeighborUS(var_genes=hvg.mait,
+                      dat=se.total,
+                      study_id=seur.total$study,
+                      cell_type=seur.total$mait_clusters_lowres,
+                      fast_version=TRUE)
+
+
+# ****************************
+## 5.2. Plot metaneighbor ####
+
+# With everything (check diagonal)
+library(gplots)
+# jpeg("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/mait_clusterslowres_hvg3712union_fastversion_fulltree.jpeg", width=1500, height=1500, res=250)
+heatmap.2(mtn,
+          # trace
+          trace="none",
+          # dendrogram
+          # Rowv=FALSE,
+          # Colv=FALSE,
+          # dendrogram="none",
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(RColorBrewer::brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="Union of HVGs (3,712 genes)",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6))
+# dev.off()
+
+
+
+
+
+# Quick look at gene scores
+seur.mait <- AddModuleScore(seur.mait, name=c("maitcommongenes_unstim", "maitcommongenes_cytok", "gep1_garner", "gep5_gapin"),
+                            features=list("maitcommongenes_unstim"=genes_common_gep5_gep1garner,
+                                          "maitcommongenes_cytok"=genes_common_gep5_gep3garner,
+                                          "gep1_garner"=dflong[dflong$geneprogram=="GEP1_garner","gene"],
+                                          "gep5_gapin"=dflong[dflong$geneprogram=="GEP5_gapin","gene"]),
+                            seed=1)
+colnames(seur.mait@meta.data)[42:45] <- c("maitcommongenes_unstim", "maitcommongenes_cytok", "gep1_garner", "gep5_gapin")
+SCpubr::do_FeaturePlot(seur.mait,  features=c("maitcommongenes_unstim", "maitcommongenes_cytok"), order=F, ncol=2)
+SCpubr::do_FeaturePlot(seur.mait,  features=c("gep1_garner", "gep5_gapin"), order=F, ncol=2)
+
+
+
+
+

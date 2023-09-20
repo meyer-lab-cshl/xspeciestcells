@@ -64,8 +64,8 @@ DimPlot(seur, group.by = "new_clusters", label=T, repel=T, reduction="UMAP_50")+
 # ******************************
 
 # Import GEP usage
-# gep_usage <- read.table("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/cNMF_output/imputed_cNMF.usages.k_12.dt_0_02.consensus.txt", header=T)
-gep_usage <- read.table("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/cNMF_output/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
+# gep_usage <- read.table("./data/human-PBMC/HumanData_20_RibbonPlotCellStateToID/cNMF_output/imputed_cNMF.usages.k_12.dt_0_02.consensus.txt", header=T)
+gep_usage <- read.table("./data/human-PBMC/HumanData_20_RibbonPlotCellStateToID/cNMF_output/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
 dim(gep_usage)
 nrow(gep_usage)==ncol(seur) # rows are cells
 head(gep_usage)
@@ -133,6 +133,45 @@ DimPlot(seur, group.by = "gep_assign", repel=T, reduction="UMAP_50") + scale_col
 # ggsave("./data/human-thymus/HumanData_20_RibbonPlotCellStateToID/method_comparison/vlnpreview_gepscomparisononrawscores.jpeg", width=10, height=10)
 
 
+# Quick look at iNKTs in GEP3
+df_inkt <- df[grep("NKT", rownames(df), value=T),]
+dim(df_inkt) # 1801 cells
+df_inkt$gep_assign_2ndmax <- gsub("_.*", "", apply(df_inkt[,1:11], 1, function(x) names(x)[order(x, decreasing=T)[2]]))
+head(df_inkt)
+ggplot(df_inkt)+
+  geom_histogram(aes(x=score_max-score_2ndmax, fill=gep_assign), bins=1000)+
+  labs(y="# cells", title="assign cells to GEPs based on cNMF usage")+
+  xlim(0,1)
+# difference between max usage and 2nd max usage is lower when cells are assigned to GEP3
+df_inkt %>%
+  filter(gep_assign=="gep3") %>%
+  group_by(gep_assign_2ndmax) %>%
+  summarize(usage_diff_mean=mean(score_max-score_2ndmax),
+            usage_diff_std=sd(score_max-score_2ndmax),
+            ncells=n())
+# 664 cells / 862 assigned to GEP3 have GEP4 as second highest usage (77%)
+# the average difference in usage between GEP3 and GEP4 is 0.2 (± 0.1)
+df_inkt %>%
+  # group_by(gep_assign, gep_assign_2ndmax) %>%
+  # summarize(usage_diff_mean=mean(score_max-score_2ndmax),
+  #           usage_diff_std=sd(score_max-score_2ndmax),
+  #           ncells=n())
+  mutate(diff_usage = score_max-score_2ndmax,
+         gep_assign_2ndmax=toupper(gep_assign_2ndmax),
+         gep_assign=toupper(gep_assign),
+         gep_assign=paste0("iNKTs in ", gep_assign)) %>%
+  ggplot(aes(x=factor(gep_assign_2ndmax, levels=paste0("GEP", 1:11)), y=diff_usage))+
+  geom_boxplot(outlier.shape=NA)+
+  geom_jitter(width=0.1, size=0.1)+
+  ylim(0,1)+
+  facet_wrap(~gep_assign)+
+  theme_bw()+
+  labs(x="GEP with 2nd highest usage", y="(max usage) - (2nd highest usage)", title="Usage difference between top 2 GEPs")+
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        strip.text=element_text(size=15))
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method5_inkt_usagediff_top2geps.jpeg", width=6, height=6)
+
+
 
 
 # *******************
@@ -165,12 +204,14 @@ counts %>%
 ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
   geom_alluvium(aes(fill=cell.ident))+
   geom_stratum()+
-  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8)+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8, angle=90)+
   scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"), name="cell type")+
   # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
   theme_void()+
+  scale_y_reverse()+
+  # coord_flip()+
   theme(legend.position="none")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method5_ribbon_nonimput.pdf", width=6, height=6)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method5_ribbon_nonimput3.jpeg", width=4, height=10)
 
 
 

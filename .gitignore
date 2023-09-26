@@ -1,6 +1,6 @@
 *
-!scripts-final
-!scripts-in-progress
+!scripts-final/
+!scripts-in-progress/
 !README.md
 !.gitignore
 .Rproj.user

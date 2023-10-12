@@ -26,9 +26,10 @@ seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_08_28_
 seur.pbmc <- subset(seur.human, Tissue=="PBMC")
 print(seur.pbmc) # 17,204 genes and 40,986 cells
 
-seur.garner <- readRDS("./data/human-PBMC/HumanData_27_ComparisonGEPsGarner/GSE238138_20h_seurat.rds")
+# seur.garner <- readRDS("/Volumes/CrucialX8/Projects/HumanThymusProject/data/human-PBMC/HumanData_27_ComparisonGEPsGarner/GSE238138_20h_seurat.rds")
+seur.garner <- readRDS("/Volumes/CrucialX8/Projects/HumanThymusProject/data/human-PBMC/HumanData_27_ComparisonGEPsGarner/seuratobj_garner_fullGEPsscored_2023-09-13.rds")
 SCpubr::do_DimPlot(seur.garner, reduction="umap", group.by="stimulation", label=T, legend.position="none")
-# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_stim.jpeg", width=8, height=7)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/umap_garner_clus.jpeg", width=8, height=7)
 
 
 
@@ -623,6 +624,10 @@ table(seur.mait$new_clusters, useNA="ifany")
 table(seur.mait$new_clusters_MAIT, useNA="ifany")
 gapin.counts <- seur.mait@assays$RNA@counts
 # gapin.counts[11:15,1:5] # sanity check raw counts
+# gep_usage <- gep_usage[rownames(gep_usage) %in% colnames(seur.mait),]
+# gep_usage$gep_assign <- gsub("_.*", "", colnames(gep_usage)[apply(gep_usage, 1, which.max)])
+# table(rownames(seur.mait@meta.data)==rownames(gep_usage), useNA="ifany")
+# seur.mait@meta.data$gep_assign <- gep_usage$gep_assign
 gapin.metadata <- seur.mait@meta.data[,c("new_clusters", "new_clusters_MAIT")]
 colnames(gapin.metadata) <- c("mait_clusters_highres", "mait_clusters_lowres")
 gapin.metadata$mait_clusters_highres <- paste0("gapin_", gapin.metadata$mait_clusters_highres)
@@ -669,7 +674,7 @@ table(seur.total$study, useNA="ifany")
 # Convert seurat count matrix to SummarizedExperiment object
 library(SummarizedExperiment)
 se.total <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
-                                 colData=seur.total$mait_clusters_lowres)
+                                 colData=seur.total@meta.data)
 
 
 # _______________________
@@ -688,7 +693,7 @@ mtn <- MetaNeighborUS(var_genes=hvg.mait,
 
 # With everything (check diagonal)
 library(gplots)
-# jpeg("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/mait_clusterslowres_hvg3712union_fastversion_fulltree.jpeg", width=1500, height=1500, res=250)
+jpeg("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/mait_clusterslowres3_hvg3712union_fastversion_fulltree.jpeg", width=1500, height=1500, res=250)
 heatmap.2(mtn,
           # trace
           trace="none",
@@ -710,7 +715,75 @@ heatmap.2(mtn,
           cexCol=0.6,
           # margins
           margins=c(6,6))
-# dev.off()
+dev.off()
+
+# Reformat AUROC into df
+library(reshape2)
+library(ggrepel)
+mtn.df <- melt(mtn)
+mtn.df <- mtn.df %>%
+  filter(str_detect(Var1,"gapin")) %>%
+  mutate(Var1 = gsub("gapin\\|", "", Var1)) %>%
+  filter(str_detect(Var2, "garner")) %>%
+  mutate(Var2 = gsub("garner\\|", "", Var2))
+
+# Get number of cells per gapin cluster and per garner cluster
+mtn.df <- mtn.df %>%
+  left_join(as.data.frame(table(seur.mait$new_clusters_MAIT)), by="Var1") %>%
+  dplyr::rename(ncells_gapin=Freq) %>%
+  mutate(Var1 = paste0("MAIT_c", Var1)) %>%
+  left_join(as.data.frame(table(seur.garner$stimulation)) %>% dplyr::rename(Var2=Var1), by="Var2") %>%
+  dplyr::rename(ncells_garner=Freq)
+
+bp.x <- ggplot(data=mtn.df, aes(x=factor(Var1, levels=paste0("MAIT_c", 0:3)), y=ncells_gapin))+
+  geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
+  scale_x_discrete(position="top")+
+  labs(y="#cells")+
+  theme(#axis.title.y = element_blank(),
+    axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+    axis.text.x = element_text(size = 15), axis.title.x = element_blank(), axis.line.x=element_blank(),
+    legend.position = "none") #+
+# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# Change order of Park clusters
+order_garner <- c("unstim", "cytokine", "TCR+cytokine", "TCR")
+bp.y <- ggplot(data=mtn.df, aes(x=factor(Var2, levels=rev(order_garner)), y=ncells_garner))+
+  geom_bar(stat="identity", fill="#bdbdbd") +
+  scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_text(size=15), axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        #axis.title.x = element_blank(),
+        axis.line.y=element_blank(),
+        legend.position = "none")# +
+# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
+
+# Bubble plot
+library(scales)
+hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("MAIT_c", 0:3)),
+                               y=factor(Var2, levels=rev(order_garner)), size = value,
+                               color=value)) +
+  geom_point(alpha=0.7)+
+  geom_text(data=mtn.df %>% filter(value>0.6) %>% mutate(across("value", \(x) round(x,2))), aes(label=value), color="black", size=6)+
+  scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
+  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC")+
+  labs(x="",y="Garner conditions", size="AUROC")+
+  theme_cowplot()+
+  theme(legend.position="bottom", legend.key.width = unit(1, 'cm'))
+
+library(patchwork)
+(bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
+ggsave("./scripts-in-progress/human-PBMC/HumanData_27_ComparisonGEPsGarner/plots/mait_clusterslowres3_hvg3712union_fastversion_bubbleplot.jpeg", width=10, height=8)
+
+
+
+
+
+
+
+
+
+
 
 
 

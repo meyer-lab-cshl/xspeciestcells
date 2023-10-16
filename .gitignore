@@ -1,6 +1,12 @@
-*
-!scripts-final/
-!scripts-in-progress/
-!README.md
-!.gitignore
+#*
+#!scripts-final/
+#!scripts-in-progress/*
+#!README.md
+#!.gitignore
 .Rproj.user
+.DS_Store
+.Rprofile
+*.Rproj
+data/*
+shinyAppHumanGapinData/*
+*.nb.html

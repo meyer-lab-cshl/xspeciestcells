@@ -15,7 +15,7 @@ library(dplyr)
 library(cowplot)
 
 # Import data
-load("./data/raw_data/mouse_data/GDT_Lee/seurat.qc.norm.rm.doublet.NA.11.14.TCR_RNA_gdT_no_TCR_gene_in_hvg_no_c7.RData")
+load("/Volumes/CrucialX8/Projects/HumanThymusProject/data/raw_data/mouse_data/GDT_Lee/seurat.qc.norm.rm.doublet.NA.11.14.TCR_RNA_gdT_no_TCR_gene_in_hvg_no_c7.RData")
 seu <- seurat.qc.norm.rm.doublet.NA.11.14.TCR_RNA_gdT_no_TCR_gene_in_hvg_no_c7
 seu <- UpdateSeuratObject(seu) # 2667 cells (more likely to be the right one)
 

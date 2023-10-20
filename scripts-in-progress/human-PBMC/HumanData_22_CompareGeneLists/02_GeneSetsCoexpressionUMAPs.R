@@ -17,14 +17,15 @@ library(pheatmap)
 
 # Import data
 setwd("~/Projects/HumanThymusProject/")
-genes.gep     <- read.csv("./data/human-PBMC/HumanData_22_CompareGeneLists/genes_per_gep_post_rank_threshold.csv", row.names=1)
+genes.gep     <- read.csv("./data/human-PBMC/HumanData_27_ComparisonGEPsGarner/limited_nonimputed_genes_per_gep_post_rank_threshold_k12.csv", row.names=1)
+# genes.gep     <- read.csv("./data/human-PBMC/HumanData_22_CompareGeneLists/genes_per_gep_post_rank_threshold.csv", row.names=1)
 genes.cano    <- readxl::read_excel("./data/human-thymus/HumanData_17_GEPsOnCanogamezData/canogamez_supp.xlsx", skip=3, sheet=1)
 genesCD8.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD8.xlsx", sheet=1)
 genesCD4.rose <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD4.xlsx", sheet=1)
 genes.poon    <- readxl::read_excel("./data/human-thymus/HumanData_22_CompareGeneLists/poon_supp.xlsx", sheet=6)[,-1]
 
-seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS")
-print(seur.human) # 78,607 cells (it's the whole seurat object)
+seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_08_28_23.RDS")
+print(seur.human) # 78,355 cells (it's the whole seurat object)
 source("./scripts-final/colors_universal.R")
 # DimPlot(seur.human, reduction="UMAP_50", group.by="new_clusters", cols = cols_integrated)
 
@@ -158,7 +159,7 @@ for (i in seq(1,ncol(genes.poon), 3)){
   colnames(subdf) <- c("gene", "padj", "logFC")
   subdf <- subdf %>%
     # OPTION 1: full list of Poon genes
-    filter(padj<0.01 & logFC>0.25)
+    filter(padj<0.001 & logFC>0.25)
     # OPTION 2: short list of Poon genes
     # slice_head(n=500) # take 500 top genes
   subdf$geneprogram <- paste0("Poon | ", geneprogram) # add column with the name of the geneprogram
@@ -187,14 +188,14 @@ cols_poon <- c("Poon | CyclingTRM"="#f1e2cc",
 longdf <- bind_rows(genes.long, .id="dataset")
 table(longdf$dataset, useNA="ifany")
 # canogamez     gapin      poon      rose 
-#   387         8,105    31,852     1,672
+#   387         4,068    26,463     1,672
 
 # Remove any genes that we don't have in seur.human anyway
 longdf <- longdf %>%
   filter(gene %in% rownames(seur.human))
 table(longdf$dataset, useNA="ifany")
 # canogamez     gapin      poon      rose 
-#   341         8,105    22,246     1,542
+#   341         3,787    19,959     1,542
 # table(longdf$geneprogram)
 
 # Create a colors vector & dataframe
@@ -225,7 +226,7 @@ names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
 
 # clean-up useless columns
 colnames(seur.human@meta.data)
-seur.human@meta.data[,18:75] <- NULL
+seur.human@meta.data[,18:49] <- NULL
 seur.human@meta.data[,13:16] <- NULL
 
 
@@ -239,7 +240,6 @@ for(gp in unique(longdf$geneprogram)){
   print(gp)
   genes_in_program <- longdf %>%
     filter(geneprogram==gp & gene %in% rownames(seur.human)) %>%
-    # slice_head(n=200) %>%
     pull(gene)
   print(length(genes_in_program))
   geneprograms.list[[gp]] <- genes_in_program
@@ -252,25 +252,25 @@ seur.human <- AddModuleScore(seur.human, name = names(geneprograms.list), featur
 
 # Remove the annoying numbers that are being added
 colnames(seur.human@meta.data)[14:22] <- stringr::str_sub(colnames(seur.human@meta.data)[14:22], end=-2)
-colnames(seur.human@meta.data)[23:49] <- stringr::str_sub(colnames(seur.human@meta.data)[23:49], end=-3)
+colnames(seur.human@meta.data)[23:48] <- stringr::str_sub(colnames(seur.human@meta.data)[23:48], end=-3)
 
 # Sanity check GEPs
-SCpubr::do_FeaturePlot(seur.human, features=colnames(seur.human@meta.data)[14:25], reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=3)
-# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/umap_allgeps2.jpeg", width=20, height=30)
+SCpubr::do_FeaturePlot(seur.human, features=colnames(seur.human@meta.data)[14:24], reduction="UMAP_50", viridis.palette = "B", use_viridis = T, order=T, ncol=3)
+# ggsave("./data/human-PBMC/HumanData_22_CompareGeneLists/umaps/umap_allgeps_nonimput.jpeg", width=20, height=30)
 
-# GEP7 for supp figure
-SCpubr::do_FeaturePlot(seur.human, features="GEP7", split.by="Batch", reduction="UMAP_50", viridis_color_map = "B", order=T, ncol=5)
-# ggsave("./data/human-thymus/HumanData_23_GEPsPerBatch/GEP7.jpeg", width=20, height=10)
+# GEP12 for supp figure
+# SCpubr::do_FeaturePlot(seur.human, features="GEP12", split.by="Batch", reduction="UMAP_50", viridis.palette = "B", use_viridis = T, order=T, ncol=3)
+# ggsave("./data/human-PBMC/HumanData_23_GEPsPerBatch/GEP12.jpeg", width=20, height=10)
 
 # Checkpoint save
-# saveRDS(seur.human, "./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-08-04.rds")
-seur.human <- readRDS("./data/human-thymus/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-08-04.rds")
+# saveRDS(seur.human, "./data/human-PBMC/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-10-16.rds")
+seur.human <- readRDS("./data/human-PBMC/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-10-16.rds")
 
 # UMAPs other datasets for supp figure
 # for(genesig in names(geneprograms.list)[13:36]){
 for(genesig in colnames(seur.human@meta.data)[43]){
   print(genesig)
-  filen <- paste0("./data/human-thymus/HumanData_22_CompareGeneLists/pdf_plots/suppfig_umaps_scaled/suppfig5_umap_", tolower(genesig), ".jpeg")
+  filen <- paste0("./data/human-PBMC/HumanData_22_CompareGeneLists/pdf_plots/suppfig_umaps_scaled/suppfig5_umap_", tolower(genesig), ".jpeg")
   if(grepl("CanoGamez", genesig)==T){
     scalemin <- 0
     scalemax <- 2
@@ -615,37 +615,7 @@ for(gep in gepsall[gepsall!="GEP6_Tcm"]){
 # colnames(seur.human@meta.data)[17] <- "GEP4"
 # colnames(seur.human@meta.data)[19] <- "GEP6"
 
-# GEP1 (row1)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "CanoGamez_CD4_TEM"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_canogamez_CD4TEM.pdf", width=9, height=8)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Rose_CD8_modul3_Tem.emra"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_rose_CD8modul3.pdf", width=9, height=8)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Poon_CD8MAIT"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_poon_CD8mait.pdf", width=9, height=8)
-p11 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "CanoGamez_CD4_TEM")) +
-  draw_label("CD4 Tem", hjust=0.5, y=0.98, size=30)
-p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Rose_CD4_modul4_Tem")) +
-  draw_label("CD4 Tem (module 4)", hjust=0.5, y=0.98, size=30)
-p13 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP1", "Poon_CD8MAIT")) +
-  draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
-
-
-# GEP4 (row 2)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "CanoGamez_CD4_TEMRA"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_canogamez_CD4TEMRA.pdf", width=9, height=8)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Rose_CD8_modul1_Temra"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_rose_CD8modul1.pdf", width=9, height=8)
-# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Poon_CD8TEM.TEMRA"), nlevels=100, colmatrix_stepsize=0),
-#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_poon_CD8tem_temra.pdf", width=9, height=8)
-p21 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "CanoGamez_CD4_TEMRA")) +
-  draw_label("CD4 Temra", hjust=0.5, y=0.98, size=30)
-p22 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Rose_CD8_modul1_Temra")) +
-  draw_label("CD8 Temra (module 1)", hjust=0.5, y=0.98, size=30)
-p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Poon_CD8TEM.TEMRA")) +
-  draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
-
-
-# GEP5
+# GEP3 (Tnaive)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP5", "CanoGamez_CD4_Tnaive"), nlevels=100, colmatrix_stepsize=0),
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep5_canogamez_CD4Tnaive.pdf", width=9, height=8)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP5", "Rose_CD8_modul4_Tnaive"), nlevels=100, colmatrix_stepsize=0),
@@ -654,19 +624,50 @@ p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=30
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep5_poon_CD8tnaive.pdf", width=9, height=8)
 
 
-# GEP6
+# GEP4 (Tcm)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "CanoGamez_CD4_TCM"), nlevels=100, colmatrix_stepsize=0),
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_canogamez_CD4Tcm.pdf", width=9, height=8)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Rose_CD8_modul2_Tcm.em"), nlevels=100, colmatrix_stepsize=0),
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_rose_CD8modul2.pdf", width=9, height=8)
 # ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP6", "Poon_CD4TCM.TFH"), nlevels=100, colmatrix_stepsize=0),
 #        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep6_poon_CD4Tcm.pdf", width=9, height=8)
-p31 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "CanoGamez_CD4_TCM")) +
+p11 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "CanoGamez_CD4_TCM")) +
   draw_label("CD4 Tcm", hjust=0.5, y=0.98, size=30)
-p32 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Rose_CD8_modul2_Tcm.em")) +
+p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Rose_CD8_modul2_Tcm_em")) +
   draw_label("CD8 Tcm/em (module 2)", hjust=0.5, y=0.98, size=30)
-p33 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Poon_CD4TCM.TFH")) +
+p13 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Poon_CD4TCM_TFH")) +
   draw_label("CD4 Tcm/fh", hjust=0.5, y=0.98, size=30)
+
+
+# GEP5 (row1)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "CanoGamez_CD4_TEM"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_canogamez_CD4TEM.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Rose_CD8_modul3_Tem.emra"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_rose_CD8modul3.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP1", "Poon_CD8MAIT"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep1_poon_CD8mait.pdf", width=9, height=8)
+p21 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP5", "CanoGamez_CD4_TEM")) +
+  draw_label("CD4 Tem", hjust=0.5, y=0.98, size=30)
+p22 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP5", "Rose_CD4_modul4_Tem")) +
+  draw_label("CD4 Tem (module 4)", hjust=0.5, y=0.98, size=30)
+p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP5", "Poon_CD8MAIT")) +
+  draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
+
+
+# GEP6 (row 2)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "CanoGamez_CD4_TEMRA"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_canogamez_CD4TEMRA.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Rose_CD8_modul1_Temra"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_rose_CD8modul1.pdf", width=9, height=8)
+# ggsave(plot=PlotCoexpression(seuratobj=seur.human, features=c("GEP4", "Poon_CD8TEM.TEMRA"), nlevels=100, colmatrix_stepsize=0),
+#        filename="./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/gep4_poon_CD8tem_temra.pdf", width=9, height=8)
+p31 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "CanoGamez_CD4_TEMRA")) +
+  draw_label("CD4 Temra", hjust=0.5, y=0.98, size=30)
+p32 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Rose_CD8_modul1_Temra")) +
+  draw_label("CD8 Temra (module 1)", hjust=0.5, y=0.98, size=30)
+p33 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Poon_CD8TEM_TEMRA")) +
+  draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
+
 
 
 # Combine into one
@@ -674,5 +675,4 @@ plot_grid(plot_grid(p11,p12,p13, nrow = 1, scale=0.95),
           plot_grid(p21,p22,p23, nrow = 1, scale=0.95),
           plot_grid(p31,p32,p33, nrow = 1, scale=0.95),
           nrow=3, scale=0.95)
-# ggsave("./data/human-thymus/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid2bis.pdf", width=23, height=20)
-ggsave("./data/human-thymus/HumanData_17_GEPsOnPoonData/plots_figure/combined_grid2bis.pdf", width=23, height=20)
+ggsave("./data/human-PBMC/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid_gepnonimput.pdf", width=23, height=20)

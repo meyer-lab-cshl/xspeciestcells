@@ -1,6 +1,6 @@
-# Purpose:
+# Purpose: Check co-expression of SCENIC regulons
 # Author: Salomé Carcy
-# Date:
+# Date: 2023-10-25
 
 
 
@@ -76,7 +76,37 @@ dim(counts.agg)
 
 
 #___________________________
-## 3.3. Spearman correlation between TFs and their gene in regulon ####
+## 3.3. Spearman correlation between all genes ####
+cor_matrix_allgenes <- cor(t(counts.agg), method="spearman") # takes about 5min to compute
+
+# make lower triangle full of NAs
+cor_matrix_allgenes[lower.tri(cor_matrix_allgenes)] <- NA
+dim(cor_matrix_allgenes)
+cor_matrix_allgenes[1:5,1:5]
+
+
+# normalize coexpression network like cococonet
+cor_matrix_allgenes_norm <- reshape2::melt(cor_matrix_allgenes) %>%
+  as_tibble() %>%
+  rename(spearman_cor=value) %>%
+  filter(!is.na(spearman_cor))
+
+cor_matrix_allgenes_norm <- cor_matrix_allgenes_norm %>%
+  # rank standardize correlation
+  arrange(Var1, spearman_cor) %>%
+  group_by(Var1) %>%
+  mutate(rank=rank(spearman_cor),
+         rank_max=max(rank)) %>%
+  # normalize by dividing by maximum rank
+  mutate(rank_normalized=rank/rank_max) %>%
+  ungroup() %>%
+  select(-rank_max)
+
+## /end ####
+
+
+#___________________________
+## 3.4. Spearman correlation between TFs and their gene in regulon ####
 
 # Import regulons
 regulons <- read.csv("./data/human-PBMC/HumanData_32_Coexpression/nes2_maskdropouts_full_obj_seurat_filtered_harmony_08_28_23_raw_counts_100_multirun_reg100-target80_regulons_pruned_final.csv",
@@ -92,49 +122,88 @@ regulons[1:17,1:10]
 
 
 # Get spearman correlation for each regulon
-df.cor <- data.frame()
-for(tf in rownames(regulons)){
-  print(tf)
-  # get the genes in that regulon
-  genes.temp <- regulons[tf,]
-  genes.temp <- genes.temp[!is.na(genes.temp)]
-  # print(length(genes.temp))
-  # if a gene is not found in seurat object
-  if(length(genes.temp[!genes.temp %in% rownames(seur.highclus)]) != 0){
-    print(paste0("genes", genes.temp[!genes.temp %in% rownames(seur.highclus)], "not found in seurat object"))
-  }
-  # get the spearman correlation
-  df.temp <- data.frame("regulon"=tf,
-                        "gene"=genes.temp)
-  df.temp$spearman_cor <- apply(df.temp, 1, function(x) stats::cor(counts.agg[x[1],], counts.agg[x[2],], method="spearman"))
-  # add to big dataframe
-  df.cor <- rbind(df.cor, df.temp)
-}
-table(df.cor$regulon)
+# df.cor <- data.frame()
+# for(tf in rownames(regulons)){
+#   print(tf)
+#   # get the genes in that regulon
+#   genes.temp <- regulons[tf,]
+#   genes.temp <- genes.temp[!is.na(genes.temp)]
+#   # print(length(genes.temp))
+#   # if a gene is not found in seurat object
+#   if(length(genes.temp[!genes.temp %in% rownames(seur.highclus)]) != 0){
+#     print(paste0("genes", genes.temp[!genes.temp %in% rownames(seur.highclus)], "not found in seurat object"))
+#   }
+#   # get the spearman correlation
+#   df.temp <- data.frame("regulon"=tf,
+#                         "gene"=genes.temp)
+#   df.temp$spearman_cor <- apply(df.temp, 1, function(x) stats::cor(counts.agg[x[1],], counts.agg[x[2],], method="spearman"))
+#   # add to big dataframe
+#   df.cor <- rbind(df.cor, df.temp)
+# }
+# table(df.cor$regulon)
 # sanity check
 # table(is.na(df.cor))
 # df.cor %>%
 #   filter(regulon=="ZBTB16")
 
+# # Plot their spearman correlation
+# hist(df.cor$spearman_cor, breaks=100)
+# df.cor %>%
+#   filter(spearman_cor==1)
+# 
+# df.cor %>%
+#   ggplot(aes(y=regulon, x=spearman_cor))+
+#   geom_boxplot(outlier.shape=NA)+
+#   geom_point(size=0.1)
+# ggsave("./data/human-PBMC/HumanData_32_Coexpression/coexpression_per_regulon.jpeg", width=5, height=40)
+# 
+# 
+# # plot spearman correlation of regulons kept by Laurent
+# df.cor %>%
+#   filter(regulon %in% c("RUNX2", "NR1D2", "CREM", "NFE2L2", "FLI1", "MYBL1", "RORA", "XBP1", "CEBPD", "FOSL2", "BHLHE40", "MAF", "PRDM1", "EOMES")) %>%
+#   ggplot(aes(y=regulon, x=spearman_cor))+
+#   geom_boxplot(outlier.shape=NA)+
+#   geom_point(size=0.1)
 
-# Plot their spearman correlation
-hist(df.cor$spearman_cor, breaks=100)
-df.cor %>%
-  filter(spearman_cor==1)
 
-df.cor %>%
-  ggplot(aes(y=regulon, x=spearman_cor))+
-  geom_boxplot(outlier.shape=NA)+
-  geom_point(size=0.1)
-ggsave("./data/human-PBMC/HumanData_32_Coexpression/coexpression_per_regulon.jpeg", width=5, height=40)
+# Get TF-target genes in a long DF
+regulons_londf <- data.frame()
+for(tf in rownames(regulons)){
+  print(tf)
+  genes.temp <- regulons[tf,]
+  genes.temp <- genes.temp[!is.na(genes.temp)]
+  # if a gene is not found in seurat object
+  if(length(genes.temp[!genes.temp %in% rownames(seur.highclus)]) != 0){
+    print(paste0("genes", genes.temp[!genes.temp %in% rownames(seur.highclus)], "not found in seurat object"))
+  }
+  df.temp <- data.frame("regulon"=tf, "targetgene"=genes.temp)
+  regulons_londf <- rbind(regulons_londf, df.temp)
+}
+# sanity checks
+# table(regulons_londf$regulon)
+# table(is.na(regulons_londf))
+# regulons_londf %>%
+#   filter(regulon=="ZBTB16")
+
+# subset the correlation matrix to our regulons
+regulons_londf <- regulons_londf %>%
+  rowwise() %>%
+  mutate(genepair=paste0(sort(c(regulon, targetgene)), collapse="|"))
+
+test <- cor_matrix_allgenes_norm
+test$Var1 <- as.character(test$Var1)
+test$Var2 <- as.character(test$Var2)
 
 
-# plot spearman correlation of regulons kept by Laurent
-df.cor %>%
-  filter(regulon %in% c("RUNX2", "NR1D2", "CREM", "NFE2L2", "FLI1", "MYBL1", "RORA", "XBP1", "CEBPD", "FOSL2", "BHLHE40", "MAF", "PRDM1", "EOMES")) %>%
-  ggplot(aes(y=regulon, x=spearman_cor))+
-  geom_boxplot(outlier.shape=NA)+
-  geom_point(size=0.1)
+head(test)
+test <- cor_matrix_allgenes_norm %>%
+  mutate(Var1=as.character(Var1),
+         Var2=as.character(Var2)) %>%
+  rowwise() %>%
+  mutate(genepair=paste0(sort(c(Var1, Var2)), collapse="|")) %>%
+  head(10)
+
+head(cor_matrix_allgenes_norm)
 
 
 
@@ -142,7 +211,7 @@ df.cor %>%
 
 
 #___________________________
-## 3.4. Check the null distribution of spearman correlations in data ####
+## 3.5. Check the null distribution of spearman correlations in CoCoCoNet ####
 counts.agg[1:5,1:5]
 nrow(counts.agg)
 
@@ -246,6 +315,13 @@ df.cor2 %>%
   labs(x="spearman_cor", y="", title="correlation across human tissues (cococonet data)")
 ggsave("./data/human-PBMC/HumanData_32_Coexpression/coexpression_per_regulon_withbaseline.jpeg", width=10, height=35)
 
+
+# plot spearman correlation of regulons kept by Laurent
+df.cor %>%
+  filter(regulon %in% c("RUNX2", "NR1D2", "CREM", "NFE2L2", "FLI1", "MYBL1", "RORA", "XBP1", "CEBPD", "FOSL2", "BHLHE40", "MAF", "PRDM1", "EOMES")) %>%
+  ggplot(aes(y=regulon, x=spearman_cor))+
+  geom_boxplot(outlier.shape=NA)+
+  geom_point(size=0.1)
 
 
 

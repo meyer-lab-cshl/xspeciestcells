@@ -374,4 +374,52 @@ gdt_counts %>%
         axis.text.x=element_text(angle=45, hjust=1))
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/gdt_cd4cd8_per_gep.jpeg", width=8, height=4)
 
+
+# plot GEP assign per GD usage
+# extract metadata of interest
+table(rownames(normcounts2)==rownames(seur.human@meta.data))
+seur.gdt@meta.data <- seur.gdt@meta.data %>%
+  # simplify VG and VD
+  mutate(tcr_gamma=case_when(
+    TCR_Alpha_Gamma_V_gene_Dominant %in% grep("TRAV", TCR_Alpha_Gamma_V_gene_Dominant, value=T) ~ "Valpha",
+    TCR_Alpha_Gamma_V_gene_Dominant %in% grep("TRGV9", TCR_Alpha_Gamma_V_gene_Dominant, value=T) ~ "VG9",
+    TCR_Alpha_Gamma_V_gene_Dominant %in% grep("TRGV", TCR_Alpha_Gamma_V_gene_Dominant, value=T) ~ "VGother",
+    .default = "unknown"
+  ),
+  tcr_delta=case_when(
+    TCR_Beta_Delta_V_gene_Dominant %in% grep("TRBV", TCR_Beta_Delta_V_gene_Dominant, value=T) ~ "Vbeta",
+    TCR_Beta_Delta_V_gene_Dominant %in% grep("TRDV1", TCR_Beta_Delta_V_gene_Dominant, value=T) ~ "VD1",
+    TCR_Beta_Delta_V_gene_Dominant %in% grep("TRDV2", TCR_Beta_Delta_V_gene_Dominant, value=T) ~ "VD2",
+    TCR_Beta_Delta_V_gene_Dominant %in% grep("TRDV3", TCR_Beta_Delta_V_gene_Dominant, value=T) ~ "VD3",
+    .default = "unknown"
+  ),
+  ) %>%
+  mutate(tcr_vd2vg9=case_when(
+    cell.ident=="GD" & tcr_delta=="VD2" & tcr_gamma=="VG9" ~ "TRDV2_TRGV9",
+    cell.ident=="GD" & tcr_delta=="VD2" & tcr_gamma=="VGother" ~ "TRDV2_TRGVother",
+    cell.ident=="GD" & tcr_delta %in% c("VD1", "VD3")      ~ "TRDV1 or TRDV3",
+    .default = "other"
+  ))
+
+# DimPlot(seur.gdt, cells.highlight = rownames(seur.gdt@meta.data[seur.gdt@meta.data$tcr_vd2vg9=="GD(TRDV2_TRGV9)",]), reduction="umap") # sanity check
+
+seur.gdt@meta.data %>%
+  rownames_to_column("cellid") %>%
+  as_tibble() %>%
+  filter(tcr_delta != "unknown" & tcr_gamma !="unknown") %>% # remove GD for which we don't have TCR usage
+  filter(tcr_delta != "Vbeta" & tcr_gamma !="Valpha") %>% # remove GD that have an alpha or beta chain in TCRseq
+  filter(!gep_assign %in% c("GEP2", "GEP7", "GEP11")) %>%
+  group_by(gep_assign, tcr_vd2vg9) %>%
+  count() %>%
+  ggplot(aes(x=gep_assign, y=n, fill=gep_assign))+
+  geom_bar(stat="identity")+
+  facet_wrap(~tcr_vd2vg9, nrow=1)+
+  labs(x="", y="# cells", title="GD")+
+  scale_fill_manual(values=c("gold", "#a40000", "#72bcd5", "#0a2e57"), name="GEP with max usage")+
+  theme_cowplot()+
+  theme(legend.position="none",
+        axis.text.x=element_text(angle=45, hjust=1))
+ggsave("./scripts-in-progress/human-PBMC/HumanData_26_GEPusage_per_lineage_PBMC/plots/gdt_tcr_per_gep.jpeg", width=8, height=4)
+
+
 ## end GDT ####

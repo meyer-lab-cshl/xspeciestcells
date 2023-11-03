@@ -19,10 +19,10 @@ library(ggnewscale)
 #################
 
 
-scenic2network <- function(weights, attributes, needsRoot=FALSE) {
-  weights <- replace(weights, is.na(weights), values = 0) # replace NAs with 0
-  weights[weights < 3] <- 0
-  weights$dummy <- 10
+scenic2network <- function(attributes, needsRoot=FALSE) {
+  #weights <- replace(weights, is.na(weights), values = 0) # replace NAs with 0
+  #weights[weights < 3] <- 0
+  #weights$dummy <- 10
   
   names(attributes)[1] <- "regulon"
   names(attributes)[2] <- "target"
@@ -37,7 +37,7 @@ scenic2network <- function(weights, attributes, needsRoot=FALSE) {
   # generate all regulon-target pairwise comparisons
   for (i in all_regulons){
     for (j in all_targets){
-      tmp <- data.frame(regulon = i, target = j, weight = weights[j,i])
+      tmp <- data.frame(regulon = i, target = j, weight = 10)
       pairwise_source_target <- rbind(pairwise_source_target, tmp)
     }
   }
@@ -55,7 +55,7 @@ scenic2network <- function(weights, attributes, needsRoot=FALSE) {
   
   # add metadata
   subset_attr <- attributes[,c("target", "attribute")]
-  df_attr <- tibble::tibble(target='dummy', attribute="Other")
+  df_attr <- tibble::tibble(target='dummy', attribute="TF")
   subset_att <- rbind(subset_attr, df_attr)
   non_zero_weights_with_attrs <- merge(non_zero_weights, subset_attr,
                                        by = "target", all.x = TRUE)
@@ -125,9 +125,9 @@ plotCircDend <- function(network, labelsize=2) {
 ## setup ####
 #############
 
-colors <- tibble::tibble(attribute=c("TF", "Cytokine", "Chemokine", "Other",
-                                     "Cytokine Receptor", "Cytotoxicity",
-                                     "Chemokine Receptor", "Integrin",
+colors <- tibble::tibble(attribute=c("TF", "cytokine", "chemokine", "other",
+                                     "cytokine receptor", "cytotoxicity",
+                                     "chemokine receptor", "integrin",
                                      "NK receptor"),
                          color=c("#ec7014", "#964A35", "#964A35", "gray",
                                  "#8EB63B", "#C7B354", "#001959", "#45204C",
@@ -170,13 +170,89 @@ names(colors_list) <- colors$attribute
 ################
 
 ## GEP 1
-weights_gep1 <- read.csv("data/scenic_gep_data_with_threshold_50target_70regulon/GEP1_seurat_filtered_harmony_02_15_23_raw_counts_multirun_04192023_regulons_pruned_target_gene_counts.csv",
-                         row.names = 1)
-attributes_gep1 <- read.csv("data/Scenic_gep_data_with_threhold_30target_70regulon/GEP_1_pruned.csv", row.names = 1)
+#weights_gep1 <- read.csv("data/scenic_gep_data_with_threshold_50target_70regulon/GEP1_seurat_filtered_harmony_02_15_23_raw_counts_multirun_04192023_regulons_pruned_target_gene_counts.csv",
+#                         row.names = 1)
+#attributes_gep1 <- read.csv("data/Scenic_gep_data_with_threhold_30target_70regulon/GEP_1_pruned.csv", row.names = 1)
 
-network_gep1 <- scenic2network(weights_gep1, attributes_gep1)
-p_gep1 <- plotCircDend(network_gep1)
+weights_gep1 <- read.csv("results/regulon_pruned_genes_100_100_2.csv")
+
+attributes <- read.csv("results/Pruned_Genes_Adaptive_regulons_w_attributes.csv")
+network <- scenic2network(attributes, needsRoot = FALSE)
+
+attributes_TF_TF <- attributes %>%
+  filter(Target %in% unique(TF))
+
+network <- graph_from_data_frame(d = attributes_TF_TF[,1:2], directed = TRUE)
+network_tbl <- as_tbl_graph(network)
+
+network_tbl <- network_tbl %>%
+  activate(edges) %>%
+  arrange(from) %>%
+  mutate(color= rep(c("#66c2a5", rep(c("#8da0cb","#66c2a5"), 8)),
+                    times=table(from)))
+    
+
+p_tfs <- ggraph(network_tbl, layout = 'linear') + 
+  geom_edge_arc(aes(color = factor(color))) +
+                #arrow=arrow(type = "closed", ends="last")) + 
+  scale_edge_color_manual(values=c("#8da0cb","#66c2a5"), guide="none") +
+  geom_node_label(aes(label=name), color="#ec7014") +
+  coord_flip() +
+  theme_graph()
+
+attributes_uniqueTF <- attributes %>%
+  filter(!Target %in% unique(TF))
+
+attributes_uniqueTF_matrix <- as.matrix(table(attributes_uniqueTF[,1:2]))
+rowclust <- hclust(dist(attributes_uniqueTF_matrix, "manhattan"))$order
+colclust <- hclust(dist(t(attributes_uniqueTF_matrix), "manhattan"))$order
+
+attributes_uniqueTF_matrix <- attributes_uniqueTF_matrix[rowclust,colclust]
+attributes_uniqueTF_df <- attributes_uniqueTF_matrix %>%
+  as.data.frame %>%
+  filter(Freq != 0)
+
+p_reg <- ggplot(attributes_uniqueTF_df)
+p_reg <- p_reg +
+  geom_point(aes(x=TF, y=Target), size=4) +
+  labs(x="Transcription Factors") +
+  coord_fixed() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5))
+
+
+cowplot::plot_grid(p_tfs, p_reg)
+network <- scenic2network(attributes, needsRoot = TRUE)
+network <- scenic2network(attributes, needsRoot = FALSE)
+p <- plotCircDend(network)
 ggsave(plot=p_gep1, "results/scenic_gep1.pdf", width=5.5, height=5.5)
+
+
+attributes_matrix <- as.matrix(table(attributes[,1:2]))
+rowclust <- hclust(dist(attributes_matrix, "manhattan"))$order
+colclust <- hclust(dist(t(attributes_matrix), "manhattan"))$order
+
+attributes_matrix <- attributes_matrix[rowclust,colclust]
+
+tt <- attributes %>%
+  select(Target, Attributes) %>%
+  distinct
+
+attributes_df <- attributes_matrix %>%
+  as.data.frame %>%
+  filter(Freq != 0) %>%
+  left_join(tt) %>%
+  mutate(Attributes = 
+
+p_reg <- ggplot(attributes_df)
+p_reg +
+  geom_point(aes(x=TF, y=Target), size=4) +
+  labs(x="Transcription Factors") +
+  coord_fixed() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5))
+
+
 
 ## GEP 4
 weights_gep4 <- read.csv("data/scenic_gep_data_with_threshold_50target_70regulon/GEP4_seurat_filtered_harmony_02_15_23_raw_counts_multirun_04192023_regulons_pruned_target_gene_counts.csv",

@@ -177,7 +177,6 @@ names(colors_list) <- colors$attribute
 weights_gep1 <- read.csv("results/regulon_pruned_genes_100_100_2.csv")
 
 attributes <- read.csv("results/Pruned_Genes_Adaptive_regulons_w_attributes.csv")
-network <- scenic2network(attributes, needsRoot = FALSE)
 
 attributes_TF_TF <- attributes %>%
   filter(Target %in% unique(TF))
@@ -234,23 +233,33 @@ colclust <- hclust(dist(t(attributes_matrix), "manhattan"))$order
 
 attributes_matrix <- attributes_matrix[rowclust,colclust]
 
-tt <- attributes %>%
+dummy_target <- attributes %>%
   select(Target, Attributes) %>%
-  distinct
+  distinct %>%
+  rename(Attributes_target=Attributes)
+  
+dummy_tf <- attributes %>%
+  select(TF, Attributes) %>%
+  distinct %>%
+  rename(Attributes_TF=Attributes)
 
 attributes_df <- attributes_matrix %>%
   as.data.frame %>%
   filter(Freq != 0) %>%
-  left_join(tt) %>%
-  mutate(Attributes = 
+  left_join(dummy_target) %>%
+  left_join(dummy_tf) %>%
+  mutate(type = case_when(Attributes_TF == Attributes_target ~ "TF",
+                          TRUE ~ "other"))
 
 p_reg <- ggplot(attributes_df)
 p_reg +
-  geom_point(aes(x=TF, y=Target), size=4) +
-  labs(x="Transcription Factors") +
+  geom_point(aes(x=Target, y=TF, color=type), size=4) +
+  labs(y="Transcription Factors",
+       x="Targets") +
+  scale_color_manual(values=c("darkgrey", "#ec7014"), guide="none")+
   coord_fixed() +
   theme_bw() +
-  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5))
+  theme(axis.text.x = element_text(angle=45, hjust=1, vjust=1))
 
 
 

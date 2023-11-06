@@ -3,6 +3,7 @@
 library(Seurat)
 #library(SeuratData)
 library(ggplot2)
+library(SPOTlight)
 #library(patchwork)
 library(dplyr)
 library(harmony)
@@ -11,6 +12,8 @@ library(RColorBrewer)
 library(pals)
 library(NMF)
 library(ggh4x)
+library(tibble)
+library(tidyr)
 
 #################
 ## functions ####
@@ -24,16 +27,17 @@ extractSlice <- function(slice, spe) {
 analyzeSPOTS <- function(slice, spe.list, modls=NULL, sce=NULL, cell_annot=NULL,
                          markers=NULL, variable_features=NULL) { 
   cat(slice)
-  tmp <- spe.list[[names(spe.list) == slice]]
+  tmp <- spe.list[[which(names(spe.list) == slice)]]
   if (is.null(modls)) {
     res.tmp <- SPOTlight(
       x = sce,
       y = tmp,
       groups = cell_annot,
-      mgs = markers,
+      mgs = as.data.frame(markers),
       hvg = variable_features,
       weight_id = "avg_log2FC",
-      group_id = "cell_annot",
+      #group_id = "cell_annot",
+      group_id = "celltype",
       gene_id = "gene")
   } else {
     res.tmp <- runDeconvolution(
@@ -48,18 +52,18 @@ visualiseTopics <- function(slice, res.slices) {
   ## how specific each topic signature is for each cell identity.
   p_topics <- plotTopicProfiles(
     x = mod,
-    y = as.character(thymus.keep$subset_annotations),
+    y = as.character(thymus.keep$spatial.cells),
     facet = FALSE,
     min_prop = 0.01,
     ncol = 1) +
     theme(aspect.ratio = 1)
-  ggsave(paste0("results/plots/thymus.batchC.", slice, ".topics.pdf"),
+  ggsave(paste0("results/plots/thymus.batch.", slice, ".topics.pdf"),
          plot=p_topics, width=8, height=8)
   
   ## how consistent is signature for all the cells from the same cell identity.
   p_topics_cell <- plotTopicProfiles(
     x = mod,
-    y = as.character(thymus.keep$subset_annotations),
+    y = as.character(thymus.keep$spatial.cells),
     facet = TRUE,
     min_prop = 0.01,
     ncol = 10) 
@@ -129,7 +133,7 @@ annotateSPOTS <- function(slice, res.slices, tspe.slices,
     rownames_to_column("spotid") %>%
     left_join(spot_annotation) %>%
     select(spotid, location, everything()) %>%
-    pivot_longer(starts_with(cluster_startswith),
+    pivot_longer(!spotid:location,
                  names_to = "cluster", values_to="proportion") %>%
     mutate(slice=slice)
 }
@@ -146,10 +150,16 @@ paletteMartin <- c("#000000", "#004949", "#009292", "#ff6db6", "#ffb6db",
                             
 colhisto <- c('#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d')
 
+all_cells <- readRDS("data/human-thymus/HumanData_16_ParkIntegration/seurat_integrated_fullpark_fullgapin.rds")
+thymus <-  subset(all_cells,
+                           subset=tissue=="Thymus")
+markers.subset <- readr::read_delim("data/human-thymus/HumanData_16_ParkIntegration/markers.tsv", delim = "\t")
+hvgs.subset <- readr::read_delim("data/human-thymus/HumanData_16_ParkIntegration/hvgs.tsv", delim = "\t")
 
-thymus <- readRDS("data/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
-markers.subsets <- readr::read_csv("results/top20markers_thymic_populations.csv")
-hvgs.subsets <- readr::read_csv("results/hvgs_thymic_populations.csv")
+
+# thymus <- readRDS("data/raw_data/human_data/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+# markers.subsets <- readr::read_csv("results/top20markers_thymic_populations.csv")
+# hvgs.subsets <- readr::read_csv("results/hvgs_thymic_populations.csv")
 
 # From: Heimli M, Flåm ST, Hjorthaug HS, Trinh D, Frisk M, Dumont K-A, Ribarska
 # T, Tekpli X, Saare M and Lie BA (2023) Multimodal human thymic profiling
@@ -219,22 +229,81 @@ ggsave(plot=p_spatial, 'results/plots/histology_plots.pdf', width = 9, height=9)
 # in cases when we have more transcriptionally similar cell
 # identities we need to increase our N to capture the biological heterogeneity
 # between them; prioritize picking from one batch
-with(thymus@meta.data, table(Batch, subset_annotations))
+thymus@meta.data %>%
+  filter(study=="park_data") %>%
+  filter(Anno_level_0=="lymphoid", grepl("DP", Anno_level_5) |  grepl("DN", Anno_level_5)) %>%
+  with(., table(Batch, Anno_level_5))
+# -> batch F74_TH_TOT_5GEX_1 best for park lymphoid
+
+thymus@meta.data %>%
+  filter(study=="park_data") %>%
+  filter(Anno_level_0=="stromal", grepl("TEC", Anno_level_3)) %>%
+  with(., table(Batch, Anno_level_3))
+# -> batch C40_TH_TOT_2 best for park stromal
+
+#with(thymus@meta.data, table(Batch, subset_annotations))
+thymus@meta.data %>%
+  filter(study=="gapin_data") %>%
+  with(., table(Batch, subset_annotations))
 # -> batch C best?
-thymus.batchC <-  subset(thymus, subset=Batch=="C") 
-print(thymus.batchC) # 7,379 cells
+# 
+#thymus.batchC <-  subset(thymus, subset=Batch=="C") 
+#print(thymus.batchC) # 7,379 cells
+
+dn_dp_park <- c("DN(Q)", "DN(P)", "DP(Q)", "DP(P)") 
+tec_park <- c("cTEC", "mTEC")
+#dn_dp_gapin <- c("DN(Q)", "DN(P)", "DP") 
+sp_gapin <- thymus@meta.data %>%
+  filter(study=="gapin_data",
+         !subset_annotations %in% c("thyCD8_DP", "thyCD4_DPq", "thyCD4_DPp")) %>%
+  select(subset_annotations) %>%
+  unique
+sp_gapin <- sp_gapin[[1]]
+
+# check filtering strategy
+thymus@meta.data %>%
+  filter(
+    study=="park_data" & Batch=="F74_TH_TOT_5GEX_1" & Anno_level_5 %in% dn_dp_park |
+    study=="park_data" & Batch=="C40_TH_TOT_2" & Anno_level_3 %in% tec_park |
+    study=="gapin_data" & Batch=="C"& #!Anno_level_5 %in% dn_dp_gapin &
+      subset_annotations %in% sp_gapin) %>%
+  with(., table(Batch, subset_annotations))
+
+thymus.subset <-
+  subset(thymus,
+         subset=((study=="park_data" & Batch=="F74_TH_TOT_5GEX_1" & 
+                      Anno_level_5 %in% dn_dp_park) |
+                 (study=="park_data" & Batch=="C40_TH_TOT_2" &
+                      Anno_level_3 %in% tec_park) |
+                 (study=="gapin_data" & Batch=="C" &
+                    subset_annotations %in% sp_gapin
+                      #!Anno_level_5 %in% dn_dp_gapin &
+                   )
+         )
+  )
+
+thymus.subset@meta.data <- thymus.subset@meta.data %>%
+  mutate(spatial.cells = case_when(Batch=="F74_TH_TOT_5GEX_1" ~ Anno_level_5,
+                                   Batch=="C40_TH_TOT_2"  ~ Anno_level_3,
+                                   Batch=="C" ~ subset_annotations))
+markers.subset <- markers.subset %>%
+  filter(celltype %in% unique(thymus.subset@meta.data$spatial.cells))
+  
+#print(thymus.subset) # 14,630 cells
 
 #go with 100 as suggested in vignette?
 set.seed(20)
 n_cells <- 100
 
-idx <- split(seq(ncol(thymus.batchC)), thymus.batchC$subset_annotations)
+#idx <- split(seq(ncol(thymus.batchC)), thymus.batchC$subset_annotations)
+idx <- split(seq(ncol(thymus.subset)), thymus.subset$spatial.cells)
 cells.keep <- lapply(idx, function(i) {
   n <- length(i)
   if (n < n_cells) n_cells <- n
   sample(i, n_cells)
 })
-thymus.keep <- thymus.batchC[, unlist(cells.keep)]
+#thymus.keep <- thymus.batchC[, unlist(cells.keep)]
+thymus.keep <- thymus.subset[, unlist(cells.keep)]
 
 ## Train non-negative matrix factorization model ####
 
@@ -245,14 +314,34 @@ thymus.keep <- thymus.batchC[, unlist(cells.keep)]
 tspe.slices <- lapply(slices, extractSlice, tspe_rename)
 names(tspe.slices) <- slices
 
-res.decon <- parallel::mclapply(slices, analyzeSPOTS, spe.list=tspe.slices,
+#res.decon <- parallel::mclapply(slices, analyzeSPOTS, spe.list=tspe.slices,
+res.decon <- lapply(slices[3:7], analyzeSPOTS, spe.list=tspe.slices,
                                 sce=thymus.keep,
-                                cell_annot=as.character(thymus.keep$subset_annotations),
-                                markers=markers.subsets,
-                                variable_features = unique(subset_hvgs$Features),
-                                mc.cores=8)
+                                #cell_annot=as.character(thymus.keep$subset_annotations),
+                                cell_annot=as.character(thymus.keep$spatial.cells),
+                                markers=markers.subset,
+                                variable_features = unique(hvgs.subset$gene))
+                               # mc.cores=4)
 names(res.decon) <- slices
-saveRDS(res.decon, 'results/NMF.modls.thymus.batchC.allslices.rds')
+saveRDS(res.decon, 'results/NMF.modls.thymus.batch-subsampled.allslices.rds')
+
+#####
+decon1 <-  analyzeSPOTS(slices[[1]], spe.list=tspe.slices,
+                       sce=thymus.keep,
+                       cell_annot=as.character(thymus.keep$spatial.cells),
+                       markers=markers.subset,
+                       variable_features = unique(hvgs.subset$gene))
+
+decon2 <-  analyzeSPOTS(slices[[2]], spe.list=tspe.slices,
+                        sce=thymus.keep,
+                        cell_annot=as.character(thymus.keep$spatial.cells),
+                        markers=markers.subset,
+                        variable_features = unique(hvgs.subset$gene))
+
+
+res.decon <- list("S2_A1"=decon1, "S1_B1"= decon2)
+
+#####
 
 
 ## Visualise learned topic profiles ####
@@ -261,14 +350,15 @@ res.topics <- parallel::mclapply(slices, visualiseTopics, res.slices=res.decon,
 
 
 ## Visualise spatial distribution ####
-slices_tmp <- slices[-4]
+#slices_tmp <- slices[-4]
+slices_tmp <- slices[1:2]
 res.spatial <- parallel::mclapply(slices_tmp, visualiseSpatial,
                                  slices.mapping=slices.mapping,
                                  res.slices=res.decon, tspe.slices=tspe.slices,
                                  mc.cores=8)
 
 ## Annotate across slices and clusters ####
-res.annotated <-  parallel::mclapply(slices, annotateSPOTS,
+res.annotated <-  parallel::mclapply(slices_tmp, annotateSPOTS,
                                      res.slices=res.decon,
                                      tspe.slices=tspe.slices) %>%
   bind_rows
@@ -282,9 +372,9 @@ summary.annotated <- res.annotated %>%
          sum_pp = sum(proportion_cluster_across_regions),
          celltype=gsub("_.*", "", cluster)) %>%
   ungroup() %>%
-  mutate(celltype=factor(celltype,
-                         levels=c("thyCD4", "thyCD8", "thyGDT", "thyNKT",
-                                  "thyMAIT"))) %>%
+  #mutate(celltype=factor(celltype,
+  #                       levels=c("thyCD4", "thyCD8", "thyGDT", "thyNKT",
+  #                                "thyMAIT"))) %>%
   arrange(celltype) %>%
   mutate(cluster=forcats::fct_inorder(cluster))
 

@@ -62,21 +62,25 @@ p1 <- ggrastr::rasterise(
     scale_color_manual(values=celltypes_col),
   # ---
   layers="Point", dpi=300)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_clusters_level3_highlight.jpeg", width=10, height=8)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_clusters_level3_highlight.pdf", width=12, height=8)
 
 
 # Plot CD1d expression
-p2 <- SCpubr::do_FeaturePlot(seur.human, 
+p2 <- ggrastr::rasterise(
+  # ---
+  SCpubr::do_FeaturePlot(seur.human, 
                        features = "CD1D", order = T,
                        # plot.title = "CD1D",
                        border.color = "black", border.size = 2,
                        reduction = "UMAP", pt.size = 1.2, legend.position = "right", font.size=30) &
-  scale_colour_scico(palette = "lapaz", alpha = 0.8, begin = 0.1, end = 0.85, direction = -1)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_cd1d_orderT.jpeg", width=10, height=8)
+  scale_colour_scico(palette = "lapaz", alpha = 0.8, begin = 0.1, end = 0.85, direction = -1),
+  # ---
+  layers="Point", dpi=300)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_cd1d_orderT.pdf", width=11, height=8)
 
 
 p1 | p2
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_combined.jpeg", width=20, height=8)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umaphuman_combined.pdf", width=20, height=8)
 
 # Plot CD1d expression per cluster in violin plot
 celltypes_col2 <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Accent"))(30)
@@ -93,7 +97,7 @@ ggrastr::rasterise(
           axis.text.x=element_text(size=15),
           axis.title.y=element_text(size=15)),
   layers="Point", dpi=300)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/vlnplt_cd1d_level3.jpeg", width=12, height=6)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/vlnplt_cd1d_level3.pdf", width=12, height=6)
 
 
 
@@ -122,14 +126,18 @@ p3 <- ggrastr::rasterise(
   # ---
   layers="Point", dpi=300)
 
-p4 <- SCpubr::do_FeaturePlot(seur.mouse, 
+p4 <- ggrastr::rasterise(
+  # ---
+  SCpubr::do_FeaturePlot(seur.mouse, 
                        features = "Cd1d1", order = T,
                        border.color = "black", border.size = 2,
                        reduction = "umap", pt.size = 1.2, legend.position = "right", font.size=30) &
-  scale_colour_scico(palette = "lapaz", alpha = 0.8, begin = 0.1, end = 0.85, direction = -1)
+  scale_colour_scico(palette = "lapaz", alpha = 0.8, begin = 0.1, end = 0.85, direction = -1),
+  # ---
+  layers="Point", dpi=300)
 
 p3 | p4
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umapmouse_combined.jpeg", width=20, height=8)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umapmouse_combined.pdf", width=20, height=8)
 
 # plot Cd1d1 expression in all clusters
 celltypes_col_mouse2 <- celltypes_col_human[names(celltypes_col_human) %in% unique(seur.mouse$cell.types)]
@@ -147,13 +155,15 @@ celltypes_col_mouse1 <- c("αβT(entry)"="#c7e9c0",
 celltypes_col_mouse <- c(celltypes_col_mouse1, celltypes_col_mouse2)
 table(unique(seur.mouse$cell.types) %in% names(celltypes_col_mouse), useNA="ifany")
 
-VlnPlot(seur.mouse, features = "Cd1d1", group.by = "cell.types", raster=F)+
-  scale_fill_manual(values=celltypes_col_mouse)+
-  labs(y="Cd1d1 (normalized expression)", title="", x="")+
-  theme(legend.position="none",
-        axis.text.x=element_text(size=15),
-        axis.title.y=element_text(size=15))
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/vlnplt_cd1d1_mouse.jpeg", width=10, height=6)
+ggrastr::rasterise(
+  VlnPlot(seur.mouse, features = "Cd1d1", group.by = "cell.types", raster=F)+
+    scale_fill_manual(values=celltypes_col_mouse)+
+    labs(y="Cd1d1 (normalized expression)", title="", x="")+
+    theme(legend.position="none",
+          axis.text.x=element_text(size=15),
+          axis.title.y=element_text(size=15)),
+  layers="Point", dpi=300)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/vlnplt_cd1d1_mouse.pdf", width=10, height=6)
 
 # Plot % cTECs with Cd1d expression > 0 in mouse vs human
 ctec_hu <- seur.human@meta.data[seur.human@meta.data$Anno_level_3 %in% c("cTEC", "mTEC", "DP"), c("Anno_level_3", "donor_id")] # 10,156 cells
@@ -216,7 +226,7 @@ ggplot(rbind(
 # *****************************
 
 # import csv file
-flowdf <- read.csv("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_cytometry_plots/percentages.csv", header=T)
+flowdf <- read.csv("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_cytometry_plots/percentages_human.csv", header=T)
 
 # plot thymocytes
 sample_cols <- RColorBrewer::brewer.pal(7, "Set2")
@@ -234,7 +244,7 @@ ggplot(flowdf %>% filter(celltype=="thymocyte"),
   ylim(c(0,100))+
   theme(axis.text.x=element_text(size=20, angle=45, hjust=1),
         axis.title.y=element_text(size=20))
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_boxplot_thymocyte.jpeg", width=4, height=5)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_boxplot_human_thymocyte.jpeg", width=4, height=5)
 
 
 # plot TECs
@@ -248,5 +258,30 @@ ggplot(flowdf %>% filter(celltype=="tec"),
   ylim(c(0,100))+
   theme(axis.text.x=element_text(size=20),
         axis.title.y=element_text(size=20))
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_boxplot_tec.jpeg", width=3, height=5)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_boxplot_human_tec.jpeg", width=3, height=5)
 
+
+# MOUSE
+flowdf.ms <- read.csv("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_cytometry_plots/percentages_mouse.csv", header=T)
+
+ggplot(flowdf.ms,
+       aes(x=factor(celltype, levels=c("CD45+", "mTEC", "cTEC")), y=percent_CD1d))+
+  geom_boxplot(outlier.shape = NA)+
+  geom_jitter(size=3, width=0.15)+
+  # scale_color_manual(values=sample_cols)+
+  labs(x="", y="% cells CD1d+", title="%CD1d+ cells")+
+  theme_cowplot()+
+  ylim(c(0,100))+
+  theme(axis.text.x=element_text(size=20, angle=45, hjust=1),
+        axis.title.y=element_text(size=20)) |
+ggplot(flowdf.ms,
+       aes(x=factor(celltype, levels=c("CD45+", "mTEC", "cTEC")), y=median_fluorescence_CD1d_pos_cells))+
+  geom_boxplot(outlier.shape = NA)+
+  geom_jitter(size=3, width=0.15)+
+  # scale_color_manual(values=sample_cols)+
+  labs(x="", y="MFI (CD1d+ cells)", title="Median Fluorescence")+
+  theme_cowplot()+
+  ylim(c(0,1000))+
+  theme(axis.text.x=element_text(size=20, angle=45, hjust=1),
+        axis.title.y=element_text(size=20))
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/flow_boxplot_mouse.jpeg", width=7, height=5)

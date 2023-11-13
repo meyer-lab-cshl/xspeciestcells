@@ -1,0 +1,10 @@
+﻿sample,sample_sex,sample_age_weeks,date,experimenter,celltype,percent_CD1d,median_fluorescence_CD1d_pos_cells
+wt1,M,6.3,10/17/23,salomé,cTEC,67,645
+wt1,M,6.3,10/17/23,salomé,mTEC,69,982
+wt1,M,6.3,10/17/23,salomé,CD45+,97,647
+wt2,M,6.3,11/3/23,salomé,cTEC,65,710
+wt2,M,6.3,11/3/23,salomé,mTEC,64,741
+wt2,M,6.3,11/3/23,salomé,CD45+,81,495
+wt3,M,6.3,11/3/23,rish,cTEC,61,725
+wt3,M,6.3,11/3/23,rish,mTEC,71,779
+wt3,M,6.3,11/3/23,rish,CD45+,94,494

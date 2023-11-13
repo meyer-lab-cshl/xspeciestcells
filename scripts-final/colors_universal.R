@@ -43,6 +43,13 @@ cols_cellstate <- c("Tnaive"= "#b3e2cd",
                     "Treg" = "#fbb4ae")
 
 # PBMC cluster colors by lineage
+cols_thym_cd4  <- c("CD4_c0" = "#DF6D27FF", "CD4_c1" = "#E9BE99FF", "CD4_c2" = "grey40", "CD4_c3" = "grey70", "CD4_c4" = "#a40000", "CD4_c5" = "gold", "CD4_c6"="#72bcd5")
+cols_thym_cd8  <- c("CD8_c0" = "#DF6D27FF", "CD8_c1" = "grey40", "CD8_c2" = "#AB6969", "CD8_c3" = "#a40000", "CD8_c4" = "gold", "CD8_c5" = "#9f5691")
+cols_thym_gdt  <- c("GD_c0" = "#d8443c", "GD_c1" = "#e09351", "GD_c2" = "gold", "GD_c3" = "#9f5691", "GD_c4" = "#72bcd5", "GD_c5" = "blueviolet", "GD_c6" = "olivedrab2", "GD_c7" = "grey50")
+cols_thym_nkt  <- c("NKT_c0" = "#d8443c", "NKT_c1" = "#e09351", "NKT_c2" = "gold", "NKT_c3" = "#74c8c3", "NKT_c4" = "#5a97c1", "NKT_c5" = "#a40000", "NKT_c6"="#72bcd5")
+cols_thym_mait <- c("MAIT_c0" = "#d8443c", "MAIT_c1" = "#e09351", "MAIT_c2" = "gold", "MAIT_c3" = "#74c8c3", "MAIT_c4" = "#a40000", "MAIT_c5" = "#5a97c1", "MAIT_c6" = "orange")
+
+# PBMC cluster colors by lineage
 cols_pbmc_cd4  <- c("0" = "#DF6D27FF", "1" = "#E9BE99FF", "2" = "grey40", "3" = "#7EF547", "4" = "grey70", "5" = "#a40000")
 cols_pbmc_cd8  <- c("0" = "#DF6D27FF", "1" = "#E9BE99FF", "2" = "grey40", "3" = "grey70", "4" = "#a40000", "5" = "gold")
 cols_pbmc_gdt  <- c("0" = "#DF6D27FF", "1" = "grey40", "2" = "#AB6969", "3" = "#a40000", "4" = "gold")

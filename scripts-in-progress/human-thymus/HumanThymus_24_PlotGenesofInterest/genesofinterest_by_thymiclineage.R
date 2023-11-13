@@ -111,6 +111,250 @@ plot_genesignature <- function(seur, genesignature, ordercells=F){
 }
 
 
+# Set color matrix
+BlendMatrix <- function(
+    n = 10,
+    col.threshold = 0.5,
+    two.colors = c("#ff0000", "#00ff00"),
+    negative.color = "black"
+) {
+  if (0 > col.threshold || col.threshold > 1) {
+    stop("col.threshold must be between 0 and 1")
+  }
+  C0 <- as.vector(col2rgb(negative.color, alpha = TRUE))
+  C1 <- as.vector(col2rgb(two.colors[1], alpha = TRUE))
+  C2 <- as.vector(col2rgb(two.colors[2], alpha = TRUE))
+  blend_alpha <- (C1[4] + C2[4])/2
+  C0 <- C0[-4]
+  C1 <- C1[-4]
+  C2 <- C2[-4]
+  merge.weight <- min(255 / (C1 + C2 +  C0 + 0.01))
+  sigmoid <- function(x) {
+    return(1 / (1 + exp(-x)))
+  }
+  blend_color <- function(
+    i,
+    j,
+    col.threshold,
+    n,
+    C0,
+    C1,
+    C2,
+    alpha,
+    merge.weight
+  ) {
+    c.min <- sigmoid(5 * (1 / n - col.threshold))
+    c.max <- sigmoid(5 * (1 - col.threshold))
+    c1_weight <- sigmoid(5 * (i / n - col.threshold))
+    c2_weight <- sigmoid(5 * (j / n - col.threshold))
+    c0_weight <-  sigmoid(5 * ((i + j) / (2 * n) - col.threshold))
+    c1_weight <- (c1_weight - c.min) / (c.max - c.min)
+    c2_weight <- (c2_weight - c.min) / (c.max - c.min)
+    c0_weight <- (c0_weight - c.min) / (c.max - c.min)
+    C1_length <- sqrt(sum((C1 - C0) ** 2))
+    C2_length <- sqrt(sum((C2 - C0) ** 2))
+    C1_unit <- (C1 - C0) / C1_length
+    C2_unit <- (C2 - C0) / C2_length
+    C1_weight <- C1_unit * c1_weight
+    C2_weight <- C2_unit * c2_weight
+    C_blend <- C1_weight * (i - 1) * C1_length / (n - 1) + C2_weight * (j - 1) * C2_length / (n - 1) + (i - 1) * (j - 1) * c0_weight * C0 / (n - 1) ** 2 + C0
+    C_blend[C_blend > 255] <- 255
+    C_blend[C_blend < 0] <- 0
+    return(rgb(
+      red = C_blend[1],
+      green = C_blend[2],
+      blue = C_blend[3],
+      alpha = alpha,
+      maxColorValue = 255
+    ))
+  }
+  blend_matrix <- matrix(nrow = n, ncol = n)
+  for (i in 1:n) {
+    for (j in 1:n) {
+      blend_matrix[i, j] <- blend_color(
+        i = i,
+        j = j,
+        col.threshold = col.threshold,
+        n = n,
+        C0 = C0,
+        C1 = C1,
+        C2 = C2,
+        alpha = blend_alpha,
+        merge.weight = merge.weight
+      )
+    }
+  }
+  return(blend_matrix)
+}
+
+# Plot color matrix
+Melt <- function(x) {
+  if (!is.data.frame(x = x)) {
+    x <- as.data.frame(x = x)
+  }
+  return(data.frame(
+    rows = rep.int(x = rownames(x = x), times = ncol(x = x)),
+    cols = unlist(x = lapply(X = colnames(x = x), FUN = rep.int, times = nrow(x = x))),
+    vals = unlist(x = x, use.names = FALSE)
+  ))
+}
+
+BlendMap <- function(color.matrix, step=2, xtext='rows', ytext="cols") {
+  color.heat <- matrix(
+    data = 1:prod(dim(x = color.matrix)) - 1,
+    nrow = nrow(x = color.matrix),
+    ncol = ncol(x = color.matrix),
+    dimnames = list(
+      1:nrow(x = color.matrix),
+      1:ncol(x = color.matrix)
+    )
+  )
+  
+  # xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = step)
+  # ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = step)
+  color.heat <- Melt(x = color.heat)
+  color.heat$rows <- as.numeric(x = as.character(x = color.heat$rows))
+  color.heat$cols <- as.numeric(x = as.character(x = color.heat$cols))
+  color.heat$vals <- factor(x = color.heat$vals)
+  plot <- ggplot(
+    data = color.heat,
+    mapping = aes_string(x = "rows", y = "cols", fill = 'vals')
+  ) +
+    geom_raster(show.legend = FALSE) +
+    theme(plot.margin = unit(x = rep.int(x = 0, times = 4), units = 'cm')) +
+    # scale_x_continuous(breaks = xbreaks, expand = c(0, 0), labels = xbreaks) +
+    # scale_y_continuous(breaks = ybreaks, expand = c(0, 0), labels = ybreaks) +
+    scale_fill_manual(values = as.vector(x = color.matrix)) +
+    labs(x=xtext, y=ytext)+
+    theme_cowplot()
+  
+  if(step!=0){
+    xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = step)
+    ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = step)
+    plot <- plot +
+      scale_x_continuous(breaks = xbreaks, expand = c(0, 0), labels = xbreaks) +
+      scale_y_continuous(breaks = ybreaks, expand = c(0, 0), labels = ybreaks)
+  } else if(step==0){
+    plot <- plot+theme(axis.text=element_blank(), axis.ticks=element_blank())
+  }
+  
+  return(plot)
+}
+
+# Normalize expression level of 2 features & return also a "blend" expression (corresponding to color matrix)
+BlendExpression <- function(data, nlevels=100) {
+  if (ncol(x = data) != 2) {
+    stop("'BlendExpression' only blends two features")
+  }
+  features <- colnames(x = data)
+  data <- as.data.frame(x = apply(
+    X = data,
+    MARGIN = 2,
+    FUN = function(x) {
+      return(round(x = (nlevels-1) * (x - min(x)) / (max(x) - min(x))))
+    }
+  ))
+  data[, 3] <- data[, 1] + data[, 2] * nlevels
+  # colnames(x = data) <- c(features, paste(features, collapse = '_'))
+  colnames(x = data) <- c(features, "blend")
+  for (i in 1:ncol(x = data)) {
+    data[, i] <- factor(x = data[, i])
+  }
+  return(data)
+}
+
+PlotCoexpression <- function(seuratobj,
+                             features,
+                             plotting="blend",
+                             pwithmatrix=T,
+                             rasterdpi=300,
+                             nlevels=100,
+                             cols.neg="#969696", cols.pos=c("#74c476", "#fd8d3c"), col.threshold=0.5, colmatrix_stepsize=10,
+                             order=T){
+  # GET COLOR MATRIX
+  cat("\n-> Getting color matrix\n")
+  color.matrix <- BlendMatrix(
+    two.colors = cols.pos,
+    col.threshold = col.threshold,
+    negative.color = cols.neg,
+    n=nlevels
+  )
+  
+  # DEFINE COLOR LIST FOR PLOTTING
+  cat("\n-> Defining colors for plotting\n")
+  colors <- list(
+    color.matrix[, 1], # red
+    color.matrix[1, ], # green
+    as.vector(x = color.matrix)
+  )
+  
+  # BLEND EXPRESSION
+  cat("\n-> Blending features expression\n")
+  df <- t(as.data.frame(seuratobj@assays$RNA@data[features,]))
+  df <- BlendExpression(df, nlevels=nlevels) # 3 columns
+  # head(df)
+  # GET PLOTTING DATAFRAME
+  cat("\n-> Defining plotting DF\n")
+  dims <- seuratobj@reductions$umap@cell.embeddings
+  # head(dims)
+  df_final <- cbind(df, dims, seuratobj@meta.data[,"cell_annot"])
+  colnames(df_final)[6] <- "clusters"
+  # head(df_final)
+  
+  # PLOT
+  if(plotting=="feature1"){
+    cat("\n-> Plotting feature 1\n")
+    if(order==T){df_final <- df_final[order(df_final[,1]),]}
+    df_final[,1] <- as.numeric(as.character(df_final[,1])) # transform factors to numbers for plotting
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[1]))+
+      geom_point(size=1)+
+      scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[nrow(color.matrix), 1])
+  }
+  else if(plotting=="feature2"){
+    cat("\n-> Plotting feature 2\n")
+    if(order==T){df_final <- df_final[order(df_final[,2]),]}
+    df_final[,2] <- as.numeric(as.character(df_final[,2])) # transform factors to numbers for plotting
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[2]))+
+      geom_point(size=1)+
+      scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[1, ncol(color.matrix)])
+  }
+  else if(plotting=="blend"){
+    cat("\n-> Plotting blended features\n")
+    if(order==T){df_final <- df_final[order(df_final[,1], df_final[,2]),]} # order points by increasing value of score 1 and score 2
+    # df_final[,3] <- as.numeric(as.character(df_final[,3])) # transform factors to numbers for plotting
+    # Colors
+    cols.use <- as.vector(color.matrix)
+    names(cols.use) <- as.character(0:(length(cols.use)-1))
+    # Plot
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[3]))+
+      geom_point(size=4)+
+      scale_color_manual(values=cols.use)+
+      labs(x="UMAP1", y="UMAP2")+
+      theme_cowplot()+
+      theme(legend.position="none",
+            axis.text=element_blank(),
+            axis.title=element_blank(),
+            axis.ticks = element_blank(),
+            axis.line = element_blank(),
+            panel.border=element_rect(color="white", fill=NA, size=1))
+    # rasterise to avoid computer crashing
+    p <- ggrastr::rasterise(p, layers="Point", dpi=rasterdpi)
+    # add color matrix if specified
+    if(pwithmatrix==T){
+      cat("\n-> Adding color matrix on plot\n")
+      p <- ggdraw(p)+
+        draw_plot(BlendMap(color.matrix, step=colmatrix_stepsize, xtext=features[1], ytext=features[2]),
+                  0.05,0.06,.25,.25)
+    }
+  }
+  
+  return(p)
+}
+
+# PlotCoexpression(seuratobj=seur.mait, colmatrix_stepsize=0, col.threshold=0.1, rasterdpi=300,
+#                  features=c("CD4", "CD8A"), cols.neg="#f0f0f0", cols.pos=c("red", "blue"), order=T, pwithmatrix=F)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_cd4cd8_test.jpeg", width=5, height=5)
+
 
 
 # ****************
@@ -213,7 +457,6 @@ FeaturePlot(seur.mait, features=c("CD4", "CD8A"), blend=T, cols=c("lightgrey", "
 ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_cd4cd8.jpeg", width=18, height=5)
 FeaturePlot(seur.gdt, features=c("CD4", "CD8A"), blend=T, cols=c("lightgrey", "red", "blue"), order=T, pt.size=2)
 ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_gdt_cd4cd8.jpeg", width=18, height=5)
-
 
 plot_four_genes(seur.nkt, c("CD4", "CD8A"))
 ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_effectorgenes.jpeg", width=6, height=3)

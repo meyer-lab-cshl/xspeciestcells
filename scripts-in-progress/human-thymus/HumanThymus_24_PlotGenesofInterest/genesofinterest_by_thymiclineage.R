@@ -53,7 +53,7 @@ DimPlot(seur.mait.ms, group.by="cell_type", label=T)
 # 2. FUNCTIONS ####
 # *****************
 
-plot_four_genes <- function(seur, genelist, ordercells=F){
+plot_four_genes <- function(seur, genelist, ordercells=F, genesontop){
   plist <- list()
   # identify which gene has highest max count
   max_per_gene <- lapply(genelist, function(x) max(seur@assays$RNA@data[x,]))
@@ -62,7 +62,8 @@ plot_four_genes <- function(seur, genelist, ordercells=F){
 
   for (gene in genelist){
     print(gene)
-    if(gene=="ZBTB16"){ordercells=T} # put PLZF at front
+    ordercells=F
+    if(gene%in%genesontop){ordercells=T} # put PLZF at front
     # get legend once
     if(gene==gene_with_max_value){
       plegend <- ggpubr::get_legend(
@@ -363,11 +364,12 @@ PlotCoexpression <- function(seuratobj,
 
 #___________________________
 ## 3.1. Score gene signatures ####
-gene_signatures <- list("effector_new"=c("HOPX", "GZMB", "NKG7", "TBX21", "PRF1", "GZMA", "KLRD1", "KLF6",
-                                     "CCR6", "RORC", "JUNB", "FOS", "RORA", "FOSB"),
+gene_signatures <- list("effector_new"=c("HOPX", "GZMB", "NKG7", "TBX21", "PRF1", "GZMA", "KLRD1", #"KLF6",
+                                        "CCR6", "RORC", "JUNB", "FOS", "RORA", "FOSB"),
                         "effector"= c("HOPX", "GZMB", "GZMK", "ZEB2", "NKG7", "GNLY", "TBX21", "EOMES", "TYROBP", "PRF1",
                                       "CCL4", "CCL5", "KLRB1", "GZMH", "GZMA", "KLRD1", "CST7", "KLF6", "CXCR4"),
-                        "naive"=c("SATB1", "TCF7", "LEF1", "CCR7", "SELL", "MYC", "EIF3E", "SOX4", "ID3", "BACH2"),
+                        "naive"=c("SATB1", "TCF7", "LEF1", "CCR7", "SELL", #"MYC", "EIF3E",
+                                  "FOXP1", "KLF2", "SOX4", "ID3", "BACH2"),
                         "egress"=c("KLF2", "CORO1A", "CCR7", "CXCR4", "CXCR6", "FOXO1", "CXCR3", "S1PR1", "S1PR4",
                                    "S100A4", "S100A6", "EMP3"))
 
@@ -384,8 +386,8 @@ colnames(seur.cd4@meta.data)[35:38]  <- names(gene_signatures)
 colnames(seur.cd8@meta.data)[35:38]  <- names(gene_signatures)
 
 # Score same signatures in mouse nkt/mait
-gene_signatures_ms <- list("effector_new"=c("Hopx", "Gzmb", "Nkg7", "Tbx21", "Prf1", "Gzma", "Klrd1", "Klf6",
-                                        "Ccr6", "Rorc", "Tmem176a", "Tmem176b", "Junb", "Fos", "Rora", "Fosb"),
+gene_signatures_ms <- list("effector_new"=c("Hopx", "Gzmb", "Nkg7", "Tbx21", "Prf1", "Gzma", "Klrd1", #"Klf6",
+                                           "Ccr6", "Rorc", "Tmem176a", "Tmem176b", "Junb", "Fos", "Rora", "Fosb"),
                            "effector"=c("Hopx", "Gzmb", "Gzmk", "Zeb2", "Nkg7", "Tbx21", "Eomes", "Tyrobp", "Prf1",
                                         "Ccl4", "Ccl5", "Klrb1a", "Gzmg", "Gzma", "Klrd1", "Cst7", "Klf6", "Cxcr4"), # manual curating
                            "naive"=ortholog.df[ortholog.df$hu_symbol %in% gene_signatures$naive, "ms_symbol_data"],
@@ -394,8 +396,8 @@ gene_signatures_ms <- list("effector_new"=c("Hopx", "Gzmb", "Nkg7", "Tbx21", "Pr
 seur.nkt.ms   <- AddModuleScore(seur.nkt.ms,  name = names(gene_signatures_ms), features=gene_signatures_ms, seed=1)
 seur.mait.ms  <- AddModuleScore(seur.mait.ms, name = names(gene_signatures_ms), features=gene_signatures_ms, seed=1)
 
-colnames(seur.nkt.ms@meta.data)[8:10]  <- names(gene_signatures_ms)
-colnames(seur.mait.ms@meta.data)[10:12] <- names(gene_signatures_ms)
+colnames(seur.nkt.ms@meta.data)[8:11]  <- names(gene_signatures_ms)
+colnames(seur.mait.ms@meta.data)[10:13] <- names(gene_signatures_ms)
 ## /end ####
 
 
@@ -404,9 +406,9 @@ colnames(seur.mait.ms@meta.data)[10:12] <- names(gene_signatures_ms)
 
 # human
 plot_genesignature(seur.nkt, genesignature = "naive", ordercells=F)
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_naivesig.jpeg", width=7, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_naivesig2.jpeg", width=7, height=5)
 plot_genesignature(seur.mait, genesignature = "naive", ordercells=F)
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_naivesig.jpeg", width=7, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_naivesig2.jpeg", width=7, height=5)
 
 plot_genesignature(seur.nkt, genesignature = "effector_new", ordercells=F)
 ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_effectorsigSC.jpeg", width=7, height=5)
@@ -416,15 +418,30 @@ plot_genesignature(seur.gdt, genesignature = "effector_new", ordercells=F)
 ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_gdt_effectorsigSC.jpeg", width=7, height=5)
 
 
+# human (donor variation)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/donor_variation/thymus_nkt_effectorsig_donorB.jpeg",
+       plot_genesignature(subset(seur.nkt, subset=Batch=="B"), genesignature = "effector_new", ordercells=F),
+       width=7, height=5)
+
 
 # mouse
 plot_genesignature(seur.nkt.ms, genesignature = "naive")
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_naivesig_mouse.jpeg", width=7, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_naivesig_mouse2.jpeg", width=7, height=5)
 plot_genesignature(seur.mait.ms, genesignature = "naive")
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_naivesig_mouse.jpeg", width=7, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_naivesig_mouse2.jpeg", width=7, height=5)
 
 plot_genesignature(seur.nkt.ms, genesignature = "effector")
 plot_genesignature(seur.mait.ms, genesignature = "effector")
+
+
+# mouse ccr7 and ccr9
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/mousethymus_ccr9ccr7_nkt.jpeg",
+       plot_four_genes(seur.nkt.ms, c("Ccr9", "Ccr7"), ordercells = F),
+       width=10, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/mousethymus_ccr9ccr7_mait.jpeg",
+       plot_four_genes(seur.mait.ms, c("Ccr9", "Ccr7"), ordercells = F),
+       width=10, height=5)
+
 
 
 ## /end ####
@@ -442,12 +459,12 @@ ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/pl
 
 
 # effector genes
-plot_four_genes(seur.nkt, c("ZBTB16", "EOMES", "KLRB1", "GZMK"))
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_effectorgenes.jpeg", width=6, height=5)
-plot_four_genes(seur.mait, c("ZBTB16", "EOMES", "KLRB1", "GZMK"))
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_effectorgenes.jpeg", width=6, height=5)
-plot_four_genes(seur.gdt, c("KLRD1", "EOMES", "KLRB1", "GZMK"), ordercells=T)
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_gdt_effectorgenes.jpeg", width=6, height=5)
+plot_four_genes(seur.nkt, c("ZBTB16", "EOMES", "KLRB1", "GZMK"), genesontop="ZBTB16")
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_nkt_effectorgenes2.jpeg", width=6, height=5)
+plot_four_genes(seur.mait, c("ZBTB16", "EOMES", "KLRB1", "GZMK"), genesontop=c("ZBTB16", "EOMES"))
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_mait_effectorgenes2.jpeg", width=6, height=5)
+plot_four_genes(seur.gdt, c("KLRD1", "EOMES", "KLRB1", "GZMK"), genesontop=c("KLRD1", "EOMES"))
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/thymus_gdt_effectorgenes2.jpeg", width=6, height=5)
 
 
 # CD4 and CD8

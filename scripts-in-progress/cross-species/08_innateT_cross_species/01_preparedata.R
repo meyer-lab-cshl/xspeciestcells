@@ -15,24 +15,29 @@ library(cowplot)
 library(tidyverse)
 library(dplyr)
 library(Seurat)
+setwd("~/Projects/HumanThymusProject/")
 
 # Import human data
 seur.nkt  <- readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS")
 seur.mait <- readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.mait.RDS")
 seur.gdt  <- readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
-seur.ms <- readRDS("./data/cross-species/08_innateT_cross_species/Reanalysis_wGD_filtered_seurat_MNN.rds")
+# seur.ms <- readRDS("./data/cross-species/08_innateT_cross_species/Reanalysis_wGD_filtered_seurat_MNN.rds")
+seur.ms <- readRDS("./data/cross-species/08_innateT_cross_species/Analysis_all_mouse-Tinn_filtered_seurat_MNN.rds")
 
 # Plot DimPlot
 DimPlot(seur.nkt,  group.by="cell_annot", label=T)
 DimPlot(seur.mait, group.by="cell_annot", label=T)
 DimPlot(seur.gdt,  group.by="cell_annot", label=T)
-DimPlot(seur.ms,  group.by="Mouse_clusters", label=T)
+DimPlot(seur.ms,  group.by="New_clusters", label=T)
+# New.ident: datasets
+# Cell.type: lineage
+# New_clusters: clusters
+
 
 # Cleanup a bit
 seur.nkt@meta.data[,33:75]  <- NULL
 seur.mait@meta.data[,33:75] <- NULL
 seur.gdt@meta.data[,33:75]  <- NULL
-seur.ms@meta.data[,22:301]  <- NULL
 
 # ORTHOLOGS table
 ortholog.df <- read.csv("./data/cross-species/03_BiomartTable/big_ass_ortholog_table.csv")
@@ -48,7 +53,10 @@ length(unique(ortholog.df$hu_symbol)) # 17,152 hu genes
 
 #___________________________
 ## 3.1. Cleanup metadata ####
-colnames(seur.ms@meta.data)[21] <- "cell_annot"
+colnames(seur.ms@meta.data)[24] <- "dataset"
+colnames(seur.ms@meta.data)[25] <- "cell.ident"
+colnames(seur.ms@meta.data)[30] <- "cell_annot"
+# seur.ms@meta.data$cell_annot <- paste0("c", seur.ms@meta.data$cell_annot)
 # DimPlot(seur.ms,  group.by="cell_annot", label=T) # sanity check
 
 ## /end ####
@@ -58,7 +66,7 @@ colnames(seur.ms@meta.data)[21] <- "cell_annot"
 ## 3.2. Prepare ortholog table ####
 
 # First, check whether genes can all be found in the ortholog table (many can't be found because I removed genes with orthology confidence=0)
-table(unique(rownames(seur.ms)) %in% unique(ortholog.df$ms_symbol_bmt)) # 9,039 not
+table(unique(rownames(seur.ms)) %in% unique(ortholog.df$ms_symbol_bmt)) # 9,314 not
 table(unique(rownames(seur.nkt)) %in% ortholog.df$hu_symbol) # 4,757 not
 
 # Subset the ortholog table to only genes that we can "translate"
@@ -75,13 +83,13 @@ dictionary <- ortholog.df %>%
   group_by(hu_symbol) %>% filter(n_distinct(ms_symbol_bmt) == 1) %>% ungroup() %>%
   ## remove duplicate rows
   distinct()
-dim(dictionary) # 11,074 genes
+dim(dictionary) # 11,161 genes
 
 # Subset seurat objects to genes that we have in the dictionnary (can't do comparison on genes we can't translate between species)
 seur.nkt  <- seur.nkt[unique(dictionary$hu_symbol),]
 seur.mait <- seur.mait[unique(dictionary$hu_symbol),]
 seur.gdt  <- seur.gdt[unique(dictionary$hu_symbol),]
-seur.ms   <- seur.ms[unique(dictionary$ms_symbol_bmt),] # keep only genes that we'll be able to translate
+seur.ms   <- seur.ms[unique(dictionary$ms_symbol_bmt),]
 
 
 ## /end ####
@@ -92,19 +100,27 @@ seur.ms   <- seur.ms[unique(dictionary$ms_symbol_bmt),] # keep only genes that w
 
 # Human HVGs
 hu.hvg <- unique(c(VariableFeatures(seur.nkt), VariableFeatures(seur.mait), VariableFeatures(seur.gdt)))
-length(hu.hvg) # 2578 genes
+length(hu.hvg) # 2599 genes
 
 # Mouse HVGs
-ms.hvg <- VariableFeatures(FindVariableFeatures(seur.ms, nfeatures=length(hu.hvg)))
-length(ms.hvg) # 2578 genes
+# DefaultAssay(seur.ms) <- "mnn.reconstructed"
+# ms.hvg1 <- VariableFeatures(seur.ms)
+# table(ms.hvg1 %in% dictionary$ms_symbol_bmt)
+DefaultAssay(seur.ms) <- "RNA"
+ms.hvg2 <- VariableFeatures(FindVariableFeatures(seur.ms, nfeatures=length(hu.hvg)))
+length(ms.hvg2) # 2578 genes
+# length(intersect(ms.hvg1, ms.hvg2))/ length(union(ms.hvg1,ms.hvg2)) # very similar (JI=0.83)
 
 # Translate the mouse HVGs into "human gene" language
-ms.hvg.translated <- unique(pull(dictionary %>% filter(ms_symbol_bmt %in% ms.hvg), # not all ms HVGs are found in ortholog.df
+ms.hvg.translated <- unique(pull(dictionary %>% filter(ms_symbol_bmt %in% ms.hvg2), # not all ms HVGs are found in ortholog.df
                           hu_symbol))
 hu.hvg.translated <- unique(pull(dictionary %>% filter(hu_symbol %in% hu.hvg), # not all hu HVGs are found in ortholog.df
                           hu_symbol))
+length(ms.hvg.translated)
+length(hu.hvg.translated)
+# length(intersect(ms.hvg.translated, hu.hvg.translated))/length(union(ms.hvg.translated, hu.hvg.translated)) # JI=0.22
 total.hvg <- unique(union(ms.hvg.translated, hu.hvg.translated))
-length(total.hvg) # 4229 genes
+length(total.hvg) # 4263 genes
 
 
 # VennDiagram::venn.diagram(
@@ -154,7 +170,7 @@ rownames(ms.counts) <- ms.dict$hu_symbol
 
 
 # Verify mouse genes (in "human symbols") correspond to human genes
-table(rownames(ms.counts) %in% rownames(hu.counts))
+table(rownames(ms.counts) == rownames(hu.counts), useNA="ifany")
 
 ## /end ####
 
@@ -162,13 +178,41 @@ table(rownames(ms.counts) %in% rownames(hu.counts))
 #___________________________
 ## 3.4. Get metadata ####
 
-# get metadata
-hu.metadata <- rbind(seur.nkt@meta.data[,c("cell.ident", "cell_annot")],
-                     seur.mait@meta.data[,c("cell.ident", "cell_annot")],
-                     seur.gdt@meta.data[,c("cell.ident", "cell_annot")])
+# get human metadata
+hu.metadata <- rbind(seur.nkt@meta.data[,c("cell.ident", "new_clusters", "cell_annot")],
+                     seur.mait@meta.data[,c("cell.ident", "new_clusters", "cell_annot")],
+                     seur.gdt@meta.data[,c("cell.ident", "new_clusters", "cell_annot")])
+hu.metadata$new_clusters <- as.character(hu.metadata$new_clusters)
+colnames(hu.metadata) <- c("lineage", "clusters_integrated", "clusters_by_lineage")
+hu.metadata$clusters_to_compare <- hu.metadata$clusters_by_lineage
 # table(hu.metadata$cell.ident, useNA="ifany")
-ms.metadata <- seur.ms@meta.data[,c("Cell.type", "cell_annot")]
-colnames(ms.metadata)[1] <- "cell.ident"
+
+# get mouse metadata
+ms.metadata <- seur.ms@meta.data[,c("cell.ident", "cell_annot")]
+colnames(ms.metadata) <- c("lineage", "clusters_integrated")
+ms.metadata$clusters_by_lineage <- paste(ms.metadata$lineage, ms.metadata$clusters_integrated, sep="_")
+ms.metadata$clusters_to_compare <- case_when(
+  ms.metadata$clusters_integrated == "0" ~ "0",
+  ms.metadata$clusters_integrated == "1" ~ "1_Gzma",
+  ms.metadata$clusters_integrated == "2" ~ "2_Gzma",
+  ms.metadata$clusters_integrated == "3" ~ "signaling",
+  ms.metadata$clusters_integrated == "4" ~ "signaling",
+  ms.metadata$clusters_integrated == "5" ~ "cycling",
+  ms.metadata$clusters_integrated == "6" ~ "transition",
+  ms.metadata$clusters_integrated == "7" ~ "typeII",
+  ms.metadata$clusters_integrated == "8" ~ "typeI",
+  ms.metadata$clusters_integrated == "9" ~ "typeI",
+  ms.metadata$clusters_integrated == "10" ~ "typeIII",
+  ms.metadata$clusters_integrated == "11" ~ "typeIII",
+  ms.metadata$clusters_integrated == "12" ~ "12"
+)
+table(ms.metadata[,c("clusters_integrated", "clusters_to_compare")], useNA="ifany")
+# DotPlot(seur.ms, group.by="New_clusters",
+#         features=c("Cd4", "Cd8a", "Rag1", "Rag2", "Dntt", "Cd3e",
+#                    "Cd44", "Il2ra",  "Kit", "Cd69", "Trac", "Trbc1", "Trdc", "Trgc1",
+#                    "Il7r", "Notch1", "Bcl11b"),
+#         dot.scale = 10)+
+#   theme(axis.title=element_blank())
 
 # add study
 ms.metadata$study <- "Mouse"
@@ -186,22 +230,27 @@ head(hu.metadata)
 # sanity checks
 # table(rownames(hu.metadata)==colnames(hu.counts), useNA="ifany") # 10k cells
 # table(rownames(ms.metadata)==colnames(ms.counts), useNA="ifany") # 45k cells
+# table(rownames(ms.counts)==rownames(hu.counts), useNA="ifany")
+# table(colnames(ms.metadata)==colnames(hu.metadata))
 
-ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
-hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
-seur.total <- merge(ms.seur, hu.seur)
+counts_merged <- cbind(ms.counts, hu.counts)
+metadata_merged <- rbind(ms.metadata, hu.metadata)
+dim(counts_merged)
+dim(metadata_merged)
+
+seur.total <- CreateSeuratObject(counts=counts_merged, meta.data=metadata_merged)
 
 # convert to .h5ad
 SeuratDisk::SaveH5Seurat(seur.total,
-                         filename = "data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_gene_names.h5Seurat")
-SeuratDisk::Convert("data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_gene_names.h5Seurat", dest = "h5ad")
+                         filename = "data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_231117.h5Seurat")
+SeuratDisk::Convert("data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_231117.h5Seurat", dest = "h5ad")
 
 # export HVG list into .csv file
 hvg.df <- data.frame("features"=rownames(seur.total),
                      "highly_variable"=ifelse(rownames(seur.total)%in%total.hvg, T, F))
 table(hvg.df$highly_variable, useNA="ifany")
 table(hvg.df[hvg.df$highly_variable==T, "features"]%in%total.hvg, useNA="ifany") # sanity check
-write.csv(hvg.df, "data/cross-species/08_innateT_cross_species/cluster/input/list_hvg.csv")
+write.csv(hvg.df, "data/cross-species/08_innateT_cross_species/cluster/input/list_hvg_231117.csv")
 
 ## /end ####
 
@@ -216,12 +265,12 @@ library(ggrepel)
 library(patchwork)
 
 # import matrix
-mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_slowversion_2023-11-13.csv", row.names=1)
-mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_slowversion_mousebylineage_2023-11-13.csv", row.names=1)
-mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_slowversion_allgenes_2023-11-13.csv", row.names=1)
+# mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_2023-11-13.csv", row.names=1)
+mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2023-11-22.csv", row.names=1)
 mtn <- as.matrix(mtn)
 
 # heatmap
+jpeg("./data/cross-species/08_innateT_cross_species/fullheatmap_231122_human_mouselineage_innateT.jpeg", width=1500, height=1500, res=150)
 gplots::heatmap.2(mtn,
           # trace
           trace="none",
@@ -238,11 +287,12 @@ gplots::heatmap.2(mtn,
           key.title="",
           keysize = 1.2,
           # text labels
-          main="Mouse vs Human innate T (4229 HVGs)",
+          main="Mouse vs Human innate T (4263 HVGs)",
           cexRow=0.6,
           cexCol=0.6,
           # margins
           margins=c(9,9))
+dev.off()
 
 # melt
 mtn.df <- melt(mtn)
@@ -265,7 +315,7 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
           axis.title.x = element_blank(),
           axis.line.x=element_blank(),
           legend.position = "none",
-          plot.margin = margin(10,30,10,10))
+          plot.margin = margin(10,0,0,0))
   
   # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
   bp.y <- ggplot(data=df%>% select(var_y, ncells_y) %>% distinct(),
@@ -300,30 +350,65 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
 
 
 ## 3.6.1. Human x Mouse bubble plot ####
-ms.seur$cell_annot_lineage <- paste0(ms.seur$cell.ident, "_", ms.seur$cell_annot)
+# Identify clusters that represent more than 5% of number of cells in each lineage
+hu_clusters_to_keep <- hu.metadata %>%
+  summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
+  # group_by(lineage) %>%
+  mutate(totalcells=sum(ncells),
+         percentcells=ncells/totalcells) %>%
+  # ungroup() %>%
+  # filter(percentcells>0.05)
+  filter(percentcells>0.007)
+ms_clusters_to_keep <- ms.metadata %>%
+  mutate(clusters_by_lineage=paste(lineage, clusters_to_compare, sep="_")) %>%
+  summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
+  # group_by(lineage) %>%
+  mutate(totalcells=sum(ncells),
+         percentcells=ncells/totalcells) %>%
+  # ungroup() %>%
+  # filter(percentcells>0.02)
+  filter(percentcells>0.007)
+
+# ms.seur$cell_annot_lineage <- paste0(ms.seur$cell.ident, "_", ms.seur$cell_annot)
 mtn.df_mshu <- mtn.df %>%
   filter(str_detect(Var1,"Human")) %>%
   mutate(Var1 = gsub("Human\\|", "", Var1)) %>%
   filter(str_detect(Var2, "Mouse")) %>%
   mutate(Var2 = gsub("Mouse\\.", "", Var2)) %>%
-  left_join(as.data.frame(table(hu.seur$cell_annot)), by="Var1") %>%
+  left_join(as.data.frame(table(hu.metadata$clusters_to_compare)), by="Var1") %>%
   rename(var_x=Var1, Var1=Var2, auroc=value, ncells_x=Freq) %>%
-  left_join(as.data.frame(table(ms.seur$cell_annot_lineage)), by="Var1") %>%
+  # left_join(as.data.frame(table(ms.seur$cell_annot_lineage)), by="Var1") %>%
+  # left_join(as.data.frame(table(ms.metadata$clusters_by_lineage)), by="Var1") %>%
+  left_join(ms_clusters_to_keep %>% select(clusters_by_lineage, ncells) %>% rename(Freq=ncells), by=c("Var1"="clusters_by_lineage")) %>%
   rename(var_y=Var1, ncells_y=Freq) %>%
-  # keep min 100 cells
-  filter(ncells_x>=100 & ncells_y>=100)
+  # keep min groups of cells that represent at least 5% of total number of cells in species
+  filter(var_x %in% hu_clusters_to_keep$clusters_by_lineage & var_y %in% ms_clusters_to_keep$clusters_by_lineage)
+  # mutate(percentcells_x=ncells_x/nrow(hu.metadata),
+  #        percentcells_y=ncells_y/nrow(ms.metadata)) %>%
+  # filter(percentcells_x<0.01 & percentcells_y<0.01)
+  # filter(ncells_x>=100 & ncells_y>=100)
 
-order_mouse <- rev(c("immature_GzmA_Gd", "immature_DP", "stage_0_signaling", "cycling_I", "cycling_II", "type_I", "type_II", "type_III"))
-order_mouse_2 <- rev(paste0(c("GD_", "MAIT_", "NKT_"),
-                            c(rep("immature_GzmA_Gd", 3), rep("immature_DP", 3), rep("stage_0_signaling", 3), rep("cycling_I", 3), rep("cycling_II", 3), rep("type_I", 3), rep("type_II", 3), rep("type_III", 3))))
+# order_mouse <- rev(c("immature_GzmA_Gd", "immature_DP", "stage_0_signaling", "cycling_I", "cycling_II", "type_I", "type_II", "type_III"))
+# order_mouse <- rev(c("0", "1_Gzma", "2_Gzma", "signaling", "cycling", "transition", "typeI", "typeII", "typeIII", "12"))
+# order_mouse_2 <- rev(paste0(c("GD_", "MAIT_", "NKT_"),
+#                             c(rep("immature_GzmA_Gd", 3), rep("immature_DP", 3), rep("stage_0_signaling", 3), rep("cycling_I", 3), rep("cycling_II", 3), rep("type_I", 3), rep("type_II", 3), rep("type_III", 3))))
+# order_mouse <- rev(paste0(
+#   c("GD_", "MAIT_", "NKT_"),
+#   sort(rep(0:12,3))
+# ))
+order_mouse <- rev(paste0(
+  c("GD_", "MAIT_", "NKT_"),
+  c(rep("0", 3), rep("1_Gzma", 3), rep("2_Gzma", 3), rep("signaling", 3), rep("cycling", 3), rep("transition", 3), rep("typeI", 3), rep("typeII", 3), rep("typeIII", 3), rep("12", 3))
+  ))
 bubble_plot(df=mtn.df_mshu,
             order_x = unique(mtn.df_mshu$var_x),
-            order_y = order_mouse_2,
+            order_y = order_mouse,
+            # order_y=unique(mtn.df_mshu$var_y),
+            # order_y=rev(as.character(0:12)),
             label_x = "Human clusters",
             label_y = "Mouse clusters",
-            auroc_min= 0.6)
-ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_allgenes11072_mshu.pdf", width=17, height=14)
-
+            auroc_min= 0.8)
+ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_23-11-22_hvg4263_mshu_mslineage_fastversion_remove_small_clusters.pdf", width=17, height=15)
 
 ## 3.6.2. Human x Human bubble plot ####
 mtn.df_huhu <- mtn.df %>%
@@ -334,9 +419,9 @@ mtn.df_huhu <- mtn.df %>%
   left_join(as.data.frame(table(hu.seur$cell_annot)), by="Var1") %>%
   rename(var_x=Var1, Var1=Var2, auroc=value, ncells_x=Freq) %>%
   left_join(as.data.frame(table(hu.seur$cell_annot)), by="Var1") %>%
-  rename(var_y=Var1, ncells_y=Freq) %>%
+  rename(var_y=Var1, ncells_y=Freq)# %>%
   # keep min 100 cells
-  filter(ncells_x>=100 & ncells_y>=100)
+  #filter(ncells_x>=100 & ncells_y>=100)
 
 bubble_plot(df=mtn.df_huhu,
             order_x = unique(mtn.df_huhu$var_x),
@@ -344,7 +429,7 @@ bubble_plot(df=mtn.df_huhu,
             label_x = "Human clusters",
             label_y = "Human clusters",
             auroc_min= 0.6)
-ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_allgenes11072_huhu.pdf", width=15, height=15)
+ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_hvg4229_huhu_fastversion.pdf", width=15, height=15)
 
 
 ## 3.6.3. Mouse x Mouse bubble plot ####
@@ -353,17 +438,17 @@ mtn.df_msms <- mtn.df %>%
   mutate(Var1 = gsub("Mouse\\|", "", Var1)) %>%
   filter(str_detect(Var2, "Mouse")) %>%
   mutate(Var2 = gsub("Mouse\\.", "", Var2)) %>%
-  left_join(as.data.frame(table(ms.seur$cell_annot_lineage)), by="Var1") %>%
+  left_join(as.data.frame(table(ms.seur$cell_annot)), by="Var1") %>%
   rename(var_x=Var1, Var1=Var2, auroc=value, ncells_x=Freq) %>%
-  left_join(as.data.frame(table(ms.seur$cell_annot_lineage)), by="Var1") %>%
-  rename(var_y=Var1, ncells_y=Freq) %>%
+  left_join(as.data.frame(table(ms.seur$cell_annot)), by="Var1") %>%
+  rename(var_y=Var1, ncells_y=Freq) #%>%
   # keep min 100 cells
-  filter(ncells_x>=100 & ncells_y>=100)
+  #filter(ncells_x>=100 & ncells_y>=100)
 
 bubble_plot(df=mtn.df_msms,
-            order_x = rev(order_mouse_2),
-            order_y = order_mouse_2,
+            order_x = rev(order_mouse),
+            order_y = order_mouse,
             label_x = "Mouse clusters",
             label_y = "Mouse clusters",
             auroc_min= 0.8)
-ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_allgenes11072_msms.pdf", width=18, height=18)
+ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_hvg4229_msms_fastversion.pdf", width=12, height=12)

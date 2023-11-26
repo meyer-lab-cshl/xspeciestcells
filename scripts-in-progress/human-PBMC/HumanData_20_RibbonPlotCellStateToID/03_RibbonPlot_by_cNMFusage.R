@@ -15,6 +15,7 @@ library(dplyr)
 library(cowplot)
 library(RColorBrewer)
 library(ggalluvial)
+setwd("~/Projects/HumanThymusProject/")
 source("./scripts-final/colors_universal.R")
 
 
@@ -106,8 +107,8 @@ dim(df) # 41,238 cells; 40986 with MAITs removed
 df$score_max <- apply(df, 1, max)
 df$gep_assign <- gsub("_.*", "", colnames(df)[apply(df, 1, which.max)])
 head(df)
-tabl(df$score_max<0.5) # only ~11,000 cells have a max score below 0.5
-tabl(df$gep_assign)
+table(df$score_max<0.5, useNA="ifany") # only ~11,000 cells have a max score below 0.5
+table(df$gep_assign, useNA="ifany")
 
 # Look at distribution of max score
 # ggplot(df)+
@@ -115,11 +116,11 @@ tabl(df$gep_assign)
 
 # How many have a very little difference between the max score and 2nd max score?
 df$score_2ndmax <- apply(df[,1:11], 1, function(x) sort(x, decreasing = T)[2])
-tabl(df$score_max-df$score_2ndmax<0.1) # 11% of the cells have less than 0.1 difference in score between top score and 2nd top score
+table(df$score_max-df$score_2ndmax<0.1) # 11% of the cells have less than 0.1 difference in score between top score and 2nd top score
 ggplot(df)+
   geom_histogram(aes(x=score_max-score_2ndmax), bins=1000)+
-  labs(y="# cells", title="assign cells to GEPs based on cNMF usage")+
-  xlim(0,1) + ylim(0,300)
+  labs(y="# cells", title="assign cells to GEPs based on GEP with highest/max usage")+
+  xlim(0,1) #+ ylim(0,300)
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_20_RibbonPlotCellStateToID/plots/method1_rawscore_diff_btw_max_2ndmax.jpeg", width=6, height=4)
 
 # First look
@@ -230,6 +231,71 @@ ggplot(aes(axis1=cell.ident, axis2=gep_assign, y=freq)) +
 #   # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
 #   theme_void()+
 #   labs(title="")
+
+
+# cluster to gep flowchart
+seur@meta.data %>%
+  as_tibble() %>%
+  filter(Tissue=="PBMC") %>%
+  # get nb of cells per gep assignment
+  group_by(gep_assign, new_clusters) %>%
+  summarise(ncells=n()) %>%
+  # get %cells in each cluster
+  ungroup() %>%
+  group_by(gep_assign) %>%
+  mutate(totalcells=sum(ncells),
+         freq = ncells*100/totalcells) %>%
+  ungroup() %>%
+  # rename a few variables
+  mutate(gep_assign=toupper(gep_assign)) %>%
+  mutate(gep_assign=replace(gep_assign, !gep_assign%in%c("GEP3", "GEP4", "GEP5", "GEP6"), "other"),
+         gep_assign = factor(gep_assign, levels=c("GEP3", "GEP4", "GEP5", "GEP6", "other"))) %>%
+  filter(gep_assign != "other" & new_clusters %in% 9:17) %>%
+  # PLOT
+  ggplot(aes(axis1=gep_assign, axis2=new_clusters, y=freq)) +
+  geom_alluvium(aes(fill=new_clusters))+
+  geom_stratum()+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8)+
+  scale_fill_manual(values=cols_integrated)+
+  # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
+  theme_void()+
+  # scale_y_reverse()+
+  # coord_flip()+
+  theme(legend.position="none")
+
+
+# lineage to cluster to gep flowchart
+seur@meta.data %>%
+  as_tibble() %>%
+  filter(Tissue=="PBMC") %>%
+  # get nb of cells per gep assignment
+  group_by(cell.ident, gep_assign, new_clusters) %>%
+  summarise(ncells=n()) %>%
+  # get %cells in each lineage
+  ungroup() %>%
+  group_by(cell.ident) %>%
+  mutate(totalcells=sum(ncells),
+         freq = ncells*100/totalcells) %>%
+  ungroup() %>%
+  # rename a few variables
+  mutate(gep_assign=toupper(gep_assign)) %>%
+  mutate(gep_assign=replace(gep_assign, !gep_assign%in%c("GEP3", "GEP4", "GEP5", "GEP6"), "other"),
+         gep_assign = factor(gep_assign, levels=c("GEP3", "GEP4", "GEP5", "GEP6", "other"))) %>%
+  filter(gep_assign != "other" & new_clusters %in% 9:17) %>%
+  # PLOT
+  ggplot(aes(axis1=cell.ident, axis3=gep_assign, axis2=new_clusters, y=freq)) +
+  # geom_alluvium(aes(fill=new_clusters))+
+  # scale_fill_manual(values=cols_integrated)+
+  geom_alluvium(aes(fill=cell.ident))+
+  scale_fill_manual(values=cols_lineages)+
+  geom_stratum()+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=8)+
+  # scale_x_discrete(limits=c("Cell type", "GEP")) + theme_classic()
+  theme_void()+
+  # scale_y_reverse()+
+  # coord_flip()+
+  theme(legend.position="none")
+
 
 
 # # GEP usage for each donor

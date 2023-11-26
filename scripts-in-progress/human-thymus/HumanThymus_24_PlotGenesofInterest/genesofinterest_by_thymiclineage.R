@@ -364,7 +364,7 @@ PlotCoexpression <- function(seuratobj,
 
 #___________________________
 ## 3.1. Score gene signatures ####
-gene_signatures <- list("effector_new"=c("HOPX", "GZMB", "NKG7", "TBX21", "PRF1", "GZMA", "KLRD1", #"KLF6",
+gene_signatures <- list("effector_new"=c("HOPX", "GZMB", "NKG7", "TBX21", "PRF1", "GZMA", "KLRD1", "EOMES",
                                         "CCR6", "RORC", "JUNB", "FOS", "RORA", "FOSB"),
                         "effector"= c("HOPX", "GZMB", "GZMK", "ZEB2", "NKG7", "GNLY", "TBX21", "EOMES", "TYROBP", "PRF1",
                                       "CCL4", "CCL5", "KLRB1", "GZMH", "GZMA", "KLRD1", "CST7", "KLF6", "CXCR4"),
@@ -576,7 +576,7 @@ mtn <- MetaNeighborUS(var_genes=hvg.all,
                       dat=se,
                       study_id=seur.thym$cell.ident,
                       cell_type=seur.thym$cell_annot,
-                      fast_version=FALSE)
+                      fast_version=TRUE)
 
 # plot full dendrogram
 heatmap.2(mtn,
@@ -621,7 +621,7 @@ ggplot(mtn.df1, aes(x=factor(Var1, levels=c("CD8_c0", "CD4_c0", "CD4_c1", "CD4_c
   geom_text(data=mtn.df1 %>% filter(auroc>0.8) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
   scale_color_gradient2(low="#2166ac", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
-  labs(x="innate T",y="conventional T", size="AUROC")+
+  labs(x="conventional T",y="innate T", size="AUROC")+
   theme_cowplot()+
   theme(legend.position="bottom", legend.key.width = unit(0.8, 'cm'),
         axis.text = element_text(size=15), axis.text.x = element_text(angle=45, hjust=1), axis.title=element_text(size=20))

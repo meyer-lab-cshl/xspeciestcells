@@ -265,7 +265,7 @@ library(ggrepel)
 library(patchwork)
 
 # import matrix
-# mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_2023-11-13.csv", row.names=1)
+# mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_2023-11-17.csv", row.names=1)
 mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2023-11-22.csv", row.names=1)
 mtn <- as.matrix(mtn)
 
@@ -301,8 +301,13 @@ mtn.df <- melt(mtn)
 bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
   
   print(head(df))
+  bp.x <- NULL
+  bp.y <- NULL
+  hm.clean <- NULL
+  p <- NULL
   
   # x barplot
+  print("barplot x")
   bp.x <- ggplot(data=df %>% select(var_x, ncells_x) %>% distinct(),
                  aes(x=factor(var_x, levels=order_x), y=ncells_x))+
     geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
@@ -310,14 +315,16 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
     labs(y="#cells")+
     theme(axis.text = element_text(size=15),
           axis.text.x=element_text(angle=45, hjust=0),
-          axis.ticks.y = element_blank(),
+          # axis.ticks.y = element_blank(),
           axis.title.y=element_text(size=20),
           axis.title.x = element_blank(),
           axis.line.x=element_blank(),
           legend.position = "none",
-          plot.margin = margin(10,0,0,0))
+          plot.margin = margin(10,0,0,0)
+          )
   
   # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
+  print("barplot y")
   bp.y <- ggplot(data=df%>% select(var_y, ncells_y) %>% distinct(),
                  aes(x=factor(var_y, levels=order_y), y=ncells_y))+
     geom_bar(stat="identity", fill="#bdbdbd") +
@@ -325,12 +332,14 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
     labs(y="#cells")+ coord_flip() + theme_cowplot()+
     theme(axis.title.y = element_blank(),
           axis.text = element_text(size=15),
-          axis.ticks.x = element_blank(),
+          axis.text.x=element_text(angle=45, hjust=1),
+          # axis.ticks.x = element_blank(),
           axis.title.x = element_text(size=20),
           axis.line.y=element_blank(),
           legend.position = "none")
   
   # BUBBLE PLOT
+  print("bubble plot")
   hm.clean <- ggplot(df, aes(x=factor(var_x, levels=order_x),
                              y=factor(var_y, levels=order_y))) +
     geom_point(aes(size = auroc, color= auroc))+
@@ -343,6 +352,7 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
           axis.text = element_text(size=15), axis.text.x = element_text(angle=45, hjust=1), axis.title=element_text(size=20))
   
   # COMBINE
+  print("combine")
   p <- (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
   return(p)
 }
@@ -355,19 +365,21 @@ hu_clusters_to_keep <- hu.metadata %>%
   summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
   # group_by(lineage) %>%
   mutate(totalcells=sum(ncells),
-         percentcells=ncells/totalcells) %>%
+         percentcells=ncells*100/totalcells) %>%
   # ungroup() %>%
   # filter(percentcells>0.05)
-  filter(percentcells>0.007)
+  filter(percentcells>1)
 ms_clusters_to_keep <- ms.metadata %>%
+  # if doing ms by lineage:
   mutate(clusters_by_lineage=paste(lineage, clusters_to_compare, sep="_")) %>%
   summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
+  # if doing ms by clusters only:
+  # summarise(ncells=n(), .by=clusters_to_compare) %>%
   # group_by(lineage) %>%
   mutate(totalcells=sum(ncells),
-         percentcells=ncells/totalcells) %>%
+         percentcells=ncells*100/totalcells) %>%
   # ungroup() %>%
-  # filter(percentcells>0.02)
-  filter(percentcells>0.007)
+  filter(percentcells>1)
 
 # ms.seur$cell_annot_lineage <- paste0(ms.seur$cell.ident, "_", ms.seur$cell_annot)
 mtn.df_mshu <- mtn.df %>%
@@ -377,18 +389,13 @@ mtn.df_mshu <- mtn.df %>%
   mutate(Var2 = gsub("Mouse\\.", "", Var2)) %>%
   left_join(as.data.frame(table(hu.metadata$clusters_to_compare)), by="Var1") %>%
   rename(var_x=Var1, Var1=Var2, auroc=value, ncells_x=Freq) %>%
-  # left_join(as.data.frame(table(ms.seur$cell_annot_lineage)), by="Var1") %>%
-  # left_join(as.data.frame(table(ms.metadata$clusters_by_lineage)), by="Var1") %>%
+  # left_join(as.data.frame(table(ms.metadata$clusters_to_compare)), by="Var1") %>%
   left_join(ms_clusters_to_keep %>% select(clusters_by_lineage, ncells) %>% rename(Freq=ncells), by=c("Var1"="clusters_by_lineage")) %>%
   rename(var_y=Var1, ncells_y=Freq) %>%
-  # keep min groups of cells that represent at least 5% of total number of cells in species
+  # keep min groups of cells that represent at least 1% of total number of cells in species
   filter(var_x %in% hu_clusters_to_keep$clusters_by_lineage & var_y %in% ms_clusters_to_keep$clusters_by_lineage)
-  # mutate(percentcells_x=ncells_x/nrow(hu.metadata),
-  #        percentcells_y=ncells_y/nrow(ms.metadata)) %>%
-  # filter(percentcells_x<0.01 & percentcells_y<0.01)
-  # filter(ncells_x>=100 & ncells_y>=100)
 
-# order_mouse <- rev(c("immature_GzmA_Gd", "immature_DP", "stage_0_signaling", "cycling_I", "cycling_II", "type_I", "type_II", "type_III"))
+
 # order_mouse <- rev(c("0", "1_Gzma", "2_Gzma", "signaling", "cycling", "transition", "typeI", "typeII", "typeIII", "12"))
 # order_mouse_2 <- rev(paste0(c("GD_", "MAIT_", "NKT_"),
 #                             c(rep("immature_GzmA_Gd", 3), rep("immature_DP", 3), rep("stage_0_signaling", 3), rep("cycling_I", 3), rep("cycling_II", 3), rep("type_I", 3), rep("type_II", 3), rep("type_III", 3))))
@@ -402,13 +409,12 @@ order_mouse <- rev(paste0(
   ))
 bubble_plot(df=mtn.df_mshu,
             order_x = unique(mtn.df_mshu$var_x),
+            # order_y = order_mouse[order_mouse!="12"],
             order_y = order_mouse,
-            # order_y=unique(mtn.df_mshu$var_y),
-            # order_y=rev(as.character(0:12)),
             label_x = "Human clusters",
             label_y = "Mouse clusters",
-            auroc_min= 0.8)
-ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_23-11-22_hvg4263_mshu_mslineage_fastversion_remove_small_clusters.pdf", width=17, height=15)
+            auroc_min= 0.65)
+ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_23-11-26_hvg4263_mshu_mslineage_fastversion_remove_small_clusters_less1percent_auroc065.pdf", width=17, height=15)
 
 ## 3.6.2. Human x Human bubble plot ####
 mtn.df_huhu <- mtn.df %>%

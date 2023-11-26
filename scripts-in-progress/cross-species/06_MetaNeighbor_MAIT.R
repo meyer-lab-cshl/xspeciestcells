@@ -17,6 +17,7 @@ library(ggplot2)
 library(cowplot)
 library(RColorBrewer)
 library(tidyverse)
+setwd("~/Projects/HumanThymusProject/")
 
 # Import data
 seur.ms <- readRDS("./data/cross-species/00_Reproduce_UMAPs/ms_mait_seurobj.rds")
@@ -134,19 +135,30 @@ hu.metadata <- hu.metadata[,c("new_clusters_MAIT", "study")]
 colnames(hu.metadata)[1] <- "clusters_MAIT"
 head(hu.metadata)
 
-ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
-hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
-seur.total <- merge(ms.seur, hu.seur) # 9788 genes
+ms.counts <- ms.counts[rownames(hu.counts),]
+table(rownames(ms.counts)==rownames(hu.counts), useNA="ifany")
+table(colnames(ms.metadata)==colnames(hu.metadata), useNA="ifany")
+tot.counts   <- cbind(ms.counts, hu.counts)
+tot.metadata <- rbind(ms.metadata, hu.metadata)
+table(colnames(tot.counts)==rownames(tot.metadata), useNA="ifany")
 
-# Sanity checks
-head(seur.total@meta.data)
-table(seur.total$clusters_MAIT, useNA="ifany")
-table(seur.total$study, useNA="ifany")
+# Convert seurat count matrix to SummarizedExperiment object
+count <- SummarizedExperiment(assays=tot.counts,
+                              colData=tot.metadata)
+
+# ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
+# hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
+# seur.total <- merge(ms.seur, hu.seur) # 9788 genes
+# 
+# # Sanity checks
+# head(seur.total@meta.data)
+# table(seur.total$clusters_MAIT, useNA="ifany")
+# table(seur.total$study, useNA="ifany")
 
 
 # Convert seurat count matrix to SummarizedExperiment object
-count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
-                              colData=seur.total$clusters_MAIT)
+# count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
+#                               colData=seur.total$clusters_MAIT)
 
 
 
@@ -156,9 +168,9 @@ count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
 # Run metaneighbor
 mtn <- MetaNeighborUS(var_genes=total.hvg,
                       dat=count,
-                      study_id=seur.total$study,
-                      cell_type=seur.total$clusters_MAIT,
-                      fast_version=FALSE)
+                      study_id=count$study,
+                      cell_type=count$clusters_MAIT,
+                      fast_version=T)
 # saveRDS(mtn, "./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
 mtn <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
 
@@ -166,7 +178,7 @@ mtn <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowvers
 mtn.sub <- mtn[1:7,8:14]
 # mtn.sub <- mtn.sub[rev(rownames(mtn.sub)),]
 
-jpeg("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_slowversion_fulltree.jpeg", width=1500, height=1500, res=200)
+jpeg("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_fastversion_fulltree.jpeg", width=1500, height=1500, res=200)
 heatmap.2(mtn,
           # trace
           trace="none",
@@ -187,7 +199,8 @@ heatmap.2(mtn,
           cexRow=0.6,
           cexCol=0.6,
           # margins
-          margins=c(6,6))
+          margins=c(6,6)
+          )
 dev.off()
 
 
@@ -255,7 +268,7 @@ bp.y <- ggplot(data=mtn.df %>% select(mouse,propcells_mouse) %>% distinct(),
 hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("MAIT_c", 0:6)),
                                y=factor(mouse, levels=rev(order_mouse)))) +
   geom_point(aes(size=auroc, color= auroc))+
-  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
+  geom_text(data=mtn.df %>% filter(auroc>0.6) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
   scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
   labs(x="Human clusters",y="Mouse clusters", size="AUROC")+
@@ -267,6 +280,145 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("MAIT_c", 0:6)),
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-ggsave("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_metaneighbor_bubbleplot3.svg", width=9, height=8)
+# ggsave("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_metaneighbor_fastversion_bubbleplot.jpeg", width=9, height=8)
 
 
+
+
+
+# _______________________
+# METANEIGHBOR TROUBLESHOOTING FAST/SLOW
+# get slow mtn
+mtn_slow <- readRDS("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_mtnslowversion.rds")
+
+# plot fast mtn
+htm_fast <- heatmap.2(mtn,
+          # trace
+          trace="none",
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="Mouse vs Human MAIT",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6)
+)
+
+cluster_order <- rownames(mtn)[htm_fast$rowInd]
+
+# plot slow mtn in same order
+mtn_slow <- mtn_slow[rev(cluster_order), cluster_order]
+jpeg("./data/cross-species/04_Metaneighbor_mait/mait_ms-hu_slowversion_fulltree_orderedlikefastversion.jpeg", width=1500, height=1500, res=200)
+heatmap.2(mtn_slow,
+          # trace
+          trace="none",
+          # dendrogram
+          dendrogram="none",
+          Rowv=F,
+          Colv=F,
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="Mouse vs Human MAIT",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6)
+)
+dev.off()
+
+
+
+# RUN METANEIGHBOR BETWEEN BATCHES
+
+# summarized experiment object (only human)
+table(rownames(hu.metadata)==rownames(seur.hu@meta.data), useNA="ifany")
+hu.metadata$batch <- seur.hu@meta.data$Batch
+head(hu.metadata)
+
+se.hu <- SummarizedExperiment(assays=hu.counts,
+                              colData=hu.metadata)
+
+# run metaneighbor (fast/slow)
+mtn_hu_fast <- MetaNeighborUS(var_genes=total.hvg,
+                              dat=se.hu,
+                              study_id=se.hu$batch,
+                              cell_type=se.hu$clusters_MAIT,
+                              fast_version=T)
+mtn_hu_slow <- MetaNeighborUS(var_genes=total.hvg,
+                              dat=se.hu,
+                              study_id=se.hu$batch,
+                              cell_type=se.hu$clusters_MAIT,
+                              fast_version=F)
+# reorder
+order_mait_test <- c(rep("|MAIT_c0", 3),
+                     rep("|MAIT_c1", 3),
+                     rep("|MAIT_c2", 3),
+                     rep("|MAIT_c3", 3),
+                     rep("|MAIT_c4", 3),
+                     rep("|MAIT_c5", 3),
+                     rep("|MAIT_c6", 3))
+order_mait_test <- paste0(rep(c("B", "C", "D"), 7), order_mait_test)
+mtn_hu_fast <- mtn_hu_fast[order_mait_test, order_mait_test]
+mtn_hu_slow <- mtn_hu_slow[order_mait_test, order_mait_test]
+
+# plot fast
+heatmap.2(mtn_hu_fast,
+          # trace
+          trace="none",
+          # dendrogram
+          dendrogram="none",
+          Rowv=F,
+          Colv=F,
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="fast version",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6)
+)
+
+# plot slow
+heatmap.2(mtn_hu_slow,
+          # trace
+          trace="none",
+          # dendrogram
+          # dendrogram="none",
+          # Rowv=F,
+          # Colv=F,
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="slow version",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6)
+)

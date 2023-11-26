@@ -12,7 +12,7 @@ library(tidyverse)
 # Import data
 seur.ms <- readRDS("./data/cross-species/00_Reproduce_UMAPs/ms_gdt_seurobj_lee.rds")
 # order_mouse <- c("cKIT+ DN1", "DN2", "DN3", "Pre-selected GD", "Post-selected GD", "Pan GD (mainly CD24+)", "CD122+ GD", "CD24- GD")
-order_mouse <- c("Tγδp", "immature Tγδ1/17", "Tγδ1", "immature Tγδ17", "Tγδ17")
+order_mouse <- c("Tγδp", "immature Tγδ1/17", "immature Tγδ17", "Tγδ1", "Tγδ17")
 cols_gdt <- brewer.pal(length(unique(seur.ms$gd_clusters)), "Blues")
 names(cols_gdt) <- unique(seur.ms$gd_clusters)
 SCpubr::do_DimPlot(seur.ms, 
@@ -55,7 +55,6 @@ length(ms.hvg)
 ms.counts <- seur.ms[["RNA"]]@counts
 ms.metadata <- seur.ms@meta.data
 
-# hu.hvg <- VariableFeatures(seur.hu)
 hu.hvg <- VariableFeatures(seur.hu)
 length(hu.hvg)
 hu.counts <- seur.hu[["RNA"]]@counts
@@ -125,31 +124,25 @@ hu.metadata <- hu.metadata[,c("new_clusters_GD", "study")]
 colnames(hu.metadata)[1] <- "clusters_GDT"
 head(hu.metadata)
 
-ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
-hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
-seur.total <- merge(ms.seur, hu.seur)
-
-# Sanity checks
-head(seur.total@meta.data)
-table(seur.total$clusters_GDT, useNA="ifany")
-table(seur.total$study, useNA="ifany")
-table(total.hvg %in% rownames(seur.total), useNA="ifany") # all HVGs should be found in the gene names of the count data
-grep("ENSMUS", rownames(seur.total), value=T) # check there are no ENSEMBLIDs in gene names
-
-
+ms.counts <- ms.counts[rownames(hu.counts),]
+table(rownames(ms.counts)==rownames(hu.counts), useNA="ifany")
+table(colnames(ms.metadata)==colnames(hu.metadata), useNA="ifany")
+tot.counts   <- cbind(ms.counts, hu.counts)
+tot.metadata <- rbind(ms.metadata, hu.metadata)
+table(colnames(tot.counts)==rownames(tot.metadata), useNA="ifany")
 
 # Convert seurat count matrix to SummarizedExperiment object
-count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
-                              colData=seur.total$clusters_GDT)
+count <- SummarizedExperiment(assays=tot.counts,
+                              colData=tot.metadata)
 
 # _______________________
 # METANEIGHBOR
 # Run metaneighbor
 mtn <- MetaNeighborUS(var_genes=total.hvg,
                       dat=count,
-                      study_id=seur.total$study,
-                      cell_type=seur.total$clusters_GDT,
-                      fast_version=FALSE)
+                      study_id=count$study,
+                      cell_type=count$clusters_GDT,
+                      fast_version=T)
 # saveRDS(mtn, "./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_2023-08-03.rds")
 mtn <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_2023-08-03.rds")
 
@@ -158,10 +151,10 @@ mtn.sub <- mtn[1:5,6:13]
 mtn.sub <- mtn.sub[,paste0("Human|GD_c", 0:7)]
 mtn.sub <- mtn.sub[paste0("Mouse|", order_mouse),]
 
-jpeg("./data/cross-species/04_Metaneighbor_gdt/gd_hvg_test/fulltree_subcluters_hvg2000_intersect392.jpeg",
-     width=1500, height=1500, res=200)
-# jpeg("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_slowversion_fulltree_subclusters.jpeg",
+# jpeg("./data/cross-species/04_Metaneighbor_gdt/gd_hvg_test/fulltree_subcluters_hvg2000_intersect392.jpeg",
 #      width=1500, height=1500, res=200)
+jpeg("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_fastversion_fulltree.jpeg",
+     width=1500, height=1500, res=200)
 heatmap.2(mtn, # mtn.sub[,order(colnames(mtn.sub))],
           # trace
           trace="none",
@@ -178,7 +171,7 @@ heatmap.2(mtn, # mtn.sub[,order(colnames(mtn.sub))],
           key.title="",
           keysize = 1.2,
           # text labels
-          main="Mouse vs Human GDT (intersect: 392 HVGs)",
+          main="Mouse vs Human GDT (union: 2002 HVGs)",
           cexRow=0.6,
           cexCol=0.6,
           # margins
@@ -251,7 +244,7 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
                                y=factor(mouse, levels=rev(order_mouse)))) +
                                # y=factor(mouse, levels=sort(unique(seur.ms$gd_clusters), decreasing=T)))) +
   geom_point(aes(size = auroc, color= auroc))+
-  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="black")+
+  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
   scale_color_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
   labs(x="Human clusters",y="Mouse clusters", size="AUROC")+
@@ -262,5 +255,64 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("GD_c", 0:7)),
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-# ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_metaneighbor_bubbleplot3.jpeg", width=12, height=9)
+# ggsave("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_metaneighbor_fastversion_bubbleplot.jpeg", width=11, height=9)
 # ggsave("./data/cross-species/04_Metaneighbor_gdt/gd_hvg_test/bubbleplot_subclusters_hvg2000_intersect392.jpeg", width=12, height=9)
+
+
+
+
+
+# _______________________
+# METANEIGHBOR TROUBLESHOOTING FAST/SLOW
+# get slow mtn
+mtn_slow <- readRDS("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_mtnslowversion_2023-08-03.rds")
+
+# plot fast mtn
+htm_fast <- heatmap.2(mtn,
+                      # trace
+                      trace="none",
+                      # superimpose a density histogram on color key
+                      density.info="none",
+                      # color scale
+                      col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+                      breaks=seq(0,1,length=101),
+                      key.xlab = "AUROC",
+                      key.title="",
+                      keysize = 1.2,
+                      # text labels
+                      main="Mouse vs Human MAIT",
+                      cexRow=0.6,
+                      cexCol=0.6,
+                      # margins
+                      margins=c(6,6)
+)
+
+cluster_order <- rownames(mtn)[htm_fast$rowInd]
+
+# plot slow mtn in same order
+mtn_slow <- mtn_slow[rev(cluster_order), cluster_order]
+jpeg("./data/cross-species/04_Metaneighbor_gdt/gdt_mslee-hu_slowversion_fulltree_orderedlikefastversion.jpeg", width=1500, height=1500, res=200)
+heatmap.2(mtn_slow,
+          # trace
+          trace="none",
+          # dendrogram
+          dendrogram="none",
+          Rowv=F,
+          Colv=F,
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="Mouse vs Human GD",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(7,7)
+)
+dev.off()
+

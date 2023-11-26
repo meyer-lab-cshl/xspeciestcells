@@ -8,9 +8,11 @@ library(ggplot2)
 library(cowplot)
 library(RColorBrewer)
 library(tidyverse)
+setwd("~/Projects/HumanThymusProject/")
 
 # Import data
 seur.ms <- readRDS("./data/cross-species/00_Reproduce_UMAPs/ms_nkt_seurobj.rds")
+seur.ms@meta.data$cell_type <- as.character(seur.ms@meta.data$cell_type)
 # DimPlot(seur.ms)
 cols_nkt <- c("#810f7c", "#8856a7", "#8c96c6", "#b3cde3", "#edf8fb")
 names(cols_nkt) <- unique(seur.ms$cell_type)
@@ -85,7 +87,7 @@ ms.hvg.translated <- pull(dictionary %>% filter(ms_symbol_data %in% ms.hvg), # n
 hu.hvg.translated <- pull(dictionary %>% filter(hu_symbol %in% hu.hvg), # not all hu HVGs are found in ortholog.df
                           hu_symbol)
 total.hvg <- unique(union(ms.hvg.translated, hu.hvg.translated))
-length(total.hvg) # 2,370 genes
+length(total.hvg) # 2,368 genes
 
 
 # Keep only ms and hu genes that have 1:1 orthologs
@@ -118,31 +120,42 @@ head(ms.metadata)
 hu.metadata$study <- "Human"
 hu.metadata <- hu.metadata[,c("new_clusters_NKT", "study")]
 colnames(hu.metadata)[1] <- "clusters_NKT"
-hu.metadata$clusters_NKT <- paste0("c", hu.metadata$clusters_NKT)
+hu.metadata$clusters_NKT <- paste0("iNKT_c", hu.metadata$clusters_NKT)
 head(hu.metadata)
 
-ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
-hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
-seur.total <- merge(ms.seur, hu.seur)
-
-# Sanity checks
-head(seur.total@meta.data)
-table(seur.total$clusters_NKT, useNA="ifany")
-table(seur.total$study, useNA="ifany")
-
+ms.counts <- ms.counts[rownames(hu.counts),]
+table(rownames(ms.counts)==rownames(hu.counts), useNA="ifany")
+table(colnames(ms.metadata)==colnames(hu.metadata), useNA="ifany")
+tot.counts   <- cbind(ms.counts, hu.counts)
+tot.metadata <- rbind(ms.metadata, hu.metadata)
+table(colnames(tot.counts)==rownames(tot.metadata), useNA="ifany")
 
 # Convert seurat count matrix to SummarizedExperiment object
-count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
-                              colData=seur.total$clusters_NKT)
+count <- SummarizedExperiment(assays=tot.counts,
+                              colData=tot.metadata)
+
+# ms.seur <- CreateSeuratObject(counts=ms.counts, meta.data=ms.metadata)
+# hu.seur <- CreateSeuratObject(counts=hu.counts, meta.data=hu.metadata)
+# seur.total <- merge(ms.seur, hu.seur)
+# 
+# # Sanity checks
+# head(seur.total@meta.data)
+# table(seur.total$clusters_NKT, useNA="ifany")
+# table(seur.total$study, useNA="ifany")
+# 
+# 
+# # Convert seurat count matrix to SummarizedExperiment object
+# count <- SummarizedExperiment(assays=seur.total@assays[["RNA"]]@counts,
+#                               colData=seur.total$clusters_NKT)
 
 # _______________________
 # METANEIGHBOR
 # Run metaneighbor
 mtn <- MetaNeighborUS(var_genes=total.hvg,
                       dat=count,
-                      study_id=seur.total$study,
-                      cell_type=seur.total$clusters_NKT,
-                      fast_version=FALSE)
+                      study_id=count$study,
+                      cell_type=count$clusters_NKT,
+                      fast_version=T)
 # saveRDS(mtn, "./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion.rds")
 mtn <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion.rds")
 
@@ -150,7 +163,7 @@ mtn <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversio
 mtn.sub <- mtn[1:5,6:12]
 mtn.sub <- mtn.sub[rev(rownames(mtn.sub)),]
 
-jpeg("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_slowversion_fulltree.jpeg",
+jpeg("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_fastversion_fulltree.jpeg",
      width=1500, height=1500, res=200)
 heatmap.2(mtn, # mtn.sub[,order(colnames(mtn.sub))],
           # trace
@@ -190,23 +203,20 @@ mtn.df <- mtn.df %>%
 # Get number of cells per human cluster and per mouse cluster
 mtn.df <- mtn.df %>%
   as_tibble() %>%
-  dplyr::rename(human=Var1, mouse=Var2, auroc=value) %>%
+  # dplyr::rename(human=Var1, mouse=Var2, auroc=value) %>%
   # add nb of cells per human cluster
-  mutate(Var1=gsub("c", "", human)) %>%
-  left_join(as.data.frame(table(seur.hu$new_clusters_NKT)), by="Var1") %>%
-  dplyr::rename(ncells_human=Freq) %>%
+  # mutate(Var1=gsub("c", "", human)) %>%
+  left_join(as.data.frame(table(seur.hu$new_clusters_NKT)) %>% mutate(Var1=paste0("iNKT_c", Var1)), by="Var1") %>%
+  dplyr::rename(human=Var1, Var1=Var2, auroc=value, ncells_human=Freq) %>%
   mutate(totalcells_human = dim(seur.hu)[2],
          propcells_human = ncells_human*100/totalcells_human) %>%
   # add nb of cells per mouse cluster
-  select(-Var1) %>%
-  mutate(Var1=mouse) %>%
   left_join(as.data.frame(table(seur.ms$cell_type)), by="Var1") %>%
-  dplyr::rename(ncells_mouse=Freq) %>%
+  dplyr::rename(mouse=Var1, ncells_mouse=Freq) %>%
   mutate(totalcells_mouse = dim(seur.ms)[2],
-         propcells_mouse = ncells_mouse*100/totalcells_mouse) %>%
-  select(-Var1) %>%
+         propcells_mouse = ncells_mouse*100/totalcells_mouse) #%>%
   # rename human clusters
-  mutate(human=paste0("iNKT_", human))
+  # mutate(human=paste0("iNKT_", human))
 # saveRDS(mtn.df, "./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion_DF.rds")
 
 
@@ -218,6 +228,7 @@ bp.x <- ggplot(data=mtn.df%>% select(human,propcells_human) %>% distinct(),
   scale_y_continuous(limits=c(0,100), breaks=c(0,50,100))+
   labs(y="%cells")+
   theme(axis.text = element_text(size=15),
+        axis.text.x = element_text(size = 15, angle=45, hjust=0),
         axis.ticks.y = element_blank(),
         axis.title.y=element_text(size=20),
         axis.title.x = element_blank(),
@@ -241,26 +252,85 @@ bp.y <- ggplot(data=mtn.df%>% select(mouse,propcells_mouse) %>% distinct(),
 
 # BUBBLE PLOT
 # library(scales)
-hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("c", 0:6)),
+hm.clean <- ggplot(mtn.df, aes(x=factor(human, levels=paste0("iNKT_c", 0:6)),
                                y=factor(mouse, levels=rev(order_mouse)))) +
   geom_point(aes(size = auroc, color= auroc))+
-  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="black")+
+  geom_text(data=mtn.df %>% filter(auroc>0.65) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
   scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
   scale_color_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
   labs(x="Human clusters",y="Mouse clusters", size="AUROC")+
   theme_cowplot()+
   theme(legend.position="bottom", legend.key.width = unit(0.8, 'cm'),
-        axis.text = element_text(size=15), axis.title=element_text(size=20))
+        axis.text = element_text(size=15), axis.title=element_text(size=20), axis.text.x=element_text(angle=45, hjust=1))
 
 # COMBINE
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-ggsave("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_metaneighbor_bubbleplot4.svg", width=9, height=8)
+# ggsave("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_metaneighbor_fastversion_bubbleplot.jpeg", width=9, height=9.5)
+
+
+
+# _______________________
+# METANEIGHBOR TROUBLESHOOTING FAST/SLOW
+# get slow mtn
+mtn_slow <- readRDS("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_mtnslowversion.rds")
+colnames(mtn_slow)[6:12] <- paste0("Human|iNKT_", substr(colnames(mtn_slow)[6:12], 7, 9))
+rownames(mtn_slow)[6:12] <- paste0("Human|iNKT_", substr(rownames(mtn_slow)[6:12], 7, 9))
+
+# plot fast mtn
+htm_fast <- heatmap.2(mtn,
+                      # trace
+                      trace="none",
+                      # superimpose a density histogram on color key
+                      density.info="none",
+                      # color scale
+                      col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+                      breaks=seq(0,1,length=101),
+                      key.xlab = "AUROC",
+                      key.title="",
+                      keysize = 1.2,
+                      # text labels
+                      main="Mouse vs Human MAIT",
+                      cexRow=0.6,
+                      cexCol=0.6,
+                      # margins
+                      margins=c(6,6)
+)
+
+cluster_order <- rownames(mtn)[htm_fast$rowInd]
+
+# plot slow mtn in same order
+mtn_slow <- mtn_slow[rev(cluster_order), cluster_order]
+jpeg("./data/cross-species/04_Metaneighbor_nkt/nkt_ms-hu_slowversion_fulltree_orderedlikefastversion.jpeg", width=1500, height=1500, res=200)
+heatmap.2(mtn_slow,
+          # trace
+          trace="none",
+          # dendrogram
+          dendrogram="none",
+          Rowv=F,
+          Colv=F,
+          # superimpose a density histogram on color key
+          density.info="none",
+          # color scale
+          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
+          breaks=seq(0,1,length=101),
+          key.xlab = "AUROC",
+          key.title="",
+          keysize = 1.2,
+          # text labels
+          main="Mouse vs Human iNKT",
+          cexRow=0.6,
+          cexCol=0.6,
+          # margins
+          margins=c(6,6)
+)
+dev.off()
+
 
 
 
 # _____________________
-# CORRELATION
+# CORRELATION ####
 
 # Get average expression per gene df
 avgexp.sub <- averageGE(seuratobj=seur.total, geneslist=total.hvg)

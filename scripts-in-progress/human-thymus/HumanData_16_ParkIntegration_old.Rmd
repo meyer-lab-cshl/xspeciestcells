@@ -59,7 +59,7 @@ cols_park <- c("DN(early)" = "#78c679", "DN(P)" = "#41ab5d",
 ### 1.2. Import data
 ```{r import-data, fig.height=8, fig.width=8}
 # Import seurat object
-seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_02_15_23.RDS") # removed low-quality cells
+seur <- readRDS("~/Projects/HumanThymusProject/data/raw_data/human_data/seurat_filtered_harmony_08_28_23.RDS") # removed low-quality cells
 
 # Sanity check
 print(seur) # 78,607 cells
@@ -213,7 +213,7 @@ library(SeuratDisk)
 Okay it's complicated to convert the AnnData, so let's get the metadata lol
 
 ```{r park-thymocyte-add-celltype}
-park_metadata <- read.csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_metadata.csv")
+park_metadata <- read.csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_metadata_thymocyte.csv")
 
 # Check that the row names are the same
 table(park_metadata$index == rownames((seur.park.thymocytes@meta.data))) # yessss nice
@@ -227,16 +227,22 @@ seur.park.thymocytes@meta.data$cell_type <- park_metadata$cell.types
 DimPlot(seur.park.thymocytes, group.by="cell_type", label=T)+
   scale_color_manual(values=cols_park)
 
-# SCpubr::do_DimPlot(seur.park.thymocytes,
-#                    group.by = "cell_type",
-#                    pt.size=0.5,
-#                    label=T,
-#                    label.color="black",
-#                    legend.position = "none",
-#                    repel=T,
-#                    colors.use=cols_park,
-#                    font.size = 24)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_umap2.jpeg", width=10, height=9)
+ggrastr::rasterise(
+  SCpubr::do_DimPlot(seur.park.thymocytes,
+                   group.by = "cell_type",
+                   pt.size=0.5,
+                   # OPTION 1
+                   # label=T,
+                   # label.color="black",
+                   # label.size = 8,
+                   # legend.position = "none",
+                   # OPTION 2
+                   label=F,
+                   legend.position = "right",
+                   repel=T,
+                   colors.use=cols_park),
+  layers="Point", dpi=300)
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/park_umap_with_legend.pdf", width=12, height=9)
 
 # Check gene names
 rownames(seur.park.thymocytes)[1:5]
@@ -253,16 +259,24 @@ Keep only cells of interest in each dataset
 # Keep only thymus
 Idents(seur) <- "Tissue"
 seur.thymus <- subset(seur, ident="Thymus")
+seur.thymus@meta.data$new_clusters <- as.character(seur.thymus@meta.data$new_clusters)
+seur.thymus@meta.data$new_clusters <- factor(seur.thymus@meta.data$new_clusters, levels=0:17)
 DimPlot(seur.thymus, group.by="new_clusters", cols=cols_integrated, reduction="UMAP_50", label=T)
-SCpubr::do_DimPlot(seur.thymus, 
+ggrastr::rasterise(
+  SCpubr::do_DimPlot(seur.thymus, 
                    group.by = "new_clusters",
+                   # OPTION 1
                    label=T,
                    label.color="black",
-                   legend.position = "none",
+                   label.size = 8,
                    repel=T,
-                   colors.use=cols_integrated,
-                   font.size = 24)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/gapin_umap_thymus.jpeg", width=10, height=10)
+                   legend.position = "none",
+                   # OPTION 2
+                   # label=F,
+                   # legend.position="right",
+                   colors.use=cols_integrated),
+  layers="Point", dpi=300)
+ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/gapin_umap_thymus.pdf", width=10, height=10)
 
 # Call the clusters "c0", "c1", etc.
 colnames(seur.thymus@meta.data)[17] <- "cell_type"

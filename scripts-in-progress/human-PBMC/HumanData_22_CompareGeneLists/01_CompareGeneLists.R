@@ -23,6 +23,10 @@ genes.cano    <- readxl::read_excel("./data/human-PBMC/HumanData_17_GEPsOnCanoga
 genesCD8.rose <- readxl::read_excel("./data/human-PBMC/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD8.xlsx", sheet=1)
 genesCD4.rose <- readxl::read_excel("./data/human-PBMC/HumanData_22_CompareGeneLists/rose_supp_clusmodulesCD4.xlsx", sheet=1)
 genes.poon    <- readxl::read_excel("./data/human-PBMC/HumanData_22_CompareGeneLists/poon_supp.xlsx", sheet=6)[,-1]
+genes.terekhova_general <- readxl::read_excel("./data/human-PBMC/HumanData_33_Tconv_Tem/terekhova_supptable.xlsx", sheet=1)
+genes.terekhova_cd4 <- readxl::read_excel("./data/human-PBMC/HumanData_33_Tconv_Tem/terekhova_supptable.xlsx", sheet=3)
+genes.terekhova_cd8 <- readxl::read_excel("./data/human-PBMC/HumanData_33_Tconv_Tem/terekhova_supptable.xlsx", sheet=5)
+genes.terekhova_gdt <- readxl::read_excel("./data/human-PBMC/HumanData_33_Tconv_Tem/terekhova_supptable.xlsx", sheet=7)
 
 # seurat object
 seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_08_28_23.RDS")
@@ -75,6 +79,7 @@ table(is.na(gapindf$gene))
 
 genes.long[["gapin"]] <- gapindf
 # table(is.na(genes.long$gapin$gene)) # sanity check
+## end geps ####
 
 
 # **************************
@@ -90,18 +95,26 @@ canodf <- genes.cano %>%
   filter(p_val_adj < 0.05 & LFC > 0.25) %>% # lowest log2FC is 0.25
   # convert to long format
   select(cluster, gene) %>%
-  rename(geneprogram=cluster)
+  rename(geneprogram=cluster) %>%
+  # add general categories
+  mutate(geneprogram_cat=case_when(
+    geneprogram=="CanoGamez | CD4_Tnaive" ~"Tnaive",
+    geneprogram=="CanoGamez | CD4_TCM"    ~"Tcm",
+    geneprogram=="CanoGamez | CD4_TEM"    ~"Tem",
+    geneprogram=="CanoGamez | CD4_TEMRA"  ~"Temra",
+    geneprogram=="CanoGamez | CD4_nTreg"  ~"Treg"
+  ))
 head(canodf)
 genes.long[["canogamez"]] <- canodf
 # table(is.na(genes.long$canogamez$gene)) # sanity check
 # table(genes.long$canogamez$gene %in% rownames(seur.human))
 
 # Define colors
-cols_cano <- c("CanoGamez | CD4_Tnaive"= "#b3e2cd",
-               "CanoGamez | CD4_TCM"   = "#f4cae4",
-               "CanoGamez | CD4_TEM"   = "#cbd5e8",
-               "CanoGamez | CD4_TEMRA" = "#fdcdac",
-               "CanoGamez | CD4_nTreg" = "#fbb4ae")
+# cols_cano <- c("CanoGamez | CD4_Tnaive"= "#b3e2cd",
+#                "CanoGamez | CD4_TCM"   = "#f4cae4",
+#                "CanoGamez | CD4_TEM"   = "#cbd5e8",
+#                "CanoGamez | CD4_TEMRA" = "#fdcdac",
+#                "CanoGamez | CD4_nTreg" = "#fbb4ae")
 ## end cano-gamez ####
 
 
@@ -114,9 +127,9 @@ roseCD4 <- genesCD4.rose %>%
   select(SYMBOL, k.5.cluster) %>%
   filter(!is.na(SYMBOL)) %>% # the few NA symbols are miRNA or uncharacterized loci
   rename(gene=SYMBOL, geneprogram=k.5.cluster) %>%
-  mutate(geneprogram=ifelse(geneprogram==1, "Rose | CD4_modul1_Tem",
+  mutate(geneprogram=ifelse(geneprogram==1, "Rose | CD4_modul1_Tem/cm",
                      ifelse(geneprogram==2, "Rose | CD4_modul2_Tcm/em",
-                     ifelse(geneprogram==3, "Rose | CD4_modul3_Tem",
+                     ifelse(geneprogram==3, "Rose | CD4_modul3_Tem/cm",
                      ifelse(geneprogram==4, "Rose | CD4_modul4_Tem",
                      ifelse(geneprogram==5, "Rose | CD4_modul5_Tnaive", "?"))))))
 
@@ -130,23 +143,37 @@ roseCD8 <- genesCD8.rose %>%
                      ifelse(geneprogram==4, "Rose | CD8_modul4_Tnaive",
                      ifelse(geneprogram==5, "Rose | CD8_modul5_Tnaive/cm", "?"))))))
 
-head(rbind(roseCD4, roseCD8))
-genes.long[["rose"]] <- rbind(roseCD4, roseCD8)
+rosetotal <- rbind(roseCD4, roseCD8) %>%
+  mutate(geneprogram_cat=case_when(
+    geneprogram=="Rose | CD4_modul1_Tem/cm"    ~"Tem",
+    geneprogram=="Rose | CD4_modul2_Tcm/em"    ~"Tcm",
+    geneprogram=="Rose | CD4_modul3_Tem/cm"    ~"Tem",
+    geneprogram=="Rose | CD4_modul4_Tem"       ~"Tem",
+    geneprogram=="Rose | CD4_modul5_Tnaive"    ~"Tnaive",
+    geneprogram=="Rose | CD8_modul1_Temra"     ~"Temra",
+    geneprogram=="Rose | CD8_modul2_Tcm/em"    ~"Tcm",
+    geneprogram=="Rose | CD8_modul3_Tem/emra"  ~"Tem",
+    geneprogram=="Rose | CD8_modul4_Tnaive"    ~"Tnaive",
+    geneprogram=="Rose | CD8_modul5_Tnaive/cm" ~"Tnaive"
+  ))
+head(rosetotal)
+
+genes.long[["rose"]] <- rosetotal
 # table(is.na(genes.long$rose$gene)) # sanity check
 # table(genes.long$rose$gene %in% rownames(seur.human))
 # table(genes.long$rose$geneprogram, useNA="ifany")
 
 # Define colors
-cols_rose <- c("Rose | CD4_modul1_Tem"      ="#cbd5e8",
-               "Rose | CD4_modul2_Tcm/em"   ="#f4cae4",
-               "Rose | CD4_modul3_Tem"      ="#cbd5e8",
-               "Rose | CD4_modul4_Tem"      ="#cbd5e8",
-               "Rose | CD4_modul5_Tnaive"   ="#b3e2cd",
-               "Rose | CD8_modul1_Temra"    ="#fdcdac",
-               "Rose | CD8_modul2_Tcm/em"   ="#f4cae4",
-               "Rose | CD8_modul3_Tem/emra" ="#cbd5e8",
-               "Rose | CD8_modul4_Tnaive"   ="#b3e2cd",
-               "Rose | CD8_modul5_Tnaive/cm"="#b3e2cd")
+# cols_rose <- c("Rose | CD4_modul1_Tem/cm"   ="#cbd5e8",
+#                "Rose | CD4_modul2_Tcm/em"   ="#f4cae4",
+#                "Rose | CD4_modul3_Tem/cm"   ="#cbd5e8",
+#                "Rose | CD4_modul4_Tem"      ="#cbd5e8",
+#                "Rose | CD4_modul5_Tnaive"   ="#b3e2cd",
+#                "Rose | CD8_modul1_Temra"    ="#fdcdac",
+#                "Rose | CD8_modul2_Tcm/em"   ="#f4cae4",
+#                "Rose | CD8_modul3_Tem/emra" ="#cbd5e8",
+#                "Rose | CD8_modul4_Tnaive"   ="#b3e2cd",
+#                "Rose | CD8_modul5_Tnaive/cm"="#b3e2cd")
 ## end rose ####
 
 
@@ -177,52 +204,138 @@ head(poondf)
 table(poondf$geneprogram, useNA="ifany")
 table(is.na(poondf$gene))
 
-genes.long[["poon"]] <- poondf[,c("geneprogram", "gene")]
+poondf <- poondf %>%
+  select(geneprogram, gene) %>%
+  mutate(geneprogram_cat=case_when(
+    geneprogram=="Poon | CyclingTRM"  ~"Trm",
+    geneprogram=="Poon | CD4Naive"    ~"Tnaive",
+    geneprogram=="Poon | CD4TCM/TFH"  ~"Tcm",
+    geneprogram=="Poon | CD4TRM"      ~"Trm",
+    geneprogram=="Poon | CD4Treg"     ~"Treg",
+    geneprogram=="Poon | CD8MAIT"     ~"MAIT",
+    geneprogram=="Poon | CD8Naive"    ~"Tnaive",
+    geneprogram=="Poon | CD8TEM/TEMRA"~"Temra",
+    geneprogram=="Poon | CD8TRM"      ~"Trm"
+  ))
+
+genes.long[["poon"]] <- poondf
 
 # Define colors
-cols_poon <- c("Poon | CyclingTRM"="#f1e2cc",
-               "Poon | CD4Naive"="#b3e2cd",
-               "Poon | CD4TCM/TFH"="#f4cae4",
-               "Poon | CD4TRM"="#fff2ae",
-               "Poon | CD4Treg"="#fbb4ae",
-               "Poon | CD8MAIT"="#cbd5e8",
-               "Poon | CD8Naive"="#b3e2cd",
-               "Poon | CD8TEM/TEMRA"="#fdcdac",
-               "Poon | CD8TRM"="#fff2ae")
+# cols_poon <- c("Poon | CyclingTRM"="#f1e2cc",
+#                "Poon | CD4Naive"="#b3e2cd",
+#                "Poon | CD4TCM/TFH"="#f4cae4",
+#                "Poon | CD4TRM"="#fff2ae",
+#                "Poon | CD4Treg"="#fbb4ae",
+#                "Poon | CD8MAIT"="#cbd5e8",
+#                "Poon | CD8Naive"="#b3e2cd",
+#                "Poon | CD8TEM/TEMRA"="#fdcdac",
+#                "Poon | CD8TRM"="#fff2ae")
 ## end poon ####
+
+
+# ********************
+## 2.5. Terekhova data ####
+head(genes.terekhova)
+terekhovadf <- cbind(genes.terekhova_general[,"MAITcells"], genes.terekhova_cd4, genes.terekhova_cd8, genes.terekhova_gdt) %>%
+  pivot_longer(cols=everything(), names_to="geneprogram", values_to = "gene") %>%
+  mutate(geneprogram=paste0("Terekhova | ", geneprogram),
+         geneprogram_cat=case_when(
+           geneprogram=="Terekhova | MAITcells"                ~ "MAIT",
+           geneprogram=="Terekhova | CD4_Tnaive"               ~ "Tnaive",
+           geneprogram=="Terekhova | CD4_Tnaive_IFN"           ~ "Tnaive",
+           geneprogram=="Terekhova | CD4_Tfh"                  ~ "Tcm",
+           geneprogram=="Terekhova | CD4_Th1"                  ~ "Tcm",
+           geneprogram=="Terekhova | CD4_Th1/Th17"             ~ "Tem",
+           geneprogram=="Terekhova | CD4_Th17"                 ~ "Tem",
+           geneprogram=="Terekhova | CD4_Th22"                 ~ "Tem",
+           geneprogram=="Terekhova | CD4_Th2"                  ~ "Tcm",
+           geneprogram=="Terekhova | CD4_HLADRpos_memory"      ~ "Tem",
+           geneprogram=="Terekhova | CD4_Exhausted-like_memory"~ "Tcm",
+           geneprogram=="Terekhova | CD4_Terminal_effector"    ~ "Temra",
+           geneprogram=="Terekhova | CD4_Temra"                ~ "Temra",
+           geneprogram=="Terekhova | CD4_Treg_cytotoxic"       ~ "Treg",
+           geneprogram=="Terekhova | CD4_Treg_naive"           ~ "Treg",
+           geneprogram=="Terekhova | CD4_Treg_memory"          ~ "Treg",
+           geneprogram=="Terekhova | CD4_Treg_KLRB1+_RORC+"    ~ "Treg",
+           geneprogram=="Terekhova | CD8_Tnaive"        ~ "Tnaive",
+           geneprogram=="Terekhova | CD8_Tnaive_IFN"    ~ "Tnaive",
+           geneprogram=="Terekhova | CD8_Tcm_CCR4pos"   ~ "Tcm",
+           geneprogram=="Terekhova | CD8_Tcm_CCR4neg"   ~ "Tcm",
+           geneprogram=="Terekhova | CD8_Trm"           ~ "Trm",
+           geneprogram=="Terekhova | CD8_Tmem_KLRC2pos" ~ "other",
+           geneprogram=="Terekhova | CD8_Tem_GZMKpos"   ~ "Tem",
+           geneprogram=="Terekhova | CD8_HLADRpos"      ~ "Tem",
+           geneprogram=="Terekhova | CD8_proliferative" ~ "Tprolif",
+           geneprogram=="Terekhova | CD8_Tem_GZMBpos"   ~ "Temra",
+           geneprogram=="Terekhova | CD8_Temra"         ~ "Temra",
+           geneprogram=="Terekhova | CD8_NKTlike"       ~ "Temra",
+           geneprogram=="Terekhova | GD_naive"     ~ "Tnaive",
+           geneprogram=="Terekhova | GD_Vd2_GZMK+" ~ "Tem",
+           geneprogram=="Terekhova | GD_Vd2_GZMB+" ~ "Temra",
+           geneprogram=="Terekhova | GD_Vd1_GZMK+" ~ "Tem",
+           geneprogram=="Terekhova | GD_Vd1_GZMB+" ~ "Temra"
+         ))
+genes.long[["terekhova"]] <- terekhovadf
+
+# Define colors
+# cols_terekhova <- c(
+#   "Terekhova | CD8_Tnaive"       ="#b3e2cd",
+#   "Terekhova | CD8_Tnaive_IFN"   ="#b3e2cd",
+#   "Terekhova | CD8_Tcm_CCR4pos"  ="#f4cae4",
+#   "Terekhova | CD8_Tcm_CCR4neg"  ="#f4cae4",
+#   "Terekhova | CD8_Trm"          ="#4292c6",
+#   "Terekhova | CD8_Tmem_KLRC2pos"="#f2f2f2",
+#   "Terekhova | CD8_Tem_GZMKpos"  ="#cbd5e8",
+#   "Terekhova | CD8_HLADRpos"     ="#cbd5e8",
+#   "Terekhova | CD8_proliferative"="#e5d8bd",
+#   "Terekhova | CD8_Tem_GZMBpos"  ="#fdcdac",
+#   "Terekhova | CD8_Temra"        ="#fdcdac",
+#   "Terekhova | CD8_NKTlike"      ="#fdcdac"
+#   )
+
+## end terekhova ####
 
 
 # *******************************
 ## 2.5. Get it all in one df ####
 longdf <- bind_rows(genes.long, .id="dataset")
 table(longdf$dataset, useNA="ifany")
-# canogamez     gapin      poon      rose 
-#   387         4,068    26,463     1,672
+# canogamez     gapin      poon      rose   terekhova
+#   387         4,068    26,463     1,672       3,400
 
 # Remove any genes that we don't have in seur.human anyway
 longdf <- longdf %>%
   filter(gene %in% rownames(seur.pbmc)) %>%
-  # filter(geneprogram != "GEP7")
   filter(geneprogram != "GEP12")
 table(longdf$dataset, useNA="ifany")
-# canogamez     gapin      poon      rose 
-#   341         3,787    19,959     1,542
+# canogamez     gapin      poon      rose  terekhova
+#   341         3,787    19,959     1,542      3,145
 # table(longdf$geneprogram)
 
 # Create a colors vector & dataframe
-cols_alldatasets <- c(cols_cano, cols_rose, cols_poon)
-cols_df <- data.frame("geneprogram"=c(names(cols_cano), names(cols_rose), names(cols_poon)),
-                      "geneprogram_cat"=c("Tnaive", "Tcm", "Tem", "Temra", "Treg", # canogamez
-                                          "Tem", "Tcm", "Tem", "Tem", "Tnaive", # rose CD4
-                                          "Temra", "Tcm", "Tem", "Tnaive", "Tnaive", # rose CD8
-                                          "Trm", "Tnaive", "Tcm", "Trm", "Treg", "CD8 MAIT", "Tnaive", "Temra", "Trm"))
-cols_df <- cols_df %>%
-  mutate("color"=ifelse(geneprogram_cat=="Tnaive", "#b3e2cd",
-                 ifelse(geneprogram_cat=="Tcm", "#f4cae4",
-                 ifelse(geneprogram_cat=="Tem", "#cbd5e8",
-                 ifelse(geneprogram_cat=="Temra", "#fdcdac",
-                 ifelse(geneprogram_cat=="Treg", "#fbb4ae",
-                 ifelse(geneprogram_cat=="Trm", "#4292c6", "#8c6bb1")))))))
+# cols_alldatasets <- c(cols_cano, cols_rose, cols_poon, cols_terekhova)
+# cols_df <- data.frame("geneprogram"=c(names(cols_cano), names(cols_rose), names(cols_poon), names(cols_terekhova)),
+#                       "geneprogram_cat"=c("Tnaive", "Tcm", "Tem", "Temra", "Treg", # canogamez
+#                                           "Tem", "Tcm", "Tem", "Tem", "Tnaive", # rose CD4
+#                                           "Temra", "Tcm", "Tem", "Tnaive", "Tnaive", # rose CD8
+#                                           "Trm", "Tnaive", "Tcm", "Trm", "Treg", "CD8 MAIT", "Tnaive", "Temra", "Trm", # poon
+#                                           "Tnaive", "Tnaive", "Tcm", "Tcm", "Trm", "Tmem", "Tem", "Tem", "Tprolif", "Temra", "Temra", "Temra") # terekhova
+#                       )
+cols_df <- longdf %>%
+  select(geneprogram, geneprogram_cat) %>%
+  distinct() %>%
+  filter(!geneprogram %in% grep("GEP", unique(longdf$geneprogram), value=T)) %>%
+  mutate(color= case_when(
+    geneprogram_cat=="Tnaive"   ~ "#b3e2cd",
+    geneprogram_cat=="Tcm"      ~ "#f4cae4",
+    geneprogram_cat=="Tem"      ~ "#cbd5e8",
+    geneprogram_cat=="Temra"    ~ "#fdcdac",
+    geneprogram_cat=="Treg"     ~ "#fbb4ae",
+    geneprogram_cat=="Trm"      ~ "#4292c6",
+    geneprogram_cat=="MAIT" ~ "#8c6bb1",
+    geneprogram_cat=="Tprolif"  ~ "#e5d8bd",
+    geneprogram_cat=="other"     ~ "#f2f2f2",
+  ))
 cols_geneprogcat <- unique(cols_df$color)
 names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
 
@@ -776,11 +889,13 @@ ggplot(df.facet2bis,
 
 
 ### 3.4.2. Double-sided overlap (random & observed) ####
-genesets_overlap2_wjaccard <- NullOverlap_double(seuratobj=seur.pbmc,
-                                        df_geneprograms = longdf,
-                                        geneprograms_to_test=unique(longdf$geneprogram),
-                                        coefficient_to_compute="jaccardweight",
-                                        nbins=25, nrandom=1000)
+genesets_overlap2_wjaccard <- NullOverlap_double(
+  seuratobj=seur.pbmc,
+  df_geneprograms = longdf,
+  geneprograms_to_test=unique(longdf$geneprogram),
+  coefficient_to_compute="jaccardweight",
+  nbins=25, nrandom=1000
+  )
 
 genesets_overlap2_wjaccard %>%
   # keep geps of interest
@@ -819,15 +934,16 @@ genesets_overlap2_wjaccard %>%
 # Plot for figure
 order_programs <- c(cols_df %>% filter(geneprogram_cat=="Tnaive") %>% arrange(geneprogram) %>% pull(geneprogram),
                     cols_df %>% filter(geneprogram_cat=="Tcm") %>% arrange(geneprogram) %>% pull(geneprogram),
-                    cols_df %>% filter(geneprogram_cat=="Treg") %>% arrange(geneprogram) %>% pull(geneprogram),
-                    cols_df %>% filter(geneprogram_cat=="Trm") %>% arrange(geneprogram) %>% pull(geneprogram),
-                    "Poon | CD8MAIT", cols_df %>% filter(geneprogram_cat %in% c("Tem")) %>% arrange(geneprogram) %>% pull(geneprogram),
+                    # cols_df %>% filter(geneprogram_cat=="Treg") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    # cols_df %>% filter(geneprogram_cat=="Trm") %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat %in% c("MAIT")) %>% arrange(geneprogram) %>% pull(geneprogram),
+                    cols_df %>% filter(geneprogram_cat %in% c("Tem")) %>% arrange(geneprogram) %>% pull(geneprogram),
                     cols_df %>% filter(geneprogram_cat=="Temra") %>% arrange(geneprogram) %>% pull(geneprogram))
 library(ggh4x)
 genesets_overlap2_wjaccard %>%
   # keep geps of interest
   filter(geneprogram1 %in% c("GEP3", "GEP4", "GEP5", "GEP6")) %>%
-  filter(!geneprogram2 %in% c(grep("GEP", geneprogram2, value=T), "Rose | CD4_modul2_Tcm/em")) %>%
+  filter(!geneprogram2 %in% c(grep("GEP", geneprogram2, value=T))) %>%
   # add padj and keep only other dataset's programs that have at least one x% overlap
   group_by(geneprogram1) %>%
   mutate(padj=pval*n_distinct(geneprogram2)) %>%
@@ -840,31 +956,51 @@ genesets_overlap2_wjaccard %>%
   left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
-  filter(!geneprogram_cat %in% c("Treg", "Trm")) %>%
+  # remove some geneprograms that we're not interested in
+  filter(!geneprogram_cat %in% c("Treg", "Trm", "Tprolif", "other")) %>%
+  filter(!geneprogram2 %in% c(
+    grep("Tnaive_IFN", geneprogram2, value=T),
+    "Terekhova | CD4_Exhausted-like_memory",
+    grep("Terekhova \\| GD_", geneprogram2, value=T)
+    )) %>%
   # PLOT
   ggplot(aes(x=factor(geneprogram1, levels=rev(paste0("GEP", 1:12))), y=observedoverlap))+
     geom_bar(stat="identity", aes(fill=geneprogram_cat))+
     geom_point(aes(y=randomoverlap_mean), shape="|", size=3)+
     tidytext::scale_x_reordered() +
     geom_text(aes(label=padj_toplot), size=4, angle=0, hjust=-0.2)+
-    # facet_grid(geneprogram_cat~geneprogram2, space="free", scales="free")+
-    # facet_wrap(~factor(geneprogram2, levels=order_programs), ncol=6)+
-    facet_manual(~factor(geneprogram2, levels=order_programs), design=rbind(c(1:6), c(7:9,NA,NA,NA), c(10:15), c(16:18,NA,NA, NA)), scales="free_x")+
+    # facet_wrap(~geneprogram2)+
+    # facet_manual(~factor(geneprogram2, levels=order_programs), design=rbind(c(1:6), c(7:9,NA,NA,NA), c(10:15), c(16:18,NA,NA, NA)), scales="free_x")+
+    # facet_manual(~factor(geneprogram2, levels=order_programs), design=rbind(c(1:8), c(9:14,NA,NA), c(15:22), c(23:28,NA,NA)), scales="free_x")+
+    facet_manual(~factor(geneprogram2, levels=order_programs),
+                 design=rbind(
+                   c(1:6), c(7:8,NA,NA,NA,NA), # naive
+                   c(9:14), c(15:17,NA,NA,NA), # Tcm
+                   c(18:19,NA,NA,NA,NA), # MAIT
+                   c(20:25), c(26:30, NA), # Tem
+                   c(31:36), c(37:38,NA,NA,NA,NA) # Temra
+                   ),
+                 scales="free_x")+
     ylim(c(0,1))+
     coord_flip()+
     theme_cowplot()+
     scale_fill_manual(values=cols_geneprogcat, name="")+
     labs(y="Weighted Jaccard Index", x="", title="Poon: padj<0.001 & logFC>0.25")
-ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_nonimputgep_jaccardweighted_doublerandom_figure3.pdf",
-       width=20, height=10)
+ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/genelists_with_terekhova/geneoverlapcoeff_bars_nonimputgep_jaccardweighted_doublerandom_morelists_pruned.pdf",
+       width=20, height=20)
 
 
-# PLOT FOR SUPP FIGURE
+# COMPARE TEREKHOVA TO ITSELF
+terekorder <- terekhovadf %>%
+  select(geneprogram, geneprogram_cat) %>%
+  distinct() %>%
+  arrange(geneprogram_cat) %>%
+  pull(geneprogram)
 genesets_overlap2_wjaccard %>%
   # keep geps of interest
-  filter(geneprogram1 %in% grep("GEP", geneprogram1, value=T)) %>%
-  filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
-  # add padj
+  filter(geneprogram1 %in% grep("Terekhova", geneprogram1, value=T)) %>%
+  filter(geneprogram2 %in% grep("Terekhova", geneprogram2, value=T)) %>%
+  # add padj and keep only other dataset's programs that have at least one x% overlap
   group_by(geneprogram1) %>%
   mutate(padj=pval*n_distinct(geneprogram2)) %>%
   ungroup() %>%
@@ -874,25 +1010,104 @@ genesets_overlap2_wjaccard %>%
   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
   # PLOT
-  ggplot(aes(x=reorder_within(geneprogram2, -observedoverlap, geneprogram1), y=observedoverlap))+
-    geom_bar(stat="identity", aes(fill=geneprogram_cat))+
-    facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:12)), ncol=4, scales="free_x")+
-    geom_point(aes(y=randomoverlap_mean), shape="_", size=3)+
-    tidytext::scale_x_reordered() +
-    geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
-    ylim(c(0,1))+
-    scale_fill_manual(values=cols_geneprogcat, name="")+
-    theme_cowplot()+
-    theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=12), #legend.position="none",
-          axis.title.y=element_text(size=20),
-          strip.text.x=element_text(size=20),
-          legend.key.size = unit(1, 'cm'),
-          legend.text=element_text(size=20),
-          panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
-          plot.margin=margin(10,10,10,70))+
-    # labs(x="", y="% GEP genes found in each gene program")
-    labs(x="", y="Weighted Jaccard Index")
+  ggplot(aes(x=factor(geneprogram1, levels=rev(terekorder)), y=observedoverlap))+
+  geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+  geom_point(aes(y=randomoverlap_mean), shape="|", size=3)+
+  tidytext::scale_x_reordered() +
+  geom_text(aes(label=padj_toplot), size=4, angle=0, hjust=-0.2)+
+  facet_wrap(~factor(geneprogram2, levels=terekorder))+
+  ylim(c(0,1))+
+  coord_flip()+
+  theme_cowplot()+
+  scale_fill_manual(values=cols_geneprogcat, name="")+
+  labs(y="Weighted Jaccard Index", x="", title="")
+
+test <- genesets_overlap2_wjaccard %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% grep("Terekhova", geneprogram1, value=T)) %>%
+  filter(geneprogram2 %in% grep("Terekhova", geneprogram2, value=T)) %>%
+  select(geneprogram1, geneprogram2, observedoverlap) %>%
+  pivot_wider(names_from=geneprogram2, values_from=observedoverlap)
+test <- as.data.frame(test)
+rownames(test) <- test$geneprogram1
+test$geneprogram1 <- NULL
+test <- test[colnames(test), colnames(test)]
+test[,"Terekhova | MAITcells"] <- as.vector(unlist(test["Terekhova | MAITcells",]))
+test[lower.tri(test)] <- t(test)[lower.tri(t(test))]
+diag(test) <- NA
+
+jpeg("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/genelists_with_terekhova/geneoverlapcoeff_heatmap_terekhova.jpeg", width=2000, height=1500, res=200)
+pheatmap::pheatmap(test,
+                   # cluster_rows = F,
+                   # cluster_cols = F,
+                   annotation_row= cols_df %>% filter(geneprogram %in% grep("Terekhova", geneprogram, value=T)) %>% column_to_rownames("geneprogram") %>% select(geneprogram_cat),
+                   annotation_col= cols_df %>% filter(geneprogram %in% grep("Terekhova", geneprogram, value=T)) %>% column_to_rownames("geneprogram") %>% select(geneprogram_cat),
+                   annotation_colors = list("geneprogram_cat"=cols_geneprogcat)
+                   )
+dev.off()
+
+# PLOT FOR SUPP FIGURE
+# genesets_overlap2_wjaccard %>%
+#   # keep geps of interest
+#   filter(geneprogram1 %in% grep("GEP", geneprogram1, value=T)) %>%
+#   filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
+#   # add padj
+#   group_by(geneprogram1) %>%
+#   mutate(padj=pval*n_distinct(geneprogram2)) %>%
+#   ungroup() %>%
+#   distinct() %>%
+#   # last details (color, padj to plot)
+#   left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+#   mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+#                             ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+#   # PLOT
+#   ggplot(aes(x=reorder_within(geneprogram2, -observedoverlap, geneprogram1), y=observedoverlap))+
+#     geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+#     facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:12)), ncol=4, scales="free_x")+
+#     geom_point(aes(y=randomoverlap_mean), shape="_", size=3)+
+#     tidytext::scale_x_reordered() +
+#     geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
+#     ylim(c(0,1))+
+#     scale_fill_manual(values=cols_geneprogcat, name="")+
+#     theme_cowplot()+
+#     theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5, size=12), #legend.position="none",
+#           axis.title.y=element_text(size=20),
+#           strip.text.x=element_text(size=20),
+#           legend.key.size = unit(1, 'cm'),
+#           legend.text=element_text(size=20),
+#           panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
+#           plot.margin=margin(10,10,10,70))+
+#     # labs(x="", y="% GEP genes found in each gene program")
+#     labs(x="", y="Weighted Jaccard Index")
 # ggsave("./scripts-in-progress/human-PBMC/HumanData_22_CompareGeneLists/plots/geneoverlapcoeff_bars_jaccardweighted_doublerandom_allGEPs.pdf", width=18, height=20)
+
+
+
+# Bubble plot all gene lists together
+genesets_overlap2_wjaccard %>%
+  filter(geneprogram1 %in% grep("Terekhova", geneprogram1, value=T)) %>%
+  filter(geneprogram2 %in% grep("Terekhova", geneprogram2, value=T)) %>%
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2),
+         padj=ifelse(padj>1, 1, padj)) %>%
+  ungroup() %>%
+  distinct() %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  # filter(padj<0.05) %>%
+  # PLOT
+  ggplot(aes(x=geneprogram1, y=geneprogram2))+
+  geom_point(aes(size=observedoverlap, color=padj))+
+  # ggrepel::geom_text_repel(aes(label=padj_toplot), size=4, direction="y", nudge_y=1, force=4) +
+  # geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
+  scale_color_gradientn(colours = c("#b2182b", "#92c5de", "#92c5de", "#92c5de", "#92c5de"),
+                        values = c(0, 0.05, 0.5, 0.95, 1))+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust=0.5), #legend.position="none",
+        # panel.grid.major.y=element_line(colour="lightgrey", linetype=2),
+        # plot.margin=margin(10,10,10,70)
+        )
+  # labs(x="", y="Jaccard index")
 
 
 ### end double overlap ####

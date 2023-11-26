@@ -1,0 +1,70 @@
+geneprogram,ngenes,nribosomalgenes,percent_genes_ribosomal
+Terekhova | CD8_Tnaive,94,27,28.7
+Terekhova | GD_Vd2_GZMK+,94,25,26.6
+GEP3,354,72,20.3
+Terekhova | CD4_Tnaive,91,18,19.8
+CanoGamez | CD4_Tnaive,17,3,17.6
+Terekhova | GD_naive,95,10,10.5
+Poon | CD4Naive,2315,113,4.9
+Poon | CD8Naive,2627,118,4.5
+Terekhova | CD8_Trm,96,4,4.2
+CanoGamez | CD4_TCM,26,1,3.8
+Terekhova | CD8_Tnaive_IFN,95,3,3.2
+Poon | CyclingTRM,1480,31,2.1
+Terekhova | CD4_Th17,96,2,2.1
+Rose | CD4_modul4_Tem,76,1,1.3
+Terekhova | CD8_Tcm_CCR4pos,92,1,1.1
+Terekhova | MAITcells,88,1,1.1
+Poon | CD4TCM/TFH,1734,17,1
+Terekhova | CD4_Treg_KLRB1+_RORC+,97,1,1
+Terekhova | GD_Vd2_GZMB+,96,1,1
+Poon | CD8TEM/TEMRA,4263,39,0.9
+Rose | CD8_modul1_Temra,345,3,0.9
+Poon | CD4Treg,1420,11,0.8
+GEP11,567,4,0.7
+GEP4,324,2,0.6
+GEP6,329,2,0.6
+Rose | CD8_modul5_Tnaive/cm,172,1,0.6
+GEP1,207,1,0.5
+GEP10,371,2,0.5
+GEP5,220,1,0.5
+Poon | CD8MAIT,1637,8,0.5
+Rose | CD8_modul4_Tnaive,251,1,0.4
+GEP9,380,1,0.3
+Poon | CD4TRM,2393,8,0.3
+Poon | CD8TRM,2090,7,0.3
+GEP8,506,1,0.2
+CanoGamez | CD4_TEM,30,0,0
+CanoGamez | CD4_TEMRA,156,0,0
+CanoGamez | CD4_nTreg,112,0,0
+GEP2,194,0,0
+GEP7,335,0,0
+Rose | CD4_modul1_Tem/cm,131,0,0
+Rose | CD4_modul2_Tcm/em,65,0,0
+Rose | CD4_modul3_Tem/cm,77,0,0
+Rose | CD4_modul5_Tnaive,88,0,0
+Rose | CD8_modul2_Tcm/em,72,0,0
+Rose | CD8_modul3_Tem/emra,265,0,0
+Terekhova | CD4_Exhausted-like_memory,95,0,0
+Terekhova | CD4_HLADRpos_memory,89,0,0
+Terekhova | CD4_Temra,93,0,0
+Terekhova | CD4_Terminal_effector,94,0,0
+Terekhova | CD4_Tfh,100,0,0
+Terekhova | CD4_Th1,93,0,0
+Terekhova | CD4_Th1/Th17,96,0,0
+Terekhova | CD4_Th2,92,0,0
+Terekhova | CD4_Th22,90,0,0
+Terekhova | CD4_Tnaive_IFN,97,0,0
+Terekhova | CD4_Treg_cytotoxic,89,0,0
+Terekhova | CD4_Treg_memory,86,0,0
+Terekhova | CD4_Treg_naive,94,0,0
+Terekhova | CD8_HLADRpos,89,0,0
+Terekhova | CD8_NKTlike,93,0,0
+Terekhova | CD8_Tcm_CCR4neg,93,0,0
+Terekhova | CD8_Tem_GZMBpos,93,0,0
+Terekhova | CD8_Tem_GZMKpos,92,0,0
+Terekhova | CD8_Temra,90,0,0
+Terekhova | CD8_Tmem_KLRC2pos,87,0,0
+Terekhova | CD8_proliferative,96,0,0
+Terekhova | GD_Vd1_GZMB+,86,0,0
+Terekhova | GD_Vd1_GZMK+,84,0,0

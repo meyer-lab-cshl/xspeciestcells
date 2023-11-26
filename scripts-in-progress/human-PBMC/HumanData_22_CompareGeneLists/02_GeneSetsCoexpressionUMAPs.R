@@ -248,11 +248,11 @@ for(gp in unique(longdf$geneprogram)){
 # Compute cell scores
 names(geneprograms.list) <- gsub(" \\| ", "_", names(geneprograms.list))
 names(geneprograms.list) <- gsub("\\/", "_", names(geneprograms.list))
+# geneprograms.list <- geneprograms.list[63:69] # only GD programs
 seur.human <- AddModuleScore(seur.human, name = names(geneprograms.list), features=geneprograms.list, seed=1)
 
 # Remove the annoying numbers that are being added
-colnames(seur.human@meta.data)[14:22] <- stringr::str_sub(colnames(seur.human@meta.data)[14:22], end=-2)
-colnames(seur.human@meta.data)[23:48] <- stringr::str_sub(colnames(seur.human@meta.data)[23:48], end=-3)
+colnames(seur.human@meta.data)[14:82] <- names(geneprograms.list)
 
 # Sanity check GEPs
 SCpubr::do_FeaturePlot(seur.human, features=colnames(seur.human@meta.data)[14:24], reduction="UMAP_50", viridis.palette = "B", use_viridis = T, order=T, ncol=3)
@@ -263,7 +263,7 @@ SCpubr::do_FeaturePlot(seur.human, features=colnames(seur.human@meta.data)[14:24
 # ggsave("./data/human-PBMC/HumanData_23_GEPsPerBatch/GEP12.jpeg", width=20, height=10)
 
 # Checkpoint save
-# saveRDS(seur.human, "./data/human-PBMC/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-10-16.rds")
+# saveRDS(seur.human, "./data/human-PBMC/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-11-24.rds")
 seur.human <- readRDS("./data/human-PBMC/HumanData_22_CompareGeneLists/seuratobj_gepscores_allgenes_2023-10-16.rds")
 
 # UMAPs other datasets for supp figure
@@ -637,6 +637,8 @@ p12 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=30
   draw_label("CD8 Tcm/em (module 2)", hjust=0.5, y=0.98, size=30)
 p13 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Poon_CD4TCM_TFH")) +
   draw_label("CD4 Tcm/fh", hjust=0.5, y=0.98, size=30)
+p14 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP4", "Terekhova_CD8_Tcm_CCR4pos")) +
+  draw_label("CD8 Tcm CCR4+", hjust=0.5, y=0.98, size=30)
 
 
 # GEP5 (row1)
@@ -652,6 +654,8 @@ p22 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=30
   draw_label("CD4 Tem (module 4)", hjust=0.5, y=0.98, size=30)
 p23 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP5", "Poon_CD8MAIT")) +
   draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
+p24 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP5", "Terekhova_MAITcells")) +
+  draw_label("MAIT", hjust=0.5, y=0.98, size=30)
 
 
 # GEP6 (row 2)
@@ -667,12 +671,14 @@ p32 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=30
   draw_label("CD8 Temra (module 1)", hjust=0.5, y=0.98, size=30)
 p33 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Poon_CD8TEM_TEMRA")) +
   draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
+p34 <- PlotCoexpression(seuratobj=seur.human, colmatrix_stepsize=0, rasterdpi=300, features=c("GEP6", "Terekhova_CD8_Temra")) +
+  draw_label("CD8 Temra", hjust=0.5, y=0.98, size=30)
 
 
 
 # Combine into one
-plot_grid(plot_grid(p11,p12,p13, nrow = 1, scale=0.95),
-          plot_grid(p21,p22,p23, nrow = 1, scale=0.95),
-          plot_grid(p31,p32,p33, nrow = 1, scale=0.95),
+plot_grid(plot_grid(p11,p12,p13,p14, nrow = 1, scale=0.95),
+          plot_grid(p21,p22,p23,p24, nrow = 1, scale=0.95),
+          plot_grid(p31,p32,p33,p34, nrow = 1, scale=0.95),
           nrow=3, scale=0.95)
-ggsave("./data/human-PBMC/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid_gepnonimput.pdf", width=23, height=20)
+ggsave("./data/human-PBMC/HumanData_22_CompareGeneLists/umaps/final_umaps/combined_grid_gepnonimput_with_terekhova.pdf", width=32, height=20)

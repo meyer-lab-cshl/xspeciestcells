@@ -47,8 +47,8 @@ ggrastr::rasterise(SCpubr::do_FeaturePlot(seur,
                        viridis.palette = "B",
                        legend.title="GEP12 (cNMF usage)")+
                      scale_color_viridis_c(option="B"),
-                   layers="Point", dpi=300)
-ggsave("./scripts-in-progress/human-PBMC/HumanData_31_PlotGEP12/plots/gep12_usage_orderF.jpeg", width=10, height=11)
+                   layers="Point", dpi=100)
+# ggsave("./scripts-in-progress/human-PBMC/HumanData_31_PlotGEP12/plots/gep12_usage_orderF_lowres.pdf", width=10, height=11)
 
 ## /end ####
 

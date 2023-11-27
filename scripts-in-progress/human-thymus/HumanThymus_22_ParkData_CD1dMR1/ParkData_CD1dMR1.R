@@ -35,7 +35,7 @@ seur.human@meta.data <- cbind(seur.human@meta.data, seur_metadata)
 
 ## 2.1. HUMAN ####
 
-seur.human <- subset(seur.human, Anno_level_3 != "Epi_GCM2") # 34,073 cells
+seur.human <- subset(seur.human, Anno_level_3 != "Epi_GCM2") # remove parathyroid cells
 
 # Create a new level of annotation
 seur.human@meta.data$Anno_curated <- seur.human@meta.data$Anno_level_1
@@ -46,10 +46,10 @@ seur.human@meta.data$Anno_curated <- case_when(
   seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="DN" ~ "DN",
   seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="DP" ~ "DP",
   seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="SP" ~ "SP",
-  seur.human@meta.data$Anno_curated=="Innate_T"   & seur.human@meta.data$Anno_level_3=="NKT" ~ "NKT",
+  seur.human@meta.data$Anno_curated=="Innate_T"   & seur.human@meta.data$Anno_level_3=="NKT" ~ "SP",
   seur.human@meta.data$Anno_curated=="Innate_T"   & seur.human@meta.data$Anno_level_3=="γδT" ~ "γδT",
   seur.human@meta.data$Anno_curated=="Endo"  ~ "Endothelial",
-  seur.human@meta.data$Anno_curated=="Ery"   ~ "Erythrocytes",
+  seur.human@meta.data$Anno_curated=="Ery"   ~ "Erythrocyte",
   seur.human@meta.data$Anno_curated=="Mesen" ~ "Mesenchymal",
   seur.human@meta.data$Anno_curated=="Mgk"   ~ "Megakaryocyte",
   .default=seur.human@meta.data$Anno_curated
@@ -57,9 +57,23 @@ seur.human@meta.data$Anno_curated <- case_when(
 table(seur.human@meta.data$Anno_curated, useNA="ifany")
 table(seur.human@meta.data[,c("Anno_curated", "Anno_level_1")], useNA="ifany")
 
+# see how many cells there are per cluster
+as.data.frame(table(seur.human$Anno_curated)) %>%
+  mutate(totalcells=sum(Freq),
+         percentcells=Freq*100/totalcells) %>%
+  arrange(percentcells)
+hu_clusters_abundant <- levels(seur.human@meta.data$Anno_curated)[!levels(seur.human@meta.data$Anno_curated) %in% c("Megakaryocyte",
+                                                                                                                    "Endothelial",
+                                                                                                                    "Mast",
+                                                                                                                    "HSC",
+                                                                                                                    "Erythrocyte")]
+
+# remove clusters that contain less than 0.5% of all cells
+# seur.human <- subset(seur.human, !Anno_curated %in% c("Megakaryocyte", "Endothelial", "Mast", "HSC", "Erythrocyte"))
+
 seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
                                             levels=c(
-                                              "DN", "DP", "SP", "γδT", "NKT",
+                                              "DN", "DP", "SP", "γδT", #"NKT",
                                               "cTEC", "mTEC", #"TEC_other",
                                               "HSC",
                                               "Innate_lymphoid",
@@ -92,39 +106,18 @@ seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
 # TEC_other         554 (Anno_level_1 TEC 17,158)
 
 
-# celltypes_col <- c(
-#   "mTEC"     = "#D23740",
-#   "cTEC"     = "#A45E2E",
-#   "TEC_other"= "#DAB6B1",
-#   "DN"     = "#FDC687",
-#   "DP"     = "#ABB6BA",
-#   "SP"     = "#7FC97F",
-#   "γδT"    = "#5C56A6",
-#   "NKT"    = "#FDDA8D", #?
-#   "Mesen"  = "#77479F", #?
-#   "Myeloid"= "#FEF295",
-#   "B"      = "#DD0C83",
-#   "Endo"   = "#F8BE8B", #
-#   "Ery"    = "#CBB1C3", #
-#   "HSC"    = "#9DBBA8",
-#   "Innate_lymphoid" = "#E3EA9C", #?
-#   "Mast"   = "#BBAED1",
-#   "Mgk"    = "#E9BA9E" #
-#   )
-
-
 celltypes_col <- c(
   "mTEC"            = "#CE3F37",
   "cTEC"            = "#8C6143",
-  # "TEC_other"= "#666666",
+  "TEC_other"= "#666666",
   "DN"              = "#FDCB89",
   "DP"              = "#9ecae1",
   "SP"              = "#7FC97F",
   "γδT"             = "#B6B1C9",
-  "NKT"             = "#B35C20",
+  # "NKT"             = "#B35C20",
   "Mesenchymal"     = "#FEE791",
   "Myeloid"         = "#F2F59A",
-  "B"               = "#E31864",
+  "B"               = "#2171b5",
   "Endothelial"     = "#7D449D",
   "Erythrocyte"     = "#CD1588",
   "HSC"             = "#9BB5A4",
@@ -133,22 +126,22 @@ celltypes_col <- c(
   "Megakaryocyte"   = "#9ABDA4"
   )
 
-
+# UMAP
 Idents(seur.human) <- "Anno_curated"
 p1 <- ggrastr::rasterise(
   # ---
   SCpubr::do_DimPlot(seur.human,
                      reduction="UMAP",
-                     # idents.keep=c("cTEC", "mTEC", "DN", "DP", "SP", "γδT", "B", "Myeloid"),
+                     idents.keep=hu_clusters_abundant,
                      na.value="grey90",
                      legend.position="right", legend.ncol=1, font.size=30, legend.icon.size=10)+
     scale_color_manual(values=celltypes_col),
   # ---
   layers="Point", dpi=300)
-ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umap_clusters_test.pdf",
-       # plot=p1,
-       device = cairo_pdf,
-       width=12, height=8)
+# ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umap_clusters_highlight.pdf",
+#        plot=p1,
+#        device = cairo_pdf,
+#        width=12, height=8)
 
 
 # Plot CD1d expression
@@ -167,16 +160,18 @@ p2 <- ggrastr::rasterise(
 #        device = cairo_pdf,
 #        width=11, height=8)
 
-
 p1 | p2
 # ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umapcombined.pdf",
 #        device = cairo_pdf,
 #        width=20, height=8)
 
 # Plot CD1d expression per cluster in violin plot
+seur.human.abundant <- subset(seur.human, Anno_curated %in% hu_clusters_abundant)
+
 ggrastr::rasterise(
-  VlnPlot(seur.human, features = "CD1D", group.by = "Anno_curated", raster=F)+
-    scale_fill_manual(values=celltypes_col_human)+
+  VlnPlot(seur.human.abundant,
+          features = "CD1D", group.by = "Anno_curated", raster=F)+
+    scale_fill_manual(values=celltypes_col)+
     labs(y="CD1D (normalized expression)", title="", x="")+
     theme(legend.position="none",
           axis.text.x=element_text(size=15),
@@ -187,10 +182,11 @@ ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1d
        width=8, height=6)
 
 # Plot CD1d expression per cluster in bubble plot
-DotPlot(seur.human,
+DotPlot(seur.human.abundant,
         features=rev(c("CD1D", "SLAMF1", "SLAMF6")),
         group.by="Anno_curated",
         cols=c("lightgrey", "darkred"),
+        col.min=0,
         dot.scale=10
         )+
   coord_flip()+
@@ -199,7 +195,7 @@ DotPlot(seur.human,
   labs(x="", y="")
 ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_dotplot_cd1d.pdf",
        device = cairo_pdf,
-       width=9, height=4.5)
+       width=8, height=4.5)
 
 ## end 2.1. ####
 
@@ -207,15 +203,14 @@ ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1d
 ## 2.2. MOUSE ####
 seur.mouse <- subset(seur.mouse, age != "Rag1KO") # 34,073 cells
 
-
 seur.mouse@meta.data$Anno_curated <- case_when(
   seur.mouse@meta.data$cell.types=="B"    ~ "B",
   seur.mouse@meta.data$cell.types %in% c("CD4+T", "CD8+T", "Treg", "αβT(entry)")  ~ "SP",
   seur.mouse@meta.data$cell.types %in% c("DN(P)", "DN(Q)")                        ~ "DN",
   seur.mouse@meta.data$cell.types %in% c("DP(P)", "DP(Q)")                        ~ "DP",
-  seur.mouse@meta.data$cell.types=="Endo" ~ "Endo",
-  seur.mouse@meta.data$cell.types=="Ery"  ~ "Ery",
-  seur.mouse@meta.data$cell.types %in% c("Fb", "VSMC")                            ~ "Mesen",
+  seur.mouse@meta.data$cell.types=="Endo" ~ "Endothelial",
+  seur.mouse@meta.data$cell.types=="Ery"  ~ "Erythrocyte",
+  seur.mouse@meta.data$cell.types %in% c("Fb", "VSMC")                            ~ "Mesenchymal",
   seur.mouse@meta.data$cell.types %in% c("HSC", "NMP")                            ~ "HSC",
   seur.mouse@meta.data$cell.types %in% c("IELpA", "IELpB/NKT", "NK")              ~ "Innate_lymphoid",
   seur.mouse@meta.data$cell.types %in% c("DC1", "DC2", "aDC", "pDC")              ~ "Myeloid",
@@ -226,7 +221,6 @@ seur.mouse@meta.data$Anno_curated <- case_when(
   seur.mouse@meta.data$cell.types == "γδT"   ~ "γδT"
 )
 
-
 seur.mouse@meta.data$Anno_curated <- factor(seur.mouse@meta.data$Anno_curated,
                                             levels=c(
                                               "DN", "DP", "SP", "γδT",
@@ -235,22 +229,31 @@ seur.mouse@meta.data$Anno_curated <- factor(seur.mouse@meta.data$Anno_curated,
                                               "Innate_lymphoid",
                                               "B",
                                               "Myeloid",
-                                              "Ery",
-                                              "Mesen",
-                                              "Endo"
+                                              "Erythrocyte",
+                                              "Mesenchymal",
+                                              "Endothelial"
                                             ))
 
-celltypes_col_mouse <- celltypes_col[levels(seur.mouse@meta.data$Anno_curated)]
+# see how many cells there are per cluster
+as.data.frame(table(seur.mouse$Anno_curated)) %>%
+  mutate(totalcells=sum(Freq),
+         percentcells=Freq*100/totalcells) %>%
+  arrange(percentcells)
+ms_clusters_abundant <- levels(seur.mouse@meta.data$Anno_curated)[!levels(seur.mouse@meta.data$Anno_curated) %in% c("Endothelial",
+                                                                                                                    "HSC",
+                                                                                                                    "Erythrocyte")]
 
+
+# UMAP
 p3 <- ggrastr::rasterise(
   # ---
   SCpubr::do_DimPlot(seur.mouse,
                      reduction="umap",
                      group.by="Anno_curated",
-                     # idents.keep=c("DN", "DP","SP", "mTEC", "cTEC"),
+                     idents.keep=ms_clusters_abundant,
                      na.value="grey90",
                      legend.position="right", legend.ncol=1, font.size=30, legend.icon.size=10)+
-    scale_color_manual(values=celltypes_col_mouse),
+    scale_color_manual(values=celltypes_col),
   # ---
   layers="Point", dpi=300)
 
@@ -265,15 +268,17 @@ p4 <- ggrastr::rasterise(
   layers="Point", dpi=300)
 
 p3 | p4
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_umapcombined_allclusters.pdf",
-#        device = cairo_pdf,
-#        width=20, height=8)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_umapcombined.pdf",
+       device = cairo_pdf,
+       width=20, height=8)
 
 
 # plot Cd1d1 expression in all clusters
+seur.mouse.abundant <- subset(seur.mouse, Anno_curated %in% ms_clusters_abundant)
+
 ggrastr::rasterise(
-  VlnPlot(seur.mouse, features = "Cd1d1", group.by = "Anno_curated", raster=F)+
-    scale_fill_manual(values=celltypes_col_mouse)+
+  VlnPlot(seur.mouse.abundant, features = "Cd1d1", group.by = "Anno_curated", raster=F)+
+    scale_fill_manual(values=celltypes_col)+
     labs(y="Cd1d1 (normalized expression)", title="", x="")+
     theme(legend.position="none",
           axis.text.x=element_text(size=15),
@@ -285,10 +290,11 @@ ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots
 
 
 # Plot CD1d expression per cluster in bubble plot
-DotPlot(seur.mouse,
+DotPlot(seur.mouse.abundant,
         features=rev(c("Cd1d1", "Slamf1", "Slamf6")),
         group.by="Anno_curated",
         cols=c("lightgrey", "darkred"),
+        col.min = 0,
         dot.scale=10
 )+
   coord_flip()+
@@ -297,7 +303,7 @@ DotPlot(seur.mouse,
   labs(x="", y="")
 ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_dotplot_cd1d1.pdf",
        device = cairo_pdf,
-       width=9, height=4.5)
+       width=8, height=4.5)
 
 
 

@@ -33,36 +33,96 @@ seur.human@meta.data <- cbind(seur.human@meta.data, seur_metadata)
 # 2. PLOT UMAPs ####
 # ******************
 
-celltypes_col <- c("#7FC97F", "#ABB6BA", "#D7B5B4", "#FDC687", "#FEF295", "#9BB5A4", "#5C56A6", "#DD0C83", "#D23740", "#A45E2E")
-names(celltypes_col) <- c("T_naive", "DP", "CD8αα(I)", "DN", "Mono", "B_naive", "γδT", "B_memory", "mTEC", "cTEC")
-
-
 ## 2.1. HUMAN ####
 
-# Clusters
+# Create a new level of annotation
+seur.human@meta.data$Anno_curated <- seur.human@meta.data$Anno_level_1
+seur.human@meta.data$Anno_curated <- case_when(
+  seur.human@meta.data$Anno_curated=="TEC" & seur.human@meta.data$Anno_level_3=="cTEC" ~ "cTEC",
+  seur.human@meta.data$Anno_curated=="TEC" & seur.human@meta.data$Anno_level_3=="mTEC" ~ "mTEC",
+  seur.human@meta.data$Anno_curated=="TEC" & seur.human@meta.data$Anno_level_3!="cTEC" & seur.human@meta.data$Anno_level_3!="mTEC" ~ "TEC_other",
+  seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="DN" ~ "DN",
+  seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="DP" ~ "DP",
+  seur.human@meta.data$Anno_curated=="T"   & seur.human@meta.data$Anno_level_2=="SP" ~ "SP",
+  seur.human@meta.data$Anno_curated=="Innate_T"   & seur.human@meta.data$Anno_level_3=="NKT" ~ "NKT",
+  seur.human@meta.data$Anno_curated=="Innate_T"   & seur.human@meta.data$Anno_level_3=="γδT" ~ "γδT",
+  .default=seur.human@meta.data$Anno_curated
+)
+table(seur.human@meta.data$Anno_curated, useNA="ifany")
+table(seur.human@meta.data[,c("Anno_curated", "Anno_level_1")], useNA="ifany")
+
+seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
+                                            levels=c(
+                                              "DN", "DP", "SP", "γδT", "NKT",
+                                              "cTEC", "mTEC", "TEC_other",
+                                              "B",
+                                              "Myeloid",
+                                              "Mesen",
+                                              "Endo",
+                                              "Ery",
+                                              "HSC",
+                                              "Innate_lymphoid",
+                                              "Mast",
+                                              "Mgk"
+                                            ))
+
+# expect:
+# B               5,082                          
+# Endo              115
+# Ery               644
+# HSC               501
+# Innate_lymphoid 2,176
+# NKT               349 (Anno_level_1 Innate_T 2931)
+# γδT             2,582 (Anno_level_1 Innate_T 2931)
+# Mast              148
+# Mesen          21,290
+# Mgk                36
+# Myeloid         4,801
+# DN             42,474 (Anno_level_1 T 201,019)
+# DP            108,418 (Anno_level_1 T 201,019)
+# SP             50,127 (Anno_level_1 T 201,019)
+# cTEC           10,156 (Anno_level_1 TEC 17,158)
+# mTEC            6,448 (Anno_level_1 TEC 17,158)
+# TEC_other         554 (Anno_level_1 TEC 17,158)
+
+
 # colnames(seur.human@meta.data)
-table(seur.human@meta.data$Anno_level_3, useNA="ifany")
-seur.human@meta.data[seur.human@meta.data$Anno_level_3=="TEC(neuro)", "Anno_level_3"] <- "mTEC"
-seur.human@meta.data[seur.human@meta.data$Anno_level_3=="TEC(myo)", "Anno_level_3"] <- "mTEC"
-table(seur.human@meta.data$Anno_level_3=="mTEC", useNA="ifany") # should have 6928 mTEC
+# table(seur.human@meta.data$Anno_level_3, useNA="ifany")
+# seur.human@meta.data[seur.human@meta.data$Anno_level_3=="TEC(neuro)", "Anno_level_3"] <- "mTEC"
+# seur.human@meta.data[seur.human@meta.data$Anno_level_3=="TEC(myo)", "Anno_level_3"] <- "mTEC"
+# table(seur.human@meta.data$Anno_level_3=="mTEC", useNA="ifany") # should have 6928 mTEC
 
 
-Idents(seur.human) <- "Anno_level_3"
+celltypes_col <- c(
+  "mTEC"   = "#D23740",
+  "cTEC"   = "#A45E2E",
+  "DN"     = "#FDC687",
+  "DP"     = "#ABB6BA",
+  "SP"     = "#7FC97F",
+  "γδT"    = "#5C56A6",
+  "Mesen"  = "#D7B5B4",
+  "Myeloid"= "#FEF295",
+  "B"      = "#DD0C83"
+  )
+
+
+Idents(seur.human) <- "Anno_curated"
 p1 <- ggrastr::rasterise(
   # ---
   SCpubr::do_DimPlot(seur.human,
                      reduction="UMAP",
-                     # group.by="Anno_level_fig1",
                      # group.by="Anno_level_3",
                      # cells.highlight = rownames(seur.human@meta.data[seur.human@meta.data$Anno_level_3 %in% c("cTEC", "DN", "DP"),]),
-                     idents.keep=c("cTEC", "mTEC", "DN", "DP", "CD8αα(I)", "Mono", "T_naive", "γδT", "B_naive", "B_memory"),
+                     idents.keep=c("cTEC", "mTEC", "DN", "DP", "SP", "γδT", "B", "Myeloid"),
                      na.value="grey90",
                      legend.position="right", legend.ncol=1, font.size=30, legend.icon.size=10)+
-    # scale_color_manual(values=grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Accent"))(11))
     scale_color_manual(values=celltypes_col),
   # ---
   layers="Point", dpi=300)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_clusters_level3_highlight.pdf", width=12, height=8)
+# ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umap_clusters_highlight.pdf",
+#        plot=p1,
+#        device = cairo_pdf,
+#        width=12, height=8)
 
 
 # Plot CD1d expression
@@ -76,29 +136,51 @@ p2 <- ggrastr::rasterise(
   scale_colour_scico(palette = "lapaz", alpha = 0.8, begin = 0.1, end = 0.85, direction = -1),
   # ---
   layers="Point", dpi=300)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umap_cd1d_orderT.pdf", width=11, height=8)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umap_cd1d_orderT.pdf",
+#        p2,
+#        device = cairo_pdf,
+#        width=11, height=8)
 
 
 p1 | p2
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/umaphuman_combined.pdf", width=20, height=8)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_umapcombined.pdf",
+       device = cairo_pdf,
+       width=20, height=8)
 
 # Plot CD1d expression per cluster in violin plot
 celltypes_col2 <- grDevices::colorRampPalette(RColorBrewer::brewer.pal(8, "Accent"))(30)
 celltypes_col2 <- celltypes_col2[!celltypes_col2 %in% celltypes_col]
-celltypes_col2 <- celltypes_col2[1:28]
-names(celltypes_col2) <- unique(seur.human$Anno_level_3)[!unique(seur.human$Anno_level_3) %in% names(celltypes_col)]
+celltypes_col2 <- celltypes_col2[1:8]
+names(celltypes_col2) <- unique(seur.human$Anno_curated)[!unique(seur.human$Anno_curated) %in% names(celltypes_col)]
 celltypes_col_human <- c(celltypes_col, celltypes_col2)
 
 ggrastr::rasterise(
-  VlnPlot(seur.human, features = "CD1D", group.by = "Anno_level_3", raster=F)+
+  VlnPlot(seur.human, features = "CD1D", group.by = "Anno_curated", raster=F)+
     scale_fill_manual(values=celltypes_col_human)+
     labs(y="CD1D (normalized expression)", title="", x="")+
     theme(legend.position="none",
           axis.text.x=element_text(size=15),
           axis.title.y=element_text(size=15)),
   layers="Point", dpi=300)
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots/vlnplt_cd1d_level3.pdf", width=12, height=6)
+ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_vlnplt_cd1d.pdf",
+       device = cairo_pdf,
+       width=8, height=6)
 
+
+# Plot CD1d expression per cluster in bubble plot
+DotPlot(seur.human,
+        features=rev(c("CD1D", "SLAMF1", "SLAMF6")),
+        group.by="Anno_curated",
+        cols=c("lightgrey", "darkred"),
+        dot.scale=10
+        )+
+  coord_flip()+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=45, hjust=1))+
+  labs(x="", y="")
+ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_dotplot_cd1d.pdf",
+       device = cairo_pdf,
+       width=9, height=4.5)
 
 
 

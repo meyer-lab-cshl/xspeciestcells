@@ -57,35 +57,6 @@ seur.human@meta.data$Anno_curated <- case_when(
 table(seur.human@meta.data$Anno_curated, useNA="ifany")
 table(seur.human@meta.data[,c("Anno_curated", "Anno_level_1")], useNA="ifany")
 
-# see how many cells there are per cluster
-as.data.frame(table(seur.human$Anno_curated)) %>%
-  mutate(totalcells=sum(Freq),
-         percentcells=Freq*100/totalcells) %>%
-  arrange(percentcells)
-hu_clusters_abundant <- levels(seur.human@meta.data$Anno_curated)[!levels(seur.human@meta.data$Anno_curated) %in% c("Megakaryocyte",
-                                                                                                                    "Endothelial",
-                                                                                                                    "Mast",
-                                                                                                                    "HSC",
-                                                                                                                    "Erythrocyte")]
-
-# remove clusters that contain less than 0.5% of all cells
-# seur.human <- subset(seur.human, !Anno_curated %in% c("Megakaryocyte", "Endothelial", "Mast", "HSC", "Erythrocyte"))
-
-seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
-                                            levels=c(
-                                              "DN", "DP", "SP", "γδT", #"NKT",
-                                              "cTEC", "mTEC", #"TEC_other",
-                                              "HSC",
-                                              "Innate_lymphoid",
-                                              "B",
-                                              "Myeloid",
-                                              "Mast",
-                                              "Erythrocyte",
-                                              "Megakaryocyte",
-                                              "Mesenchymal",
-                                              "Endothelial"
-                                            ))
-
 # expect:
 # B               5,082                          
 # Endo              115
@@ -104,6 +75,34 @@ seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
 # cTEC           10,156 (Anno_level_1 TEC 17,158)
 # mTEC            6,448 (Anno_level_1 TEC 17,158)
 # TEC_other         554 (Anno_level_1 TEC 17,158)
+
+seur.human@meta.data$Anno_curated <- factor(seur.human@meta.data$Anno_curated,
+                                            levels=c(
+                                              "DN", "DP", "SP", "γδT", #"NKT",
+                                              "cTEC", "mTEC", #"TEC_other",
+                                              "HSC",
+                                              "Innate_lymphoid",
+                                              "B",
+                                              "Myeloid",
+                                              "Mast",
+                                              "Erythrocyte",
+                                              "Megakaryocyte",
+                                              "Mesenchymal",
+                                              "Endothelial"
+                                            ))
+
+# see how many cells there are per cluster
+as.data.frame(table(seur.human$Anno_curated)) %>%
+  mutate(totalcells=sum(Freq),
+         percentcells=Freq*100/totalcells) %>%
+  arrange(percentcells)
+hu_clusters_abundant <- levels(seur.human@meta.data$Anno_curated)[!levels(seur.human@meta.data$Anno_curated) %in% c("Megakaryocyte",
+                                                                                                                    "Endothelial",
+                                                                                                                    "Mast",
+                                                                                                                    "HSC",
+                                                                                                                    "Erythrocyte")]
+# remove clusters that contain less than 0.5% of all cells
+# seur.human <- subset(seur.human, !Anno_curated %in% c("Megakaryocyte", "Endothelial", "Mast", "HSC", "Erythrocyte"))
 
 
 celltypes_col <- c(

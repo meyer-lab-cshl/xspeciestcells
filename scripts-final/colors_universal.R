@@ -51,7 +51,7 @@ cols_thym_mait <- c("MAIT_c0" = "#d8443c", "MAIT_c1" = "#e09351", "MAIT_c2" = "g
 
 # PBMC cluster colors by lineage
 cols_pbmc_cd4  <- c("0" = "#DF6D27FF", "1" = "#E9BE99FF", "2" = "grey40", "3" = "#7EF547", "4" = "grey70", "5" = "#a40000")
-cols_pbmc_cd8  <- c("0" = "#DF6D27FF", "1" = "#E9BE99FF", "2" = "grey40", "3" = "grey70", "4" = "#a40000", "5" = "gold")
+cols_pbmc_cd8  <- c("0" = "#DF6D27FF", "1" = "#E9BE99FF", "2" = "grey70", "3" = "#a40000", "4" = "gold")
 cols_pbmc_gdt  <- c("0" = "#DF6D27FF", "1" = "grey40", "2" = "#AB6969", "3" = "#a40000", "4" = "gold")
 cols_pbmc_nkt  <- c("0" = "#DF6D27FF", "1" = "#5B8DB9FF", "2" = "grey40", "3" = "#a40000")
 cols_pbmc_mait <- c("0" = "grey90", "1" = "grey70", "2" = "grey40", "3" = "#a40000")

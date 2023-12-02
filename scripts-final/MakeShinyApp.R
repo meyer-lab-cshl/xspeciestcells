@@ -389,8 +389,6 @@ seur.human@assays$RNA@counts[1:5,1:5]
 # hgnc_symbol: 3199 missing (genes_missing_hgnc)
 # uniprot_gn_symbol: 3627 missing (genes_missing_uniprot)
 
-
-#
 mat <- seur.human@assays$RNA@counts
 h5_target <- "./data/clean_data/rawcounts_human_integrated_object_23_12_01.h5"
 ref_name <- "hu_rawcounts_postqc"
@@ -493,11 +491,14 @@ seur.ms@meta.data$ms_replicate <- case_when(
 
 seur.ms@meta.data <- seur.ms@meta.data %>% relocate(ms_replicate, .after=study)
 seur.ms@meta.data <- seur.ms@meta.data %>% relocate(tcell_lineage, .after=percent_mitochondrial)
+
+table(seur.ms@meta.data[,c("ms_replicate", "tcell_lineage")], useNA="ifany")
+table(seur.ms@meta.data[,c("study", "tcell_lineage")], useNA="ifany")
 ## /end ####
 
 
 #___________________________
-## 3.3. Add annotation ####
+## 3.3. Add annotation and save ####
 seur.ms@meta.data$clusters_annotation <- case_when(
   seur.ms@meta.data$clusters_integrated_data==0  ~ "0_immature",
   seur.ms@meta.data$clusters_integrated_data==1  ~ "1_GD_Gzma",
@@ -525,19 +526,17 @@ seur.ms@meta.data$clusters_annotation <- factor(seur.ms@meta.data$clusters_annot
   "typeIII",
   "12"
 ))
-
 table(seur.ms@meta.data[,c("clusters_integrated_data", "clusters_annotation")], useNA="ifany")
-## /end ####
 
 
-#___________________________
-## 3.3. Third analysis ####
+seur.ms@meta.data$tcell_lineage <- case_when(
+  seur.ms@meta.data$tcell_lineage=="NKT"  ~ "iNKT",
+  .default=seur.ms@meta.data$tcell_lineage
+)
+table(seur.ms@meta.data$tcell_lineage, useNA="ifany")
 
-## /end ####
-
-
-#___________________________
-## 3.4. Fourth analysis ####
+# Save seurat
+saveRDS(seur.ms, "./data/clean_data/seurat_mouse_integrated_object_23_12_02.rds")
 
 ## /end ####
 
@@ -548,6 +547,99 @@ table(seur.ms@meta.data[,c("clusters_integrated_data", "clusters_annotation")], 
 # 4. SHINY APP ####
 # *****************
 
+library(ShinyCell)
+
+#___________________________
+## 4.1. Human page ####
+
+# Create shiny config human
+scConf_hu = createConfig(seur.human, maxLevels = 60)
+scConf_hu = modColours(scConf_hu, meta.to.mod = "tcell_lineage", new.colours = c("#74c476", "#df65b0", "#9e9ac8", "#08519c", "#9ecae1"))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "tissue", new.colours = c("#b2182b", "#9ecae1"))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "clusters_integrated_data", new.colours = as.vector(cols_integrated))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "clusters_per_lineage", new.colours = as.vector(c(cols_pbmc_cd4, #0 to 5
+                                                                                                  cols_thym_cd4, #0 to 6
+                                                                                                  cols_pbmc_cd8, #0 to 4
+                                                                                                  cols_thym_cd8, #0 to 5
+                                                                                                  cols_pbmc_gdt, #0 to 4
+                                                                                                  cols_thym_gdt, #0 to 7
+                                                                                                  cols_pbmc_nkt, #0 to 3
+                                                                                                  cols_thym_nkt, #0 to 6
+                                                                                                  cols_pbmc_mait, #0 to 3
+                                                                                                  cols_thym_mait #0 to 6
+                                                                                                  )))
+makeShinyFiles(obj=seur.human,
+               scConf=scConf_hu,
+               gex.assay = "RNA",
+               gex.slot = "data",
+               gene.mapping = FALSE,
+               shiny.prefix = "sc_hu",
+               shiny.dir = "shinyAppMulti/",
+               default.gene1 = "CD4",
+               default.gene2 = "CD8A",
+               default.multigene = c("CCR6","RORC","GZMB","GNLY","TBX21",
+                                     "IFNG","EOMES","NKG7","GZMK","ZBTB16",
+                                     "KLRB1", "JUNB", "JUN", "FOS", "SELL",
+                                     "CCR7", "SATB1", "CCR9", "CD8B", "CD40LG",
+                                     "CD4", "IFI6", "STAT1", "CTLA4", "FOXP3", "IKZF4",
+                                     "NR4A1", "EGR3", "EGR1", "TRGC2", "TRDC", "GNG4",
+                                     "PDCD1", "CD8A", "AQP3", "CD1C", "RAG1", "PTCRA"),
+               default.dimred = c("umap50_1", "umap50_2"))
+## /end ####
+
+
+#___________________________
+## 4.2. Mouse page ####
+
+# Create shiny config mouse
+scConf_ms = createConfig(seur.ms)
+scConf_ms = modColours(scConf_ms, meta.to.mod = "tcell_lineage", new.colours = c("#08519c", "#9e9ac8", "#9ecae1"))
+scConf_ms = modColours(scConf_ms,
+                       meta.to.mod = "clusters_integrated_data",
+                       new.colours = c("#f4c40f","#b75347", "#d8443c", "#e09351",
+                                       "#2b9b81", "#421401", "#92c051", "#9f5691",
+                                       "#17154f", "#74c8c3", "#5a97c1", "gold", "#a40000")
+                       )
+scConf_ms = modColours(scConf_ms,
+                       meta.to.mod = "clusters_annotation",
+                       new.colours = c("#f4c40f","#b75347", "#d8443c", "#e09351", "#421401",
+                                       "#92c051", "#17154f", "#9f5691", "#5a97c1", "#a40000")
+                       )
+
+makeShinyFiles(obj=seur.ms,
+               scConf=scConf_ms,
+               gex.assay = "RNA",
+               gex.slot = "data",
+               gene.mapping = FALSE,
+               shiny.prefix = "sc_ms",
+               shiny.dir = "shinyAppMulti/",
+               default.gene1 = "Cd4",
+               default.gene2 = "Cd8a",
+               default.multigene = c("Ccl5", "Fosb", "Rorc", "Gzmb", "Nkg7", "Zbtb16",
+                                     "Tesc", "Lef1", "Tox", "Gzma", "S1pr1", "Klf2"),
+               default.dimred = c("UMAP_1", "UMAP_2"))
+## /end ####
+
+
+#___________________________
+## 4.3. Shiny app ####
+
+# Code for shiny app
+citation = list(
+  author  = "L.Loh, S.Carcy, et al.",
+  title   = "",
+  journal = "",
+  volume  = "",
+  page    = "",
+  year    = "", 
+  doi     = "",
+  link    = "")
+makeShinyCodesMulti(
+  shiny.title = "ShinyCell Human & Mouse innate T cell development",
+  shiny.footnotes = citation,
+  shiny.prefix = c("sc_hu", "sc_ms"),
+  shiny.headers = c("Human data", "Mouse data"), 
+  shiny.dir = "shinyAppMulti/")
 
 
 

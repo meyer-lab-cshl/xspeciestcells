@@ -1,3 +1,12 @@
+# Purpose: Quality control & integration of raw data
+# Author: Laurent Gapin
+# Date: February 2023
+
+
+
+
+# 1.IMPORT ---------------------- 
+## 1.1. Import librairies -------
 library(Seurat)
 library(tidyverse)
 library(SeuratWrappers)
@@ -31,115 +40,131 @@ library(supCPM)
 library(SCPA)
 library(pheatmap)
 
-####START of the analysis
+
+## 1.2. Import data -------------
 all.data <- list()
-all.data[['CD4_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag01_hs_CD4SP/CUTHY08BDRscRNA_seq_051321_SampleTag01_hs_CD4SP_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
-all.data[['CD8_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag02_hs_CD8SP/CUTHY08BDRscRNA_seq_051321_SampleTag02_hs_CD8SP_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
+# Batch A
+all.data[['CD4_1_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag01_hs_CD4SP/CUTHY08BDRscRNA_seq_051321_SampleTag01_hs_CD4SP_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['CD8_1_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag02_hs_CD8SP/CUTHY08BDRscRNA_seq_051321_SampleTag02_hs_CD8SP_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
 all.data[['CD1a_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag04_hs_CD1a/CUTHY08BDRscRNA_seq_051321_SampleTag04_hs_CD1a_RSEC_MolsPerCell.csv",
                                         header = TRUE, skip = 8)
 all.data[['CD1c_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY08/CUTHY08BDRscRNA_seq_051321_SampleTag03_hs_CD1c/CUTHY08BDRscRNA_seq_051321_SampleTag03_hs_CD1c_RSEC_MolsPerCell.csv",
                                         header = TRUE, skip = 8)
-all.data[['CD4_2_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag05_hs_CD4_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
-all.data[['CD8_2_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag06_hs_CD8_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
+# Batch B
+all.data[['CD4_2_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag05_hs_CD4_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['CD8_2_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag06_hs_CD8_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
 all.data[['MAIT_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag07_hs_MAIT_RSEC_MolsPerCell.csv",
                                         header = TRUE, skip = 8)
-all.data[['NKT_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag08_hs_NKT_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
-all.data[['CD4_3_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag09_hs_CD4_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
-all.data[['CD8_3_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag10_hs_CD8_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
+all.data[['NKT_1_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY11/CUTHY11BDRscRNA_seq_091621_SampleTag08_hs_NKT_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+# Batch C
+all.data[['CD4_3_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag09_hs_CD4_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['CD8_3_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag10_hs_CD8_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
 all.data[['MAIT_2_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag11_hs_MAIT_RSEC_MolsPerCell.csv",
                                         header = TRUE, skip = 8)
-all.data[['NKT_2_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag12_hs_NKT_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 8)
-all.data[['GD_1_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag01_hs_GD_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 8)
-all.data[['CD4_1_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag02_hs_CD4_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 8)
-all.data[['CD8_1_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag03_hs_CD8_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 8)
-all.data[['MAIT_1_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag04_hs_MAIT_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 8)
-all.data[['NKT_1_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag05_hs_iNKT_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 8)
-all.data[['GD_1_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag06_hs_GD_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 8)
-all.data[['NKT_3_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag05_hs_NKT/CUThy13_220225_SampleTag05_hs_NKT_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 7)
-all.data[['CD4_4_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag01_hs_CD4/CUThy13_220225_SampleTag01_hs_CD4_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 7)
-all.data[['CD8_4_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag02_hs_CD8/CUThy13_220225_SampleTag02_hs_CD8_RSEC_MolsPerCell.csv",
-                                       header = TRUE, skip = 7)
-all.data[['GD_2_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag03_hs_GD/CUThy13_220225_SampleTag03_hs_GD_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 7)
+all.data[['NKT_2_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag12_hs_NKT_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['GD_1_Thymus']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY12/CUTHY12BDRscRNA_seq_211101_SampleTag01_hs_GD_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+# Batch E
+all.data[['CD4_1_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag02_hs_CD4_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['CD8_1_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag03_hs_CD8_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['MAIT_1_PBMC']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag04_hs_MAIT_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['NKT_1_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag05_hs_iNKT_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+all.data[['GD_1_PBMC']]     <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/HC_55/HC55_BDRscRNA_seq_211129_SampleTag06_hs_GD_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 8)
+# Batch D
+all.data[['NKT_3_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag05_hs_NKT/CUThy13_220225_SampleTag05_hs_NKT_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD4_4_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag01_hs_CD4/CUThy13_220225_SampleTag01_hs_CD4_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_4_Thymus']]  <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag02_hs_CD8/CUThy13_220225_SampleTag02_hs_CD8_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_2_Thymus']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag03_hs_GD/CUThy13_220225_SampleTag03_hs_GD_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
 all.data[['MAIT_3_Thymus']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/CUTHY13/CUThy13_220225_SampleTag04_hs_MAIT/CUThy13_220225_SampleTag04_hs_MAIT_RSEC_MolsPerCell.csv",
                                         header = TRUE, skip = 7)
-all.data[['NKT_2_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag08_hs_NKT41/PBMC_LRS_05_06_220225_SampleTag08_hs_NKT41_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['MAIT_2_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag09_hs_MAIT41/PBMC_LRS_05_06_220225_SampleTag09_hs_MAIT41_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 7)
-all.data[['GD_2_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag07_hs_GD41/PBMC_LRS_05_06_220225_SampleTag07_hs_GD41_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['NKT_3_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag11_hs_NKT68/PBMC_LRS_05_06_220225_SampleTag11_hs_NKT68_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['MAIT_3_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag12_hs_MAIT68/PBMC_LRS_05_06_220225_SampleTag12_hs_MAIT68_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 7)
-all.data[['CD8_2_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag04_hs/KIR3DL3-02-18-22_SampleTag04_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_3_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag07_hs/KIR3DL3-02-18-22_SampleTag07_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD8_3_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag05_hs/KIR3DL3-02-18-22_SampleTag05_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_4_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag08_hs/KIR3DL3-02-18-22_SampleTag08_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD8_4_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag06_hs/KIR3DL3-02-18-22_SampleTag06_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_5_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag09_hs/KIR3DL3-02-18-22_SampleTag09_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD8_5_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag01_hs/3DL3-LRS08-09-11_SampleTag01_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_6_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag04_hs/3DL3-LRS08-09-11_SampleTag04_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD8_6_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag02_hs/3DL3-LRS08-09-11_SampleTag02_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_7_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag05_hs/3DL3-LRS08-09-11_SampleTag05_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD8_7_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag03_hs/3DL3-LRS08-09-11_SampleTag03_hs_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_8_PBMC']] <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag06_hs/3DL3-LRS08-09-11_SampleTag06_hs_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['CD4_2_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag01_hs_CD4_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag01_hs_CD4_LRS08_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['CD8_8_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag02_hs_CD8_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag02_hs_CD8_LRS08_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_9_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag03_hs_GD_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag03_hs_GD_LRS08_RSEC_MolsPerCell.csv",
-                                    header = TRUE, skip = 7)
-all.data[['MAIT_4_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag04_hs_MAIT_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag04_hs_MAIT_LRS08_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 7)
-all.data[['NKT_4_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag05_hs_NKT_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag05_hs_NKT_LRS08_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['CD4_3_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag06_hs_CD4_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag06_hs_CD4_LRS05_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['CD8_9_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag07_hs_CD8_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag07_hs_CD8_LRS05_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['GD_10_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag08_hs_GD_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag08_hs_GD_LRS05_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['CD4_4_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag09_hs_CD4_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag09_hs_CD4_LRS06_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
-all.data[['CD8_10_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag10_hs_CD8_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag10_hs_CD8_LRS06_RSEC_MolsPerCell.csv",
-                                      header = TRUE, skip = 7)
-all.data[['GD_11_PBMC']] <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag11_hs_GD_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag11_hs_GD_LRS06_RSEC_MolsPerCell.csv",
-                                     header = TRUE, skip = 7)
+# Batch F
+all.data[['NKT_2_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag08_hs_NKT41/PBMC_LRS_05_06_220225_SampleTag08_hs_NKT41_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['MAIT_2_PBMC']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag09_hs_MAIT41/PBMC_LRS_05_06_220225_SampleTag09_hs_MAIT41_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_2_PBMC']]     <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag07_hs_GD41/PBMC_LRS_05_06_220225_SampleTag07_hs_GD41_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['NKT_3_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag11_hs_NKT68/PBMC_LRS_05_06_220225_SampleTag11_hs_NKT68_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['MAIT_3_PBMC']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06/PBMC_LRS_05_06_220225_SampleTag12_hs_MAIT68/PBMC_LRS_05_06_220225_SampleTag12_hs_MAIT68_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+# Batch G
+all.data[['CD8_2_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag04_hs/KIR3DL3-02-18-22_SampleTag04_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_3_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag07_hs/KIR3DL3-02-18-22_SampleTag07_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_3_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag05_hs/KIR3DL3-02-18-22_SampleTag05_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_4_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag08_hs/KIR3DL3-02-18-22_SampleTag08_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_4_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag06_hs/KIR3DL3-02-18-22_SampleTag06_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_5_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/KIR3DL3-02-18-22_SampleTag09_hs/KIR3DL3-02-18-22_SampleTag09_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+# Batch H
+all.data[['CD8_5_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag01_hs/3DL3-LRS08-09-11_SampleTag01_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_6_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag04_hs/3DL3-LRS08-09-11_SampleTag04_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_6_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag02_hs/3DL3-LRS08-09-11_SampleTag02_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_7_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag05_hs/3DL3-LRS08-09-11_SampleTag05_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_7_PBMC']]    <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag03_hs/3DL3-LRS08-09-11_SampleTag03_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_8_PBMC']]     <- read.csv("/Volumes/Samsung_T5/KIR3DL3/3DL3-LRS08-09-11_SampleTag06_hs/3DL3-LRS08-09-11_SampleTag06_hs_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+# Batch I
+all.data[['CD4_2_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag01_hs_CD4_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag01_hs_CD4_LRS08_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_8_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag02_hs_CD8_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag02_hs_CD8_LRS08_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_9_PBMC']]     <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag03_hs_GD_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag03_hs_GD_LRS08_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['MAIT_4_PBMC']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag04_hs_MAIT_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag04_hs_MAIT_LRS08_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['NKT_4_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag05_hs_NKT_LRS08/LRS_05_06_BDscRNAseq_220506_SampleTag05_hs_NKT_LRS08_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD4_3_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag06_hs_CD4_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag06_hs_CD4_LRS05_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_9_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag07_hs_CD8_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag07_hs_CD8_LRS05_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_10_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag08_hs_GD_LRS05/LRS_05_06_BDscRNAseq_220506_SampleTag08_hs_GD_LRS05_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD4_4_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag09_hs_CD4_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag09_hs_CD4_LRS06_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['CD8_10_PBMC']]   <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag10_hs_CD8_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag10_hs_CD8_LRS06_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
+all.data[['GD_11_PBMC']]    <- read.csv("/Volumes/Samsung_T5/Human_MAIT_NKT/Data/PBMC_LRS_05_06_2/LRS_05_06_BDscRNAseq_220506_SampleTag11_hs_GD_LRS06/LRS_05_06_BDscRNAseq_220506_SampleTag11_hs_GD_LRS06_RSEC_MolsPerCell.csv",
+                                        header = TRUE, skip = 7)
 
+
+
+
+# 2.CREATE SEURAT OBJECT ---------------------- 
+## 2.1. Count matrix --------------------------
 shared_genes <- Reduce(intersect, lapply(X = all.data, FUN = function(x){ colnames(x) }))
 shared_genes <- shared_genes[!shared_genes %in% 'Cell_Index']
 sample.names <- names(all.data)
 
+# Transform count matrices into seurat object
 all.seurat <- lapply(X = 1:length(all.data), FUN = function(x){
   sample.counts <- all.data[[x]]
   rownames(sample.counts) <- sample.counts$Cell_Index
@@ -149,12 +174,15 @@ all.seurat <- lapply(X = 1:length(all.data), FUN = function(x){
   seurat.obj <- CreateSeuratObject(counts = transpose.df, project = sample.names[x])
 })
 
+# Merge everything in one seurat object
 merged_seurat <- merge(x = all.seurat[[1]], y = all.seurat[2:length(all.seurat)],
                        add.cell.ids = sample.names, project = 'Human_Innate')
 
+# Get mitochondrial content
 merged_seurat[["percent.mt"]] <- PercentageFeatureSet(merged_seurat, pattern = "^MT\\.")
 
-## 3. ADD METADATA ####
+
+## 2.2. Metadata --------------------------
 sample_metadata <- read.csv(file = "/Volumes/Samsung_T5/Human_MAIT_NKT/Data/Metadata.csv") %>% 
   dplyr::select(-sample.id, -X, -file)
 
@@ -163,10 +191,13 @@ cell_metadata <- sample_metadata[merged_seurat$orig.ident,]
 for(meta in names(cell_metadata)){
   merged_seurat[[meta]] <- cell_metadata[[meta]]
 }
+merged_seurat@meta.data # sanity check
 
-merged_seurat@meta.data
 
-## 2. REMOVE CELLS WITH LOW MITOCHONDRIAL CONTENT ####
+
+
+# 3.QUALITY CONTROL ------------------------------------------------------
+## 3.1. Remove cells with low mitochondrial content ---------------------- 
 
 # Look at qc measures per batch & donor
 VlnPlot(merged_seurat, features="percent.mt", group.by = "Batch", split.by = "Donor") + labs(x = "Batch", fill = "Donor")
@@ -177,8 +208,6 @@ seur.list <- lapply(X = seur.list, FUN = function(x) {
   threshold <- attr(scuttle::isOutlier(x@meta.data$percent.mt, type="higher"), "thresholds")["higher"]
   print(threshold)
   x <- subset(x, subset= percent.mt<threshold)
-  # x@meta.data$highmt <- ifelse(x@meta.data$percent.mt > threshold, TRUE, FALSE)
-  # return(x)
 })
 # Combine seurat object back together
 filtered_seurat <- purrr::reduce(seur.list, function(x, y){
@@ -186,10 +215,12 @@ filtered_seurat <- purrr::reduce(seur.list, function(x, y){
 })
 
 # Sanity check
-VlnPlot(filtered_seurat, features="percent.mt", 
-        group.by="Batch", split.by="Donor") + 
+VlnPlot(filtered_seurat, features="percent.mt", group.by="Batch", split.by="Donor") + 
   labs(x = "Batch", fill = "Donor", title="post-filtering")
 
+
+## 3.2. Remove cells with low count --------------------------------------
+# Look at qc measures
 VlnPlot(filtered_seurat, 
         features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), 
         ncol = 3, 
@@ -199,27 +230,35 @@ VlnPlot(filtered_seurat,
 filtered_seurat <- subset(filtered_seurat, 
                           subset = nFeature_RNA > 500 & nFeature_RNA < 3000)
 
-# Create violin plots to visualize the distribution of features
-# in the filtered dataset
+# Create violin plots to visualize the distribution of features in the filtered dataset
 VlnPlot(filtered_seurat, 
         features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), 
         ncol = 3, 
         pt.size = 0)
 
-# Get the expression counts for each gene and filter out genes
-# that are not expressed in at least 20 cells, as well as the
-# mitochondrial genes
+
+## 3.3. Remove low-expressed genes and MT genes --------------------------
+# Get the expression counts for each gene
 counts <- GetAssayData(object = filtered_seurat, 
                        slot = "counts")
+# Filter out genes that are not expressed in at least 20 cells
 nonzero <- counts > 0
 keep_genes <- Matrix::rowSums(nonzero) >= 20
+# Filter out mitochondrial genes
 genes.to.remove <- rownames(filtered_seurat)[grep(rownames(filtered_seurat), pattern = "^MT\\.")]
 keep_genes[which(names(keep_genes) %in% genes.to.remove)] = FALSE
 filtered_counts <- counts[keep_genes, ]
 
-# Create a new Seurat object with the filtered counts and metadata
+# Create a new Seurat object with genes of interest
 filtered_seurat <- CreateSeuratObject(filtered_counts, meta.data = filtered_seurat@meta.data)
 
+
+
+
+# 4.PREPROCESSING -------------------------------------
+## 4.1. Preprocessing WITHOUT integration -------------
+
+### 4.1.1. Normalize, HVGs, Scale, PCA ----------------
 # Normalize the data using the log normalization method
 filtered_seurat <- NormalizeData(object = filtered_seurat,
                                  normalization.method = "LogNormalize", 
@@ -239,14 +278,15 @@ filtered_seurat <- ScaleData(filtered_seurat,
 filtered_seurat <- RunPCA(filtered_seurat, 
                           assay = "RNA",
                           seed.use = 42, 
-                          npcs = 50, 
+                          npcs = 50,
                           weight.by.var = TRUE)
 
 # Create an elbow plot to help choose the number of PCs to use
 ElbowPlot(filtered_seurat, ndims = 50, reduction = "pca")
 
-# Use uniform manifold approximation and projection (UMAP) to 
-# visualize the data in two dimensions
+
+### 4.1.2. UMAP & Clustering --------------------------
+# Use uniform manifold approximation and projection (UMAP) to visualize the data in two dimensions
 pcs <- 20
 filtered_seurat <- RunUMAP(filtered_seurat, 
                            dims = 1:pcs, 

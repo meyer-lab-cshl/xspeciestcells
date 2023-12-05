@@ -9,13 +9,13 @@
 # code below for installation is from https://github.com/SGDDNB/ShinyCell
 
 # Install required packages for ShinyCell
-# reqPkg = c("data.table", "Matrix", "hdf5r", "reticulate", "ggplot2", 
+# reqPkg = c("data.table", "Matrix", "hdf5r", "reticulate", "ggplot2",
 #            "gridExtra", "glue", "readr", "RColorBrewer", "R.utils", "Seurat")
 # newPkg = reqPkg[!(reqPkg %in% installed.packages()[,"Package"])]
 # if(length(newPkg)){install.packages(newPkg)}
 
 # Install required packages for the Shiny app interface to work
-# reqPkg = c("shiny", "shinyhelper", "data.table", "Matrix", "DT", "hdf5r", 
+# reqPkg = c("shiny", "shinyhelper", "data.table", "Matrix", "DT", "hdf5r",
 #            "reticulate", "ggplot2", "gridExtra", "magrittr", "ggdendro")
 # newPkg = reqPkg[!(reqPkg %in% installed.packages()[,"Package"])]
 # if(length(newPkg)){install.packages(newPkg)}

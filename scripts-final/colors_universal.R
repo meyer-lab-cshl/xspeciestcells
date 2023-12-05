@@ -42,6 +42,19 @@ cols_cellstate <- c("Tnaive"= "#b3e2cd",
                     "Temra" = "#fdcdac",
                     "Treg" = "#fbb4ae")
 
+# GEP assignment
+cols_GEPs <-  c("gep1"  =  "#f5bb50",
+                "gep2"  =  "#ada43b",
+                "gep3"  =  "#b0799a",
+                "gep4"  =  "#f6b3b0",
+                "gep5"  =  "#bf3729",
+                "gep6"  =  "#17154f",
+                "gep7"  =  "#355828",
+                "gep8"  =  "#e48171",
+                "gep9"  =  "#2f357c",
+                "gep10" =  "#6c5d9e",  
+                "gep11" =  "#e69b00")
+
 # PBMC cluster colors by lineage
 cols_thym_cd4  <- c("CD4_c0" = "#DF6D27FF", "CD4_c1" = "#E9BE99FF", "CD4_c2" = "grey40", "CD4_c3" = "grey70", "CD4_c4" = "#a40000", "CD4_c5" = "gold", "CD4_c6"="#72bcd5")
 cols_thym_cd8  <- c("CD8_c0" = "#DF6D27FF", "CD8_c1" = "grey40", "CD8_c2" = "#AB6969", "CD8_c3" = "#a40000", "CD8_c4" = "gold", "CD8_c5" = "#9f5691")

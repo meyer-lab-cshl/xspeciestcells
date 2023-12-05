@@ -369,7 +369,8 @@ head(as.data.frame(seur.human@meta.data))
 saveRDS(seur.human, "./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
 
 # Save metadata
-write_csv(as.data.frame(seur.human@meta.data), "./data/clean_data/metadata_human_integrated_object_23_12_01.csv")
+mtdata <- as.data.frame(seur.human@meta.data) %>% rownames_to_column("cellid")
+write_csv(mtdata, "./data/clean_data/metadata_human_integrated_object_23_12_01.csv")
 
 # SAVE COUNTS
 seur.human@assays$RNA@counts[1:5,1:5]
@@ -498,7 +499,7 @@ table(seur.ms@meta.data[,c("study", "tcell_lineage")], useNA="ifany")
 
 
 #___________________________
-## 3.3. Add annotation and save ####
+## 3.3. Add annotation ####
 seur.ms@meta.data$clusters_annotation <- case_when(
   seur.ms@meta.data$clusters_integrated_data==0  ~ "0_immature",
   seur.ms@meta.data$clusters_integrated_data==1  ~ "1_GD_Gzma",
@@ -527,13 +528,38 @@ seur.ms@meta.data$clusters_annotation <- factor(seur.ms@meta.data$clusters_annot
   "12"
 ))
 table(seur.ms@meta.data[,c("clusters_integrated_data", "clusters_annotation")], useNA="ifany")
+## /end ####
 
 
+#___________________________
+## 3.4. Update TCR info & save ####
+
+# rename lineage
 seur.ms@meta.data$tcell_lineage <- case_when(
   seur.ms@meta.data$tcell_lineage=="NKT"  ~ "iNKT",
   .default=seur.ms@meta.data$tcell_lineage
 )
 table(seur.ms@meta.data$tcell_lineage, useNA="ifany")
+
+# rename TCR info
+seur.ms@meta.data$inkt_mait_tcr <- case_when(
+  seur.ms@meta.data$iNKT_TCR==1 & seur.ms@meta.data$TRAV %in% c("TRAV11", "TRAV11D") & seur.ms@meta.data$TRAJ=="TRAJ18"  ~ "TRAV11-TRAJ18 (iNKT)",
+  seur.ms@meta.data$MAIT_TCR==1 & seur.ms@meta.data$TRAV=="TRAV1" & seur.ms@meta.data$TRAJ=="TRAJ33" ~ "TRAV1-TRAJ33 (MAIT)",
+  is.na(seur.ms@meta.data$iNKT_TCR) | is.na(seur.ms@meta.data$MAIT_TCR) ~ "NA",
+  .default=NA
+)
+table(seur.ms@meta.data[,c("iNKT_TCR", "inkt_mait_tcr")], useNA="ifany")
+table(seur.ms@meta.data[,c("MAIT_TCR", "inkt_mait_tcr")], useNA="ifany")
+table(seur.ms@meta.data[,c("TRAV", "inkt_mait_tcr")], useNA="ifany")
+table(seur.ms@meta.data[,c("TRAJ", "inkt_mait_tcr")], useNA="ifany")
+
+seur.ms@meta.data$iNKT_TCR <- NULL
+seur.ms@meta.data$MAIT_TCR <- NULL
+seur.ms@meta.data <- seur.ms@meta.data %>% relocate(inkt_mait_tcr, .after="tcell_lineage")
+
+# reorder columns a bit
+seur.ms@meta.data <- seur.ms@meta.data %>% relocate(study, .after="percent_mitochondrial")
+seur.ms@meta.data <- seur.ms@meta.data %>% relocate(ms_replicate, .after="study")
 
 # Save seurat
 saveRDS(seur.ms, "./data/clean_data/seurat_mouse_integrated_object_23_12_02.rds")
@@ -551,10 +577,34 @@ library(ShinyCell)
 
 #___________________________
 ## 4.1. Human page ####
+# seur.human <- readRDS("./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
+
+# Keep only the integrated umap embedding for shiny app
+seur.human@reductions$pca <- NULL
+seur.human@reductions$initial_umap <- NULL
+seur.human@reductions$harmony <- NULL
+seur.human[["umap"]] <- CreateDimReducObject(embeddings = seur.human@reductions$umap_integrated@cell.embeddings,
+                                             loadings   = seur.human@reductions$umap_integrated@feature.loadings,
+                                             projected  = seur.human@reductions$umap_integrated@feature.loadings.projected,
+                                             key="UMAP_",
+                                             assay="RNA")
+seur.human@reductions$umap_integrated <- NULL
+
+
+# Make donor a factor
+seur.human@meta.data$donor_id <- factor(seur.human@meta.data$donor_id, levels=1:13)
+seur.human@meta.data$GEP_with_max_usage <- factor(seur.human@meta.data$GEP_with_max_usage, levels=paste0("GEP", 1:11))
 
 # Create shiny config human
 scConf_hu = createConfig(seur.human, maxLevels = 60)
-scConf_hu = modColours(scConf_hu, meta.to.mod = "tcell_lineage", new.colours = c("#74c476", "#df65b0", "#9e9ac8", "#08519c", "#9ecae1"))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "tcell_lineage", new.colours = c("#74c476", "#df65b0", "#08519c", "#9e9ac8", "#9ecae1"))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "tcell_lineage_tissue",
+                       new.colours = c("#74c476", "#c7e9c0",
+                                       "#df65b0", "#d4b9da",
+                                       "#08519c", "#4292c6",
+                                       "#9e9ac8", "#dadaeb",
+                                       "#9ecae1", "#deebf7")
+                       )
 scConf_hu = modColours(scConf_hu, meta.to.mod = "tissue", new.colours = c("#b2182b", "#9ecae1"))
 scConf_hu = modColours(scConf_hu, meta.to.mod = "clusters_integrated_data", new.colours = as.vector(cols_integrated))
 scConf_hu = modColours(scConf_hu, meta.to.mod = "clusters_per_lineage", new.colours = as.vector(c(cols_pbmc_cd4, #0 to 5
@@ -568,6 +618,12 @@ scConf_hu = modColours(scConf_hu, meta.to.mod = "clusters_per_lineage", new.colo
                                                                                                   cols_pbmc_mait, #0 to 3
                                                                                                   cols_thym_mait #0 to 6
                                                                                                   )))
+scConf_hu = modColours(scConf_hu, meta.to.mod = "GEP_with_max_usage", new.colours = as.vector(cols_GEPs))
+
+# set default metadata to display
+scConf_hu = modDefault(scConf_hu, "clusters_integrated_data", "tissue")
+                  
+# create data files
 makeShinyFiles(obj=seur.human,
                scConf=scConf_hu,
                gex.assay = "RNA",
@@ -584,12 +640,17 @@ makeShinyFiles(obj=seur.human,
                                      "CD4", "IFI6", "STAT1", "CTLA4", "FOXP3", "IKZF4",
                                      "NR4A1", "EGR3", "EGR1", "TRGC2", "TRDC", "GNG4",
                                      "PDCD1", "CD8A", "AQP3", "CD1C", "RAG1", "PTCRA"),
-               default.dimred = c("umap50_1", "umap50_2"))
+               default.dimred = c("UMAP_1", "UMAP_2"))
 ## /end ####
 
 
 #___________________________
 ## 4.2. Mouse page ####
+
+# seur.ms <- readRDS("./data/clean_data/seurat_mouse_integrated_object_23_12_02.rds")
+
+# Keep only the integrated umap for the shiny app
+seur.ms@reductions$mnn <- NULL
 
 # Create shiny config mouse
 scConf_ms = createConfig(seur.ms)
@@ -605,7 +666,15 @@ scConf_ms = modColours(scConf_ms,
                        new.colours = c("#f4c40f","#b75347", "#d8443c", "#e09351", "#421401",
                                        "#92c051", "#17154f", "#9f5691", "#5a97c1", "#a40000")
                        )
+scConf_ms = modColours(scConf_ms,
+                       meta.to.mod = "inkt_mait_tcr",
+                       new.colours = c("grey80", "#9ecae1", "#9e9ac8")
+)
 
+# set default metadata to display
+scConf_ms = modDefault(scConf_ms, "clusters_integrated_data", "study")
+
+# create data files
 makeShinyFiles(obj=seur.ms,
                scConf=scConf_ms,
                gex.assay = "RNA",
@@ -640,8 +709,3 @@ makeShinyCodesMulti(
   shiny.prefix = c("sc_hu", "sc_ms"),
   shiny.headers = c("Human data", "Mouse data"), 
   shiny.dir = "shinyAppMulti/")
-
-
-
-
-

@@ -9,4 +9,5 @@
 *.Rproj
 data/*
 shinyAppHumanGapinData/*
+shinyAppMulti/*
 *.nb.html

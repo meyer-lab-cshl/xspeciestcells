@@ -8,7 +8,6 @@
 .Rprofile
 *.Rproj
 data/*
-scripts-in-progress/*
 shinyAppHumanGapinData/*
 shinyAppMulti/*
 *.nb.html

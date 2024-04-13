@@ -196,6 +196,33 @@ ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1d
        device = cairo_pdf,
        width=8, height=4.5)
 
+# Plot all SFR expression
+# Plot CD1d expression per cluster in bubble plot
+DotPlot(seur.human.abundant,
+        features=rev(c("CD1D",
+                       "SLAMF1",
+                       "LY9", # SLAMF3
+                       "CD244", # SLAMF4
+                       "CD84", # SLAMF5
+                       "SLAMF6",
+                       "SLAMF7",
+                       "SLAMF8",
+                       "SLAMF9"
+                       )),
+        group.by="Anno_curated",
+        cols=c("lightgrey", "darkred"),
+        col.min=0,
+        dot.scale=10
+)+
+  coord_flip()+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=45, hjust=1))+
+  labs(x="", y="")
+ggsave(filename="~/Desktop/Meyer-lab/Conferences/2024-02_CD1MR1-Hobart/presentation/hu_dotplot_slamfs.pdf",
+       device = cairo_pdf,
+       width=8, height=6)
+
+
 ## end 2.1. ####
 
 

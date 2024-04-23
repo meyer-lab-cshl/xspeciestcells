@@ -1,0 +1,339 @@
+---
+title: "Chapter X - R Notebook"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 5, fig.height = 5,
+                      warning=FALSE, message=FALSE,
+                      root.dir = "~/Projects/phd/")
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+
+source("~/Projects/phd/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# Import human data
+seur_human <- readRDS("./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
+
+# Import mouse data
+seur_tinn_mouse <- readRDS("./data/cross-species/08_innateT_cross_species/Analysis_all_mouse-Tinn_filtered_seurat_MNN.rds")
+DimPlot(seur_tinn_mouse,  group.by="New_clusters", label=T)
+
+# Import GEP genes
+genes.gep <- read.csv("./data/human-PBMC/HumanData_27_ComparisonGEPsGarner/limited_nonimputed_genes_per_gep_post_rank_threshold_k12.csv", row.names=1)
+genes.gep <- gather(genes.gep, key=gep, value=gene, colnames(genes.gep)) %>%
+  filter(!is.na(gene)) %>%
+  mutate(gep=sub("_", "", gep))
+# head(genes.gep)
+# table(genes.gep$gep, useNA="ifany")
+# table(is.na(genes.gep$gene))
+```
+
+
+
+
+# FUNCTIONS
+```{r define-functions}
+lineage_genesignature <- function(seuratobj, genesignature, file_name="no"){
+  min_gene_score <- min(seuratobj@meta.data[,genesignature])
+  min_cutoff <- 0
+  if(min_gene_score>0){min_cutoff <- min_gene_score}
+  
+  p <- do_FeaturePlot(
+    seuratobj,
+    features = genesignature,
+    min.cutoff=min_cutoff,
+    use_viridis = T,
+    viridis.palette = "E",
+    legend.position="right",
+    order=T,
+    pt.size = 1.5,
+    raster=F
+    # raster.dpi=2048,
+    # pt.size=10
+  )
+  # p <- ggrastr::rasterise(
+  #   p,
+  #   layers="Point",
+  #   dpi=300
+  # )
+  print(p)
+  # if(file_name != "no"){
+  #   ggsave(paste0("~/Projects/phd/data/figures/chapter_04/figs_unfinished/section1/", file_name),
+  #          plot=p,
+  #          width=9, height=6)
+  # }
+}
+
+plot_DotPlot <- function(seurobj, group, features, scaling=T){
+  # get plot data
+  p <- Seurat::DotPlot(
+    seurobj,
+    group.by=group,
+    features=features,
+    scale=scaling
+  )
+  # plot in personalized way
+  p <- ggplot(p$data, aes(x=id, y=features.plot, fill=avg.exp.scaled, size=pct.exp))+
+    geom_point(color="black", shape=21)+
+    # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
+    scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
+    theme_bw()+
+    theme(axis.text.y=element_text(face="italic"),
+          axis.text.x=element_text(angle=45, hjust=1))+
+    labs(y="", x="")
+  # different color scale if scaled or not
+  if(scaling==T){
+    p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")
+  } else{
+    p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="normalized\navg expression")
+  }
+  return(p)
+}
+```
+
+
+
+
+# SCORE GEPs ON MOUSE OBJECT
+
+## Get orthologous genes
+```{r gep-orthologous}
+# import ortholog table
+ortholog.df <- read.csv("~/Projects/phd/data/cross_species/ortholog_table_ms_hu_full.csv")
+
+# check how many GEP genes are found in ortholog table
+table(genes.gep$gene %in% ortholog.df$hu_symbol, useNA="ifany")
+
+# subset ortholog table to GEP genes
+ortholog.df <- ortholog.df %>% filter(hu_symbol %in% genes.gep$gene)
+
+# translate GEP genes to ms and keep only mouse genes that are 
+genes.gep_translated <- genes.gep %>%
+  rename(hu_symbol=gene) %>%
+  left_join(
+    ortholog.df %>% select(ms_symbol, hu_symbol),
+    by="hu_symbol"
+    ) %>%
+  filter(ms_symbol %in% rownames(seur_tinn_mouse))
+```
+
+
+## Make into list
+```{r gep-gene-lists}
+# human
+gep_list_hu <- lapply(split(genes.gep_translated, genes.gep_translated$gep), function(x) x %>% pull(hu_symbol) %>% unique())
+lapply(gep_list_hu, function(x) length(x))
+
+# mouse
+gep_list_ms <- lapply(split(genes.gep_translated, genes.gep_translated$gep), function(x) x %>% pull(ms_symbol) %>% unique())
+lapply(gep_list_ms, function(x) length(x))
+```
+
+
+## Score on human and mouse datasets
+```{r score-gene-list}
+seur_human@meta.data[32:43] <- NULL
+seur_tinn_mouse@meta.data[31:42] <- NULL
+
+# score
+seur_human <- AddModuleScore(seur_human, name = names(gep_list_hu), features=gep_list_hu, seed=1)
+seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = names(gep_list_ms), features=gep_list_ms, seed=1, ctrl=500)
+
+
+# Remove the annoying numbers that are being added
+colnames(seur_human@meta.data)[32:43] <- names(gep_list_hu)
+colnames(seur_tinn_mouse@meta.data)[31:42] <- names(gep_list_ms)
+```
+
+
+## Plot scores
+```{r plot-human-geps, fig.width=6, fig.height=5}
+for(i in paste0("GEP", 1:12)){
+  lineage_genesignature(seur_human, i)
+}
+```
+
+
+```{r plot-mouse-geps, fig.width=6, fig.height=5}
+for(i in paste0("GEP", 1:12)){
+  lineage_genesignature(seur_tinn_mouse, i)
+}
+```
+
+
+
+## Try scoring GEP5 with different number of control genes
+```{r score-gep5-mouse-with-diff-nb-ctrl-genes}
+# seur_tinn_mouse@meta.data[43:44] <- NULL
+seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = "GEP5_ctrl100", features=gep_list_ms[8], seed=1, ctrl=100)
+seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = "GEP5_ctrl500", features=gep_list_ms[8], seed=1, ctrl=500)
+# seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = "GEP5_ctrl1000", features=gep_list_ms[8], seed=1, ctrl=1000)
+# seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = "GEP5_ctrl2000", features=gep_list_ms[8], seed=1, ctrl=2000)
+colnames(seur_tinn_mouse@meta.data)[43:44] <- c("GEP5_ctrl100", "GEP5_ctrl500")
+
+ggplot(
+  as.data.frame(seur_tinn_mouse@meta.data)[,c("GEP5_ctrl100", "GEP5_ctrl500")],
+  aes(x=GEP5_ctrl100, y=GEP5_ctrl500)
+)+
+  geom_point()
+```
+
+Surprisingly, it seems like GEP5 is not very highly expressed in mouse Tinn integrated dataset. This is not due to number of control genes chosen. Let's check out by bubble plot the expression level of the GEP5 genes in the mouse Tinn dataset.
+
+Let's check out the distribution of average expression of all genes vs GEP5 genes.
+```{r}
+# Human
+hu_avg_exp <- data.frame("avgexp"=rowMeans(seur_human@assays$RNA@data))
+hu_avg_exp$gep5_gene <- ifelse(rownames(hu_avg_exp) %in% gep_list_hu$GEP5, T, F)
+# table(rownames(hu_avg_exp[hu_avg_exp$gep5_gene==T,]) %in% gep_list_hu$GEP5, useNA="ifany")
+hist(hu_avg_exp$avgexp, breaks=100)
+hist(hu_avg_exp$avgexp, breaks=100)
+
+# Mouse
+ms_avg_exp <- data.frame("avgexp"=rowMeans(seur_tinn_mouse@assays$RNA@data))
+ms_avg_exp$gep5_gene <- ifelse(rownames(ms_avg_exp) %in% gep_list_ms$GEP5, T, F)
+# table(rownames(ms_avg_exp[ms_avg_exp$gep5_gene==T,]) %in% gep_list_ms$GEP5, useNA="ifany")
+
+# Plot
+ggplot(hu_avg_exp, aes(x=gep5_gene, y=avgexp))+
+  geom_boxplot()+
+  labs(title="Human")+
+  ylim(0,2)
+ggplot(ms_avg_exp, aes(x=gep5_gene, y=avgexp))+
+  geom_boxplot()+
+  labs(title="Mouse")+
+  ylim(0,2)
+```
+
+
+## Score GEP5 only on 1:1 orthologs with orthology confidence of 1
+```{r score-gep5-one2one, fig.width=6, fig.height=5}
+genes.gep_translated.one2one <- genes.gep %>%
+  rename(hu_symbol=gene) %>%
+  left_join(
+    ortholog.df %>% filter(homology_type=="ortholog_one2one" & orthology_confidence==1) %>% select(ms_symbol, hu_symbol),
+    by="hu_symbol"
+    ) %>%
+  filter(ms_symbol %in% rownames(seur_tinn_mouse))
+
+# Make into list
+gep5_one2one_hu <- genes.gep_translated.one2one %>% filter(gep=="GEP5") %>% pull(hu_symbol) %>% unique()
+gep5_one2one_ms <- genes.gep_translated.one2one %>% filter(gep=="GEP5") %>% pull(ms_symbol) %>% unique()
+length(gep5_one2one_hu)
+length(gep5_one2one_ms)
+
+# Score on mouse object
+seur_tinn_mouse <- AddModuleScore(seur_tinn_mouse, name = "GEP5_one2one", features=list("gep5"=gep5_one2one_ms), seed=1, ctrl=100)
+colnames(seur_tinn_mouse@meta.data)[45] <- "GEP5_one2one"
+ggplot(
+  as.data.frame(seur_tinn_mouse@meta.data)[,c("GEP5_ctrl100", "GEP5_one2one")],
+  aes(x=GEP5_ctrl100, y=GEP5_one2one)
+ )+
+  geom_point()
+lineage_genesignature(seur_tinn_mouse, "GEP5_one2one")
+```
+
+
+
+
+## BUBBLE PLOT
+```{r bubbleplot-gep5-human, fig.height=7, fig.width=5}
+plot_DotPlot(seur_human, group="clusters_integrated_data", features=sort(gep5_one2one_hu)[1:50], scaling=T)
+plot_DotPlot(seur_human, group="clusters_integrated_data", features=sort(gep5_one2one_hu)[51:100], scaling=T)
+plot_DotPlot(seur_human, group="clusters_integrated_data", features=sort(gep5_one2one_hu)[101:150], scaling=T)
+plot_DotPlot(seur_human, group="clusters_integrated_data", features=sort(gep5_one2one_hu)[151:179], scaling=T)
+```
+
+```{r bubbleplot-gep5-mouse, fig.height=7, fig.width=5}
+plot_DotPlot(seur_tinn_mouse, group="New_clusters", features=sort(gep5_one2one_ms)[1:50], scaling=T)
+plot_DotPlot(seur_tinn_mouse, group="New_clusters", features=sort(gep5_one2one_ms)[51:100], scaling=T)
+plot_DotPlot(seur_tinn_mouse, group="New_clusters", features=sort(gep5_one2one_ms)[101:150], scaling=T)
+plot_DotPlot(seur_tinn_mouse, group="New_clusters", features=sort(gep5_one2one_ms)[151:179], scaling=T)
+```
+
+
+
+Let's compare the distribution of %cells expressing GEP5 genes.
+```{r percent-cells-expressing-GEP5-genes}
+# human
+hu_percent_exp <- data.frame("hu_ncells_exp"=rowSums(seur_human@assays$RNA@data>0)) %>%
+  rownames_to_column("hu_symbol") %>%
+  filter(hu_symbol %in% gep_list_hu$GEP5) %>%
+  mutate("hu_percent_exp"=hu_ncells_exp*100/ncol(seur_human))
+
+# mouse
+ms_percent_exp <- data.frame("ms_ncells_exp"=rowSums(seur_tinn_mouse@assays$RNA@data>0)) %>%
+  rownames_to_column("ms_symbol") %>%
+  filter(ms_symbol %in% gep_list_ms$GEP5) %>%
+  mutate("ms_percent_exp"=ms_ncells_exp*100/ncol(seur_tinn_mouse))
+
+# combine by ortholog genes
+percent_exp.df <- hu_percent_exp %>%
+  left_join(
+    genes.gep_translated %>% select(hu_symbol, ms_symbol),
+    by="hu_symbol"
+  ) %>%
+  left_join(
+    ms_percent_exp,
+    by="ms_symbol"
+  )
+
+# plot
+hist(hu_percent_exp$hu_percent_exp, breaks=100)
+hist(ms_percent_exp$ms_percent_exp, breaks=100)
+ggplot(percent_exp.df, aes(x=hu_percent_exp, y=ms_percent_exp))+
+  geom_point()+
+  geom_abline()+
+  scale_x_log10()+
+  scale_y_log10()
+
+# how many genes are expressed in less than 1% of cells?
+ggplot(
+  rbind(
+    data.frame(
+      "species"="human",
+      "percent_exp"=hu_percent_exp$hu_percent_exp
+    ),
+    data.frame(
+      "species"="mouse",
+      "percent_exp"=ms_percent_exp$ms_percent_exp
+    )
+  ),
+  aes(x=percent_exp, colour=species)
+)+
+  geom_histogram(bins=100)
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

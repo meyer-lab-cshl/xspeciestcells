@@ -289,7 +289,7 @@ nktup  <- cellTypeSignature(cell.1="iNKT",  padj_max=0.05, log2FC_min = 0.1, shr
 #                           plyr::count(Reduce(c, nktup))  %>% filter(freq>=3) %>% pull(x)))
                           # plyr::count(Reduce(c, gdtup))  %>% filter(freq>=2) %>% pull(x)))
 
-# Bind the CD4vsMAIT, CD4vsiNKT
+# Get intersect of DE genes
 cd4_inkt_up <- intersect(
   plyr::count(Reduce(c, cd4up[c("CD4vsMAIT", "CD4vsCD8")]))  %>% filter(freq>=2) %>% pull(x),
   plyr::count(Reduce(c, nktup[c("iNKTvsMAIT", "iNKTvsCD8")]))  %>% filter(freq>=2) %>% pull(x)

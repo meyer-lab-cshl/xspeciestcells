@@ -314,6 +314,33 @@ runContrast <- function(
    "allgenes"=res
   ))
 }
+
+
+plot_DotPlot <- function(seurobj, group, features, scaling=T){
+  # get plot data
+  p <- Seurat::DotPlot(
+    seurobj,
+    group.by=group,
+    features=features,
+    scale=scaling
+  )
+  # plot in personalized way
+  p <- ggplot(p$data, aes(x=id, y=features.plot, fill=avg.exp.scaled, size=pct.exp))+
+    geom_point(color="black", shape=21)+
+    # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
+    scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
+    theme_bw()+
+    theme(axis.text.y=element_text(face="italic"),
+          axis.text.x=element_text(angle=45, hjust=1))+
+    labs(y="", x="")
+  # different color scale if scaled or not
+  if(scaling==T){
+    p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")
+  } else{
+    p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="normalized\navg expression")
+  }
+  return(p)
+}
 ```
 
 
@@ -382,7 +409,7 @@ for(i in 1:ncol(combinations_contrast)){
   
   # get DE genes from contrast
   deseq_output_temp <- NULL
-  deseq_output_temp <- runContrast(contrast_vector = c("lineage_id", lineage1, lineage2), padj_thresh = 0.05)
+  deseq_output_temp <- runContrast(contrast_vector = c("lineage_id", lineage1, lineage2), padj_thresh = 0.01)
   listDE_final[[contrast_name]] <- deseq_output_temp$degenes
 }
 
@@ -483,7 +510,7 @@ pheatmap(rld_cor, annotation = deseq_data$metadf_deseq[, c("lineage_id"), drop=F
 ## Plot heatmap
 ```{r plot-deseq, fig.width=5, fig.height=10}
 # PLOT (per lineage)
-counts_corrected_to_plot <- counts_corrected[c(DEgenes_to_plot, "EPHB6"),]
+counts_corrected_to_plot <- counts_corrected[c(DEgenes_to_plot, DEgenes_to_plot_negcontrol),]
 # counts_corrected_to_plot <- counts_corrected_to_plot[,c(paste0("CD4_donor", 2:4), paste0("iNKT_donor", 2:4), paste0("CD8_donor", 2:4), paste0("MAIT_donor", 2:4))]
 
 # colors for donor
@@ -514,15 +541,112 @@ pheatmap(
   angle_col=45,
   fontsize_col = 4,
   # title
-  main="CD4/iNKT vs CD8/MAIT one by one contrast intersect DE genes (c3, c9, c10, c11)"
+  main="CD4/iNKT vs CD8/MAIT one by one contrast\nintersect DE genes (c3, c9, c10, c11)"
+)
+# dev.off()
+```
+
+Plot horizontally for thesis defense presentation.
+```{r pheatmap-thesis-defense, fig.width=10, fig.height=5}
+# pdf("~/Projects/phd/data/presentation/figs_unfinished/part1_heatmap_DEgenes_CD4iNKT_vs_CD8MAIT_contrast1by1.pdf",
+#     width=15, height=5)
+pheatmap(
+  t(counts_corrected_to_plot),
+  color = rev(colorRampPalette(brewer.pal(10, "RdBu"))(100)),
+  scale = "column", # z-score
+  cluster_rows = T,
+  cluster_cols = T,
+  border_color = NA,
+  # Create gaps to separate CD4/NKT
+  # gaps_row=c(2,6, 11, 14),
+  cutree_cols = 3,
+  annotation_row = deseq_data$metadf_deseq %>% dplyr::select(c(lineage_id, donor_id)),
+  annotation_colors = list(
+    lineage_id = cols_lineages,
+    donor_id=cols_donorid
+  ),
+  # Change rows text format
+  show_rownames = T,
+  fontsize_row = 4,
+  # Change columns
+  angle_col=90,
+  fontsize_col = 4,
+  # title
+  main="CD4/iNKT vs CD8/MAIT one by one contrast\nintersect DE genes (c3, c9, c10, c11)"
+)
+# dev.off()
+```
+
+Plot DE genes as dotplot to make sure the heatmap is not misleading.
+
+```{r dotplot, fig.width=5, fig.height=10}
+# Subset to cells of interest
+seur_thym_naive <- subset(seur_integrated, subset=tissue=="Thymus")
+seur_thym_naive <- subset(seur_thym_naive, subset=tcell_lineage!="GD")
+seur_thym_naive <- subset(seur_thym_naive, subset=donor_id!=1)
+seur_thym_naive <- subset(seur_thym_naive, subset=clusters_integrated_data %in% c("3", "9", "10", "11"))
+DimPlot(seur_thym_naive, reduction="umap_integrated", group.by="clusters_integrated_data", cols=cols_integrated)
+
+# Create a new metadata column that combines lineage and donor
+seur_thym_naive@meta.data$lineage_donor <- paste(seur_thym_naive@meta.data$tcell_lineage, paste0("donor", seur_thym_naive@meta.data$donor_id), sep="_")
+order_donors <- c("donor2", "donor3", "donor4")
+seur_thym_naive@meta.data$lineage_donor <- factor(
+  seur_thym_naive@meta.data$lineage_donor,
+  levels=c(
+    paste("CD4", order_donors, sep="_"),
+    paste("iNKT", order_donors, sep="_"),
+    paste("CD8", order_donors, sep="_"),
+    paste("MAIT", order_donors, sep="_")
+  )
+)
+table(seur_thym_naive@meta.data$lineage_donor, useNA="ifany")
+
+# dotplot
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot, scaling=T)
+```
+
+
+
+
+
+## Plot DE genes Tinn vs Tconv
+Plot the iNKT vs CD4
+```{r contrast-iNKT-vs-CD4, fig.height=20, fig.width=5}
+# PLOT (per lineage)
+counts_corrected_to_plot_cd4_inkt <- counts_corrected[listDE_final$CD4vsiNKT$gene,grep("CD4|iNKT", colnames(counts_corrected), value=T)]
+
+# pdf("./scripts-in-progress/human-thymus/HumanThymus_25_common_genes_CD4iNKT_CD8MAIT/plots/heatmap_DEgenes_CD4CD8_vs_iNKTMAIT_contrast1bypadj0_05.pdf",
+#     width=7, height=5)
+pheatmap(
+  counts_corrected_to_plot_cd4_inkt,
+  color = rev(colorRampPalette(brewer.pal(10, "RdBu"))(100)),
+  scale = "row", # z-score
+  cluster_rows = T,
+  cluster_cols = T,
+  border_color = NA,
+  # Create gaps to separate CD4/NKT
+  # gaps_row=c(2,6, 11, 14),
+  cutree_rows = 2,
+  annotation_col = deseq_data$metadf_deseq %>% dplyr::select(c(lineage_id, donor_id)),
+  annotation_colors = list(
+    lineage_id = cols_lineages,
+    donor_id=cols_donorid
+  ),
+  # Change rows text format
+  show_rownames = T,
+  fontsize_row = 4,
+  # Change columns
+  angle_col=45,
+  fontsize_col = 4,
+  # title
+  main="CD4 vs iNKT\nDE genes (c3, c9, c10, c11)\npadj<0.01"
 )
 # dev.off()
 ```
 
 
-## Plot DE genes Tinn vs Tconv
-
-```{r}
+Now plot the intersect of iNKTMAIT vs CD4CD8.
+```{r contrast-iNKTMAIT-vs-CD4CD8}
 # now get the genes for Tinn vs Tconv, in CD4/CD8 vs iNKT/MAIT
 cd4_cd8_up <- intersect(
   intersect( # CD4/CD8 vs iNKT
@@ -574,9 +698,23 @@ pheatmap(
   angle_col=45,
   fontsize_col = 4,
   # title
-  main="CD4/CD8 vs iNKT/MAIT one by one contrast\nintersect DE genes (c3, c9, c10, c11)\npadj<0.05"
+  main="CD4/CD8 vs iNKT/MAIT one by one contrast\nintersect DE genes (c3, c9, c10, c11)\npadj<0.01"
 )
 # dev.off()
+
+
+
+# Check out dotplot
+seur_thym_naive@meta.data$lineage_donor <- factor(
+  seur_thym_naive@meta.data$lineage_donor,
+  levels=c(
+    paste("CD4", order_donors, sep="_"),
+    paste("CD8", order_donors, sep="_"),
+    paste("iNKT", order_donors, sep="_"),
+    paste("MAIT", order_donors, sep="_")
+  )
+)
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot_tinn_tconv, scaling=T)
 ```
 
 

@@ -1,0 +1,322 @@
+---
+title: "Compare mouse Tconv and Tinn thymocytes"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 5, fig.height = 5,
+                      warning=FALSE, message=FALSE,
+                      root.dir = "~/Projects/phd/")
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+library(SummarizedExperiment)
+library(MetaNeighbor)
+library(gplots)
+library(reshape2)
+
+source("~/Projects/phd/scripts/colors_universal.R")
+```
+
+
+## Import data
+```{r import-data}
+seur_tinn_mouse <- readRDS("./data/cross-species/08_innateT_cross_species/Analysis_all_mouse-Tinn_filtered_seurat_MNN.rds")
+seur_chopp_mouse <- readRDS("~/Projects/phd/data/seurat_objects/chopp2020/MouseThymusChoppEtAl2020.rds")
+
+DimPlot(seur_tinn_mouse,  group.by="New_clusters", label=T)
+DimPlot(seur_chopp_mouse)
+```
+
+
+## Clean up data
+```{r cleanup-data}
+# Innate
+seur_tinn_mouse@meta.data
+seur_tinn_mouse <- subset(seur_tinn_mouse, subset=New_clusters != "12")
+
+# Conventional
+seur_chopp_mouse@meta.data
+seur_chopp_mouse <- subset(seur_chopp_mouse, subset=cluster != "Bcell")
+```
+
+
+
+
+# FUNCTIONS
+```{r define-functions}
+plot_mtn <-
+  function(mtn_output,
+           var1 = "human",
+           var2 = "mouse",
+           var1_nbcells,
+           var2_nbcells,
+           var1_order,
+           var2_order,
+           bp_ymax = 20,
+           file_name="no",
+           figsize=c(12, 12)
+           ) {
+    
+  # REMODEL DATAFRAME
+  mtn.df <- melt(mtn_output) %>%
+    filter(str_detect(Var1,var1)) %>%
+    mutate(Var1 = gsub(paste0(var1, "\\|"), "", Var1)) %>%
+    filter(str_detect(Var2, var2)) %>%
+    mutate(Var2 = gsub(paste0(var2, "\\|"), "", Var2)) %>%
+    as_tibble() %>%
+    dplyr::rename(auroc=value) %>%
+    # add nb of cells for var1 and var2
+    left_join(var1_nbcells, by="Var1") %>%
+    left_join(var2_nbcells, by="Var2") %>%
+    # transform var1 and var2 into factors for ordering
+    mutate(Var1=factor(Var1, levels=var1_order),
+           Var2=factor(Var2, levels=var2_order))
+  
+    
+    # PROPORTION OF VAR1 THYMOCYTES IN EACH CLUSTER
+    bp.x <-
+      ggplot(
+        data = mtn.df %>% select(Var1, propcells_var1) %>% distinct(),
+        aes(x = Var1, y = propcells_var1)
+      ) +
+      geom_bar(stat = "identity", fill = "#bdbdbd") + theme_cowplot() +
+      scale_x_discrete(position = "top") +
+      scale_y_continuous(limits = c(0, bp_ymax), breaks = seq(0,bp_ymax, length.out=3)) +
+      labs(y = "%cells") +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 0),
+        axis.ticks.y = element_blank(),
+        axis.title.x = element_blank(),
+        axis.line.x = element_blank(),
+        legend.position = "none"
+      )
+    
+    # PROPORTION OF VAR2 THYMOCYTES IN EACH CLUSTER
+    bp.y <-
+      ggplot(
+        data = mtn.df %>% select(Var2, propcells_var2) %>% distinct(),
+        aes(x = Var2, y = propcells_var2)
+      ) +
+      geom_bar(stat = "identity", fill = "#bdbdbd") +
+      scale_x_discrete(position = "top") +
+      scale_y_continuous(limits = c(0, bp_ymax), breaks = seq(0,bp_ymax, length.out=3)) +
+      labs(y = "%cells") + coord_flip() + theme_cowplot() +
+      theme(
+        axis.title.y = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "none"
+      )
+    
+    # BUBBLEPLOT
+    hm.clean <-
+      ggplot(mtn.df, aes(x = Var1, y = Var2)) +
+      geom_point(aes(size = abs(auroc-0.5), fill = auroc), color="black", shape=21) +
+      geom_text(
+        data = mtn.df %>% filter(auroc > 0.8) %>% mutate(across("auroc", \(x) round(x, 2))),
+        aes(label = auroc),
+        color = "white"
+      ) +
+      scale_size_continuous(
+        limits = c(0, 0.5),
+        breaks = seq(0, 0.5, by = 0.1),
+        range = c(1, 15)
+      ) +
+      scale_fill_gradient2(
+        low = "#2166ac",
+        mid = "white",
+        high = "#a50f15",
+        midpoint = 0.5,
+        limits = c(0, 1),
+        name = "AUROC",
+        breaks = seq(0, 1, by = 0.2)
+      ) +
+      labs(x = paste(var1, "clusters"), y = paste(var2, "clusters"), size = "AUROC") +
+      theme_cowplot() +
+      theme(
+        legend.position = "bottom",
+        legend.key.width = unit(0.8, 'cm'),
+        axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+    
+    # COMBINE
+    p <- (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
+    if(file_name!="no"){ggsave(paste0("./data/figures/chapter_04/figs_unfinished/section1/", file_name), plot=p, width=figsize[1], height=figsize[2])}
+    return(p)
+  }
+
+# Get nb of cells in human and mouse clusters
+nbcells_hu <- as.data.frame(table(seur_hu_thym$nkt$clusters_per_lineage)) %>%
+    dplyr::rename(ncells_var1=Freq) %>%
+    mutate(propcells_var1 = ncells_var1*100/dim(seur_hu_thym$nkt)[2]) 
+nbcells_ms <- as.data.frame(table(seur_ms_thym$nkt$cell_type)) %>%
+    dplyr::rename(Var2=Var1, ncells_var2=Freq) %>%
+    mutate(propcells_var2 = ncells_var2*100/dim(seur_ms_thym$nkt)[2])
+
+# Define order of mouse and human clusters
+hu_levels <- paste0("iNKT_thymus_c", 0:6)
+ms_levels <- rev(c(
+  "Stage0",
+  "iNKTp",
+  "iNKT2",
+  "iNKT17",
+  "iNKT1"
+))
+```
+
+
+
+
+# METANEIGHBOR
+
+## Prepare data for metaneighbor
+```{r mtn-prep-data}
+# Subset seurat objects to common genes
+common_genes <- intersect(rownames(seur_tinn_mouse), rownames(seur_chopp_mouse))
+seur_tinn_mouse <- seur_tinn_mouse[common_genes,]
+seur_chopp_mouse <- seur_chopp_mouse[common_genes,]
+table(rownames(seur_tinn_mouse)==rownames(seur_chopp_mouse), useNA="ifany")
+
+
+# Get counts, HVGs and metadata
+tinn.hvg <- VariableFeatures(FindVariableFeatures(seur_tinn_mouse, nfeatures=2000))
+tinn.counts <- seur_tinn_mouse[["RNA"]]@counts
+tinn.metadata <- seur_tinn_mouse@meta.data
+
+tconv.hvg <- VariableFeatures(FindVariableFeatures(seur_chopp_mouse, nfeatures=2000))
+tconv.counts <- seur_chopp_mouse[["RNA"]]@counts
+tconv.metadata <- seur_chopp_mouse@meta.data
+
+
+# Get union of HVGs
+total.hvg <- union(tinn.hvg, tconv.hvg) # 3194 HVGs
+
+
+# Prepare metadata
+tinn.metadata <- tinn.metadata[,c("New.ident", "Cell.type", "New_clusters")]
+colnames(tinn.metadata) <- c("dataset", "lineage", "cluster_id")
+table(tinn.metadata$dataset, useNA="ifany")
+tinn.metadata$cluster <- case_when(
+  tinn.metadata$cluster_id == "0" ~ "postselection",
+  tinn.metadata$cluster_id == "1" ~ "gzma",
+  tinn.metadata$cluster_id == "2" ~ "gzma",
+  tinn.metadata$cluster_id == "3" ~ "signaling",
+  tinn.metadata$cluster_id == "4" ~ "signaling",
+  tinn.metadata$cluster_id == "5" ~ "cycling",
+  tinn.metadata$cluster_id == "6" ~ "transition",
+  tinn.metadata$cluster_id == "7" ~ "typeII",
+  tinn.metadata$cluster_id == "8" ~ "typeI",
+  tinn.metadata$cluster_id == "9" ~ "typeI",
+  tinn.metadata$cluster_id == "10" ~ "typeIII",
+  tinn.metadata$cluster_id == "11" ~ "typeIII"
+)
+table(tinn.metadata[,c("cluster", "cluster_id")], useNA="ifany")
+
+tconv.metadata <- tconv.metadata[,c("Genotype", "cluster")]
+tconv.metadata$dataset <- paste0("Chopp_", tconv.metadata$Genotype)
+tconv.metadata$cluster <- as.character(tconv.metadata$cluster)
+table(tconv.metadata$dataset, useNA="ifany")
+table(tconv.metadata$cluster, useNA="ifany")
+
+
+# Make a summarized experiment object
+table(rownames(tinn.counts)==rownames(tconv.counts))
+tot.counts <- cbind(tinn.counts, tconv.counts)
+tot.metadata <- rbind(tinn.metadata[,c("dataset", "cluster")], tconv.metadata[,c("dataset", "cluster")])
+table(tot.metadata$dataset, useNA="ifany")
+table(tot.metadata$cluster, useNA="ifany")
+
+se_object <- SummarizedExperiment(
+  assays=tot.counts,
+  colData=tot.metadata
+  )
+```
+
+
+## Run metaneighbor
+```{r nkt-run-metaneighbor}
+# Run metaneighbor
+mtn <- MetaNeighborUS(var_genes=total.hvg,
+                      dat=se_object,
+                      study_id=se_object$dataset,
+                      cell_type=se_object$cluster,
+                      fast_version=F) # diagonal looking really weird in slow version
+
+# Plot heatmap
+# pdf(
+#   file = "./data/figures/chapter_04/figs_unfinished/suppfigures/nkt_crosspecies_metaneighbor_heatmap.pdf",
+#   width = 5.5,
+#   height = 5.5
+#   )
+heatmap.2(
+  mtn,
+  trace = "none",
+  # superimpose a density histogram on color key
+  density.info = "none",
+  # color scale
+  col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(100)),
+  breaks = seq(0, 1, length = 101),
+  key.xlab = "AUROC",
+  key.title = "",
+  # text labels
+  main = "",
+  cexRow = 0.6,
+  cexCol = 0.6,
+  # margins
+  margins = c(7, 7)
+)
+# dev.off()
+```
+
+
+## Analysis 1
+```{r analysis-1}
+
+```
+
+
+## Analysis 2
+```{r analysis-2}
+
+```
+
+## Analysis 3
+```{r analysis-3}
+
+```
+
+
+## Analysis 4
+```{r analysis-4}
+
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

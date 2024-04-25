@@ -486,6 +486,35 @@ ggsave("./scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/pl
 # CCR9 and CCR7
 FeaturePlot(seur.nkt, features=c("CCR7", "CCR9"), blend=T, blend.threshold=0.01, cols=c("lightgrey", "red", "blue"), order=T, pt.size=2)
 
+
+# Genes of interest for paper figure
+lineage_nebulosagenes <- function(seuratobj, genes_vector, pgrid_size=c(10,30), file_name="no"){
+  
+  pnebulosa <- list()
+  for(gene in genes_vector) {
+    p <- SCpubr::do_NebulosaPlot(seuratobj, features = gene)
+    pnebulosa[[gene]] <- p
+  }
+  pgrid <- plot_grid(plotlist=pnebulosa, nrow=1)
+  
+  if(file_name != "no"){
+    ggsave(paste0("~/Projects/HumanThymusProject/scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/densityplots/", file_name),
+           plot=pgrid,
+           width=pgrid_size[1], height=pgrid_size[2],
+           limitsize=F)
+  }
+  return(pgrid)
+}
+genes_of_interest <- c("ZBTB16", "CCR9", "CCR7", #"CD4", "FOS",
+                       "KLRB1", "EOMES", "GZMK", #"CD8A",
+                       "CCR6", #"CCL5",
+                       "RORA")
+
+lineage_nebulosagenes(seur.nkt, genes_vector = genes_of_interest, file_name="thymus_nkt_genesfig2.pdf", pgrid_size = c(33,5))
+lineage_nebulosagenes(seur.mait, genes_vector = genes_of_interest, file_name="thymus_mait_genesfig2.pdf", pgrid_size = c(33,5))
+lineage_nebulosagenes(seur.gdt, genes_vector = genes_of_interest, file_name="thymus_gdt_genesfig2.pdf", pgrid_size = c(33,5))
+
+
 ## /end ####
 
 

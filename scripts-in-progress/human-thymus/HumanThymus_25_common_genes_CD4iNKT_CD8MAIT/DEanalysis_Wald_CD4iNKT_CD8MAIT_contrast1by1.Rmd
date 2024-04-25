@@ -316,7 +316,7 @@ runContrast <- function(
 }
 
 
-plot_DotPlot <- function(seurobj, group, features, scaling=T){
+plot_DotPlot <- function(seurobj, group, features, scaling=T, orientation="vertical"){
   # get plot data
   p <- Seurat::DotPlot(
     seurobj,
@@ -330,13 +330,25 @@ plot_DotPlot <- function(seurobj, group, features, scaling=T){
     # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
     scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
     theme_bw()+
-    theme(axis.text.y=element_text(face="italic"),
-          axis.text.x=element_text(angle=45, hjust=1))+
     labs(y="", x="")
+  
+  # vertical/horizontal orientation
+  if(orientation=="vertical"){
+    p <- p +
+      theme(
+        axis.text.y=element_text(face="italic"),
+        axis.text.x=element_text(angle=45, hjust=1)
+      )
+  } else if(orientation=="horizontal"){
+    p <- p +
+      coord_flip()+
+      theme(axis.text.x=element_text(face="italic", angle=45, hjust=1))
+  }
+  
   # different color scale if scaled or not
   if(scaling==T){
     p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")
-  } else{
+  } else if(scaling==F){
     p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="normalized\navg expression")
   }
   return(p)
@@ -602,7 +614,13 @@ seur_thym_naive@meta.data$lineage_donor <- factor(
 table(seur_thym_naive@meta.data$lineage_donor, useNA="ifany")
 
 # dotplot
-plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot, scaling=T)
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot, scaling=T, orientation="vertical")
+```
+
+Horizontal orientation for figure:
+```{r dotplot-horizontal, fig.width=15, fig.height=5}
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot, scaling=T, orientation="horizontal")
+# ggsave("~/Projects/HumanThymusProject/scripts-in-progress/human-thymus/HumanThymus_25_common_genes_CD4iNKT_CD8MAIT/plots/dotplot_DEgenes_CD4iNKT_vs_CD8MAIT_contrast1by1.pdf", width=15, height=5)
 ```
 
 
@@ -714,7 +732,8 @@ seur_thym_naive@meta.data$lineage_donor <- factor(
     paste("MAIT", order_donors, sep="_")
   )
 )
-plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot_tinn_tconv, scaling=T)
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot_tinn_tconv, scaling=T, orientation="horizontal")
+# ggsave("~/Projects/HumanThymusProject/scripts-in-progress/human-thymus/HumanThymus_25_common_genes_CD4iNKT_CD8MAIT/plots/dotplot_DEgenes_CD4CD8_vs_iNKTMAIT_contrast1by1.pdf", width=7, height=5)
 ```
 
 

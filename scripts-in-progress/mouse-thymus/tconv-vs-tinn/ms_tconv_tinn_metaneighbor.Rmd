@@ -209,7 +209,7 @@ tconv.metadata <- seur_chopp_mouse@meta.data
 
 
 # Get union of HVGs
-total.hvg <- union(tinn.hvg, tconv.hvg) # 3194 HVGs
+total.hvg <- union(tinn.hvg, tconv.hvg) # 3183 HVGs
 
 
 # Prepare metadata
@@ -243,6 +243,7 @@ table(tconv.metadata$cluster, useNA="ifany")
 table(rownames(tinn.counts)==rownames(tconv.counts))
 tot.counts <- cbind(tinn.counts, tconv.counts)
 tot.metadata <- rbind(tinn.metadata[,c("dataset", "cluster")], tconv.metadata[,c("dataset", "cluster")])
+tot.metadata$cluster <- gsub("-", "_", tot.metadata$cluster)
 table(tot.metadata$dataset, useNA="ifany")
 table(tot.metadata$cluster, useNA="ifany")
 
@@ -251,6 +252,44 @@ se_object <- SummarizedExperiment(
   colData=tot.metadata
   )
 ```
+
+
+## Export data to run metaneighbor on Elzar
+```{r export-data}
+seur.total <- CreateSeuratObject(counts=tot.counts, meta.data=tot.metadata) # 14,671 genes by 61,632 cells
+
+# convert to seurat v3 assay to be able to convert
+seur.total[["RNA3"]] <- as(object = seur.total[["RNA"]], Class = "Assay")
+DefaultAssay(seur.total) <- "RNA3"
+seur.total[["RNA"]] <- NULL
+seur.total <- RenameAssays(object = seur.total, RNA3 = 'RNA')
+
+# convert to .h5ad
+SeuratDisk::SaveH5Seurat(
+  seur.total,
+  filename = "data/mouse-thymus/02_tconv-vs-tinn/elzar/input/ms_tconv_tinn_full_seu_240424.h5Seurat",
+  overwrite=T,
+  verbose=T
+  )
+SeuratDisk::Convert(
+  source="data/mouse-thymus/02_tconv-vs-tinn/elzar/input/ms_tconv_tinn_full_seu_240424.h5Seurat",
+  dest = "h5ad",
+  assay="RNA",
+  overwrite=T,
+  verbose=T
+  )
+
+# export HVG list into .csv file
+hvg.df <- data.frame(
+  "features" = rownames(seur.total),
+  "highly_variable" = ifelse(rownames(seur.total) %in% total.hvg, T, F)
+)
+table(hvg.df$highly_variable, useNA="ifany")
+table(hvg.df[hvg.df$highly_variable==T, "features"]%in%total.hvg, useNA="ifany") # sanity check
+write.csv(hvg.df, "data/mouse-thymus/02_tconv-vs-tinn/elzar/input/list_hvg_240424.csv")
+```
+
+
 
 
 ## Run metaneighbor

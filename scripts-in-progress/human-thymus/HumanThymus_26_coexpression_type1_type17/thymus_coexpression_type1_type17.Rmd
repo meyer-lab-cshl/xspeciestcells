@@ -420,8 +420,9 @@ PlotCoexpression(
   features = c("type1", "type17"),
   set_negative_scores_to_0 = T, # whether to have negative signature scores set to 0 (negative scores mean that signature genes are expressed less than control genes)
   plotting = "blend",
+  pt_size=2,
   matrix_coordinates = c(0, 0),
-  cols.neg="#d9d9d9", # negative color
+  cols.neg="#bdbdbd", # negative color
   cols.pos=c("red", "blue"),
   col.threshold=0.1, # at which threshold to switch from grey to color
   colmatrix_stepsize=100, # how many steps in the color matrix
@@ -436,8 +437,9 @@ PlotCoexpression(
   set_negative_scores_to_0 = T,
   plotting = "blend",
   matrix_coordinates = c(0.7, 0.06),
-  cols.neg="#a9a9a9",
-  cols.pos=c("#74c476", "#fd8d3c"),
+  cols.neg="#bdbdbd",
+  cols.pos=c("red", "blue"),
+  pt_size=2,
   col.threshold=0.01,
   colmatrix_stepsize=100,
   order=T
@@ -452,8 +454,9 @@ PlotCoexpression(
   set_negative_scores_to_0 = T,
   plotting = "blend",
   matrix_coordinates = c(0, 0),
-  cols.neg="#d9d9d9",
+  cols.neg="#bdbdbd",
   cols.pos=c("red", "blue"),
+  pt_size=2,
   col.threshold=0.1,
   colmatrix_stepsize=100,
   order=T

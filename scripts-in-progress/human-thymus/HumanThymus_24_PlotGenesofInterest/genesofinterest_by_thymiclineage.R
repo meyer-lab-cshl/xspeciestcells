@@ -492,10 +492,12 @@ lineage_nebulosagenes <- function(seuratobj, genes_vector, pgrid_size=c(10,30), 
   
   pnebulosa <- list()
   for(gene in genes_vector) {
+    p <- NULL
     p <- SCpubr::do_NebulosaPlot(seuratobj, features = gene)
+    p <- ggrastr::rasterise(p, layers="Point", dpi=200)
     pnebulosa[[gene]] <- p
   }
-  pgrid <- plot_grid(plotlist=pnebulosa, nrow=1)
+  pgrid <- plot_grid(plotlist=pnebulosa, ncol=1)
   
   if(file_name != "no"){
     ggsave(paste0("~/Projects/HumanThymusProject/scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/densityplots/", file_name),
@@ -510,10 +512,16 @@ genes_of_interest <- c("ZBTB16", "CCR9", "CCR7", #"CD4", "FOS",
                        "CCR6", #"CCL5",
                        "RORA")
 
-lineage_nebulosagenes(seur.nkt, genes_vector = genes_of_interest, file_name="thymus_nkt_genesfig2.pdf", pgrid_size = c(33,5))
-lineage_nebulosagenes(seur.mait, genes_vector = genes_of_interest, file_name="thymus_mait_genesfig2.pdf", pgrid_size = c(33,5))
-lineage_nebulosagenes(seur.gdt, genes_vector = genes_of_interest, file_name="thymus_gdt_genesfig2.pdf", pgrid_size = c(33,5))
+lineage_nebulosagenes(seur.nkt, genes_vector = genes_of_interest, file_name="thymus_nkt_genesfig2_2.pdf", pgrid_size = c(5,40))
+lineage_nebulosagenes(seur.mait, genes_vector = genes_of_interest, file_name="thymus_mait_genesfig2_2.pdf", pgrid_size = c(5,40))
+lineage_nebulosagenes(seur.gdt, genes_vector = genes_of_interest, file_name="thymus_gdt_genesfig2_2.pdf", pgrid_size = c(5,40))
 
+# test figure pdf size
+# test <- SCpubr::do_NebulosaPlot(seur.nkt, features = "ZBTB16")
+# test <- ggrastr::rasterise(test, layers="Point", dpi=200)
+# ggsave("~/Projects/HumanThymusProject/scripts-in-progress/human-thymus/HumanThymus_24_PlotGenesofInterest/plots/densityplots/nkt_test.pdf",
+#        plot=test,
+#        width=5, height=5)
 
 ## /end ####
 

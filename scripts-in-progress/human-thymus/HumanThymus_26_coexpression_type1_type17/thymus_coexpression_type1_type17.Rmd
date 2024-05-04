@@ -382,16 +382,16 @@ names(cols_thym_mait) <- gsub('thymus_', '', names(cols_thym_mait))
 names(cols_thym_gdt) <- gsub('thymus_', '', names(cols_thym_gdt))
 
 ggplot(
-  # df %>% filter(cluster_per_lineage %in% c("NKT_c5", "NKT_c6", "MAIT_c6", "GDT_c7")),
-  df,
+  df %>% filter(cluster_per_lineage %in% c("NKT_c5", "NKT_c6", "MAIT_c6", "GDT_c7")),
+  # df,
   aes(x=type1_integrated, y=type17_integrated, color=cluster_per_lineage)
 )+
   geom_point()+
-  facet_wrap(~factor(tcell_lineage, levels=c("iNKT", "MAIT", "GD")))+
+  facet_wrap(~factor(tcell_lineage, levels=c("iNKT", "MAIT", "GD")), ncol=1)+
   scale_color_manual(values=c(cols_thym_nkt, cols_thym_mait, cols_thym_gdt))+
   labs(x="Type 1 signature", y="Type 17 signature")+
   theme_cowplot()
-# ggsave("./scripts-in-progress/human-thymus/HumanThymus_26_coexpression_type1_type17/plots/scatterplot_coexpression_allcells.pdf", width=10, height=5)
+ggsave("./scripts-in-progress/human-thymus/HumanThymus_26_coexpression_type1_type17/plots/scatterplot_coexpression_vertical.pdf", width=6, height=10)
 ```
 
 Check what proportion of MAIT_c6 cells have a type 1 and type 17 signature above 0

@@ -17,7 +17,8 @@ library(dplyr)
 library(Seurat)
 
 # Import data
-seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_08_28_23.RDS")
+# seur.human <- readRDS("./data/raw_data/human_data/seurat_filtered_harmony_08_28_23.RDS")
+seur.human <- readRDS("./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
 DimPlot(seur.human, group.by="new_clusters", reduction="UMAP_50")
 
 
@@ -50,7 +51,8 @@ counts.norm <- seur.highclus@assays$RNA@data
 metadata    <- seur.highclus@meta.data
 
 # Subset metadata only to information we're interested in (tissue, cell identity, batch, and clusters)
-metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters", "RNA_snn_res.75", "Donor")]
+# metadata <- metadata[,c("Tissue", "cell.ident", "Batch", "new_clusters", "RNA_snn_res.75", "Donor")]
+metadata <- metadata[,c("tissue", "tcell_lineage", "batch_id", "clusters_integrated_data", "RNA_snn_res.75", "donor_id")]
 colnames(metadata) <- c("tissue_id", "cell_id", "batch_id", "cluster_id", "cluster_highres", "donor_id")
 head(metadata) # sanity check
 

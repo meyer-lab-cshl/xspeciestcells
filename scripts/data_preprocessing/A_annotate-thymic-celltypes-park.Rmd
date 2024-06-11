@@ -1,0 +1,73 @@
+---
+title: "Format Park dataset"
+author: "Hannah Meyer"
+date: "2023-06-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## 1. IMPORT
+
+### 1.1. Import librairies
+```{r import-libraries, message=FALSE}
+library(ggplot2)
+library(gplots)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+```
+
+### 1.2. Import data
+```{r}
+## PARK DATA ####
+intdir <- "data/human-thymus/HumanData_16_ParkIntegration"
+seur.park <- readRDS(file.path(intdir, "park_full_seu_gene_names.rds"))
+
+# Add better cell_type to full park seurat object
+park_metadata <- read.csv(file.path(intdir, "park_fullmetadata.csv"))
+
+```
+
+## 2 Clean and add different levels of cell annotation to park data ####
+
+### 2.1. Salomé magic
+Salomé's done some magic here, needs to look into how to tidy up this code
+
+```{r}
+# Whole data annotation
+table(park_metadata$index == rownames(seur.park@meta.data)) # yessss nice
+annotation_columns <- colnames(park_metadata)[2:7]
+seur.park@meta.data[,annotation_columns] <- park_metadata[,annotation_columns]
+seur.park@meta.data$cell_type <- NULL
+
+# Park data
+colnames(seur.park@meta.data)[13] <- "Batch"
+colnames(seur.park@meta.data)[20] <- "percent.mt"
+seur.park@meta.data$tissue <- "Thymus"
+seur.park@meta.data$study <- "park_data"
+
+seur.park@meta.data$Anno_level_0 <- case_when(
+  seur.park@meta.data$Anno_level_1 %in%
+    c("T", "B", "Innate_T", "Innate_lymphoid") ~ "lymphoid",
+  seur.park@meta.data$Anno_level_1 %in% c("Mast", "Myeloid") ~ "myeloid",
+  seur.park@meta.data$Anno_level_1 == "Mgk" ~ "mgk",
+  seur.park@meta.data$Anno_level_1 == "Ery" ~ "hsc",
+  seur.park@meta.data$Anno_level_1 == "HSC" ~ "hsc",
+  seur.park@meta.data$Anno_level_1 %in% c("Endo", "Mesen", "TEC") ~ "stromal",
+)
+table(seur.park@meta.data[,c( "Anno_level_0")], useNA="ifany")
+
+seur.park@meta.data <- seur.park@meta.data %>%
+  mutate(Anno_level_3 = case_when(Anno_level_3 == "TEC(neuro)" ~ 'mTEC',
+                                  Anno_level_3 == "TEC(myo)" ~ 'mTEC',
+                                  TRUE ~ Anno_level_3))
+table(seur.park@meta.data[,c( "Anno_level_3")], useNA="ifany")
+
+saveRDS(seur.park, 'data/human-thymus/HumanData_16_ParkIntegration/park_full_seu_gene_names_updated_anno.rds')
+```
+

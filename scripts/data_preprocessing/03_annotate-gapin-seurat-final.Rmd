@@ -1,0 +1,241 @@
+---
+title: "Format final seurat object"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+## 1. IMPORT
+
+### 1.1. Import libraries
+```{r import-libraries, message=FALSE}
+library(ggplot2)
+library(gplots)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(RColorBrewer)
+library(harmony)
+```
+
+```{R setup}
+cols_integrated <- c("0" = "#f4c40f", "1" = "#b75347", "2" = "#d8443c",
+                     "3" = "#e09351", "4" = "#2b9b81", "5" = "#421401",
+                     "6" = "#92c051", "7" = "#9f5691", "8" = "#17154f",
+                     "9" = "#74c8c3", "10" = "#5a97c1", "11" = "gold",
+                     "12" = "#a40000", "13" = "#72bcd5", "14" = "grey50",
+                     "15" = "orange", "16" = "blueviolet", "17" = "#0a2e57",
+                     "18" = "#bdbdbd")
+
+cols_park <- c("DN(early)" = "#78c679", "DN(P)" = "#41ab5d",
+               "DN(Q)" = "#238443", "γδT" = "#92c051", "DP(P)" = "#b75347",
+               "DP(Q)" = "#d8443c", "αβT(entry)" = "#e09351",
+               "CD8+T"= "#5a97c1","CD8αα(I)" = "#421401",
+               "CD8αα(II)" = "#0a2e57", "CD4+T"= "gold",
+               "T(agonist)" = "#9f5691", "Treg(diff)" = "#9f5691",
+               "Treg" = "blueviolet", "Th17" = "#a40000", "NKT" = "#72bcd5")
+```
+
+### 1.2. Import data
+
+```{R}
+# Import our seurat object (low quality cells removed)
+# generated in: 01_annotate_thymic_celltypes-gapin.R
+seur.gapin <- readRDS("data/human-thymus/annotation/seurat_filtered_harmony_02_15_23_thymus_subset_annotations.RDS")
+print(seur.gapin) # 78,607 cells
+```
+
+## 2. Format
+### 2.1 tidy up columns
+-> this is where we'll have to do the final cleanup!
+```{R}
+# Gapin data
+gapin_columns_to_keep <- colnames(seur.gapin@meta.data)[c(1:32,76)]
+gapin_columns_to_keep <- gapin_columns_to_keep[!gapin_columns_to_keep %in% c("seurat_clusters", "RNA_snn_res.0.7", "RNA_snn_res.1.2")]
+seur.gapin@meta.data <- seur.gapin@meta.data[,gapin_columns_to_keep]
+
+colnames(seur.gapin@meta.data)[6] <- "sex"
+colnames(seur.gapin@meta.data)[8] <- "donor_id"
+colnames(seur.gapin@meta.data)[11] <- "tissue"
+colnames(seur.gapin@meta.data)[14] <- "cell_clusters"
+seur.gapin@meta.data[,"cell_clusters"] <-
+  paste0("c", seur.gapin@meta.data[,"cell_clusters"])
+seur.gapin@meta.data$study <- "gapin_data"
+```
+
+
+### 2.2 Add annotation levels analogous to Park
+```{R add annotation levels analogous to Park}
+seur.gapin@meta.data$Anno_level_0 <- "lymphoid" 
+
+seur.gapin@meta.data$Anno_level_1 <- case_when(
+  seur.gapin@meta.data$cell.ident %in% c("NKT", "MAIT", "GD") ~ "Innate_T",
+  seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "T",
+)
+table(seur.gapin@meta.data[,c("cell.ident", "Anno_level_1")], useNA="ifany")
+
+seur.gapin@meta.data$Anno_level_2 <- case_when(
+  seur.gapin@meta.data$tissue=="PBMC" ~ "Periph_T",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c0", "c1") ~ "DN",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c2") ~ "DP",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) &
+    seur.gapin@meta.data$cell.ident %in% c("NKT", "MAIT", "GD") ~ "Innate_T",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) &
+    seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "SP"
+)
+table(seur.gapin@meta.data[,c("tissue", "Anno_level_2")], useNA="ifany")
+
+seur.gapin@meta.data$Anno_level_3 <- case_when(
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:11) ~ "pbmc_T_naive",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) ~ "pbmc_T_memory",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c0", "c1") ~ "DN",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c2") ~ "DP",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) &
+    seur.gapin@meta.data$cell.ident == "GD" ~ "γδT",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c3", "c11", "c9", "c10") &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "T_naive",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c4" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "T(agonist)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c5" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(I)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c6" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(II)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c7" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "Treg",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c8" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "T_IFNsignaling",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "Teffector",
+)
+table(seur.gapin@meta.data[,c("tissue", "Anno_level_3")], useNA="ifany")
+
+seur.gapin@meta.data$Anno_level_4 <- case_when(
+  # PBMC
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell.ident == "CD4" ~ "pbmc_CD4",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell.ident == "CD8" ~ "pbmc_CD8",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell.ident == "NKT" ~ "pbmc_NKT",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell.ident == "MAIT" ~ "pbmc_MAIT",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell.ident == "GD" ~ "pbmc_GD",
+  # THYMUS
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c0", "c1") ~ "DN",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c2" ~ "DP",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) &
+    seur.gapin@meta.data$cell.ident == "GD" ~ "γδT",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    !seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:2) &
+    seur.gapin@meta.data$cell.ident %in% c("CD4") ~ "thymus_CD4",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    !seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:2) &
+    seur.gapin@meta.data$cell.ident %in% c("CD8") ~ "thymus_CD8",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell.ident == "NKT" ~ "thymus_NKT",
+  seur.gapin@meta.data$tissue=="Thymus"   &
+    seur.gapin@meta.data$cell.ident == "MAIT" ~ "thymus_MAIT"
+)
+table(seur.gapin@meta.data[,c("tissue", "Anno_level_4")], useNA="ifany")
+
+seur.gapin@meta.data$Anno_level_5 <- case_when(
+  # PBMC
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 0:11)  ~ "pbmc_T_naive",
+  seur.gapin@meta.data$tissue=="PBMC"   &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) ~ "pbmc_T_memory",
+  # THYMUS
+  # THYMUS - DN
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c0" ~ "DN(Q)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c1" ~ "DN(P)",
+  # THYMUS - DP
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c2" ~ "DP",
+  # THYMUS - γδ
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 3:17) &
+    seur.gapin@meta.data$cell.ident == "GD" ~ "γδT",
+  # THYMUS - T naive
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c3", "c9") &
+    seur.gapin@meta.data$cell.ident %in% c("CD4", "CD8") ~ "αβT(entry)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c11", "c10") &
+    seur.gapin@meta.data$cell.ident == "CD4" ~ "CD4+T",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c11", "c10") &
+    seur.gapin@meta.data$cell.ident == "CD8" ~ "CD8+T",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c3", "c9","c11", "c10") &
+    seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_naive",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% c("c3", "c9","c11", "c10") &
+    seur.gapin@meta.data$cell.ident == "MAIT" ~ "MAIT_naive",
+  # THYMUS - Tagonist
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c4" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "T(agonist)",
+  # THYMUS - CD8aa
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c5" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(I)",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c6" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "CD8αα(II)",
+  # THYMUS - Treg
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c7" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "Treg",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c8" &
+    seur.gapin@meta.data$cell.ident != "GD" ~ "T_IFNsignaling",
+  # THYMUS - effector
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) &
+    seur.gapin@meta.data$cell.ident == "CD4" ~ "CD4+T_effector",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) &
+    seur.gapin@meta.data$cell.ident == "CD8" ~ "CD8+T_effector",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters == "c12" &
+    seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_effector_Tcm",
+  seur.gapin@meta.data$tissue=="Thymus" &
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 13:17) &
+    seur.gapin@meta.data$cell.ident == "NKT" ~ "iNKT_effector_Tem",
+  seur.gapin@meta.data$tissue=="Thymus" & 
+    seur.gapin@meta.data$cell_clusters %in% paste0("c", 12:17) &
+    seur.gapin@meta.data$cell.ident == "MAIT" ~ "MAIT_effector_Tem",
+)
+table(seur.gapin@meta.data[,c("tissue", "Anno_level_3")], useNA="ifany")
+
+saveRDS(seur.gapin, 'data/human-thymus/annotation/gapin_full_seu_gene_names_updated_anno.rds')
+```

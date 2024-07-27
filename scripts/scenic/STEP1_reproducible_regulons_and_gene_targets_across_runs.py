@@ -5,6 +5,8 @@ import collections
 import pandas
 import typing
 
+
+#TODO: ADD PARSER AND HELP MESSAGING
 grnboostAdjacenciesLoc = ''
 regulonLoc = '/home/tonya/tmp_SCENIC/mouse_scenic_runs_10102023/full_innate_Tcell_integration_including_gd/'
 outputFile = '/home/tonya/tmp_SCENIC/mouse_scenic_runs_10102023/full_innate_Tcell_integration_including_gd/nes2_maskdropouts_mouse_innate_gd_intergration_50_multirun_reg100-target80_regulons_pruned_final.gmt'

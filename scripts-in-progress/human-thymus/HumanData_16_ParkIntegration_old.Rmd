@@ -525,25 +525,39 @@ mtn.df <- mtn.df %>%
   left_join(as.data.frame(table(seur.park.thymocytes$cell_type)) %>% dplyr::rename(Var2=Var1), by="Var2") %>%
   dplyr::rename(ncells_park=Freq)
 
-bp.x <- ggplot(data=mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)), y=ncells_gapin))+
-  geom_bar(stat="identity", fill="#bdbdbd") + theme_cowplot()+
-  scale_x_discrete(position="top")+
-  labs(y="#cells")+
-  theme(#axis.title.y = element_blank(),
-    axis.text.y = element_blank(), axis.ticks.y = element_blank(),
-    axis.text.x = element_text(size = 15), axis.title.x = element_blank(), axis.line.x=element_blank(),
-    legend.position = "none") #+
+bp.x <-
+  ggplot(
+    data = mtn.df %>% select(Var1, ncells_gapin) %>% distinct(),
+    aes(x = factor(Var1, levels = paste0("c", 0:17)), y = ncells_gapin)
+  ) +
+  geom_bar(stat = "identity", fill = "#bdbdbd") + theme_cowplot() +
+  scale_x_discrete(position = "top") +
+  scale_y_continuous(limits = c(0, 6500), breaks = seq(0,6000, length.out=3)) +
+  labs(y = "#cells") +
+  theme(
+    #axis.title.y = element_blank(),
+    # axis.text.y = element_blank(),
+    # axis.ticks.y = element_blank(),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_blank(),
+    axis.line.x = element_blank(),
+    legend.position = "none"
+  ) #+
 # scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
 
 # Change order of Park clusters
 order_park <- c("DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)", "αβT(entry)", "T(agonist)", "CD8αα(I)", "CD8αα(II)",
                 "γδT", "Treg(diff)", "Treg", "CD4+T", "CD8+T", "Th17", "NKT")
-bp.y <- ggplot(data=mtn.df, aes(x=factor(Var2, levels=rev(order_park)), y=ncells_park))+
+bp.y <- ggplot(
+  data=mtn.df %>% select(Var2, ncells_park) %>% distinct(), 
+  aes(x=factor(Var2, levels=rev(order_park)), y=ncells_park)
+  )+
   geom_bar(stat="identity", fill="#bdbdbd") +
   scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
+  scale_y_continuous(limits = c(0, 12500), breaks = seq(0,10000, length.out=3)) +
   theme(axis.title.y = element_blank(),
-        axis.text.y = element_text(size=15), axis.ticks.x = element_blank(),
-        axis.text.x = element_blank(),
+        axis.text.y = element_text(size=15), #axis.ticks.x = element_blank(),
+        # axis.text.x = element_blank(),
         #axis.title.x = element_blank(),
         axis.line.y=element_blank(),
         legend.position = "none")# +
@@ -551,15 +565,38 @@ bp.y <- ggplot(data=mtn.df, aes(x=factor(Var2, levels=rev(order_park)), y=ncells
 
 # Bubble plot
 library(scales)
+# hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
+#                                y=factor(Var2, levels=rev(order_park)))) +
+#   geom_point(aes(size=value, color=value))+
+#   geom_text(data=mtn.df %>% filter(value>0.90) %>% mutate(across("value", \(x) round(x,2))), aes(label=value), color="white")+
+#   # scales
+#   scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
+#   scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
+#   # themes
+#   labs(x="",y="Park clusters", size="AUROC")+
+#   theme_cowplot()+
+#   theme(legend.position="bottom",
+#         legend.key.width = unit(1, 'cm'),
+#         axis.title = element_text(size=20),
+#         axis.text = element_text(size=15))
+
 hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
                                y=factor(Var2, levels=rev(order_park)))) +
-  geom_point(aes(size=value, color=value))+
+  geom_point(aes(size = abs(value-0.5), fill = value), color="black", shape=21) +
   geom_text(data=mtn.df %>% filter(value>0.90) %>% mutate(across("value", \(x) round(x,2))), aes(label=value), color="white")+
   # scales
-  scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
-  scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
+  scale_size_continuous(limits=c(0,0.5), breaks=seq(0, 0.5, by = 0.1), range = c(1, 15))+
+      scale_fill_gradient2(
+        low = "#2166ac",
+        mid = "white",
+        high = "#a50f15",
+        midpoint = 0.5,
+        limits = c(0, 1),
+        name = "AUROC",
+        breaks = seq(0, 1, by = 0.2)
+      )+
   # themes
-  labs(x="",y="Park clusters", size="AUROC")+
+  labs(x="Current thesis clusters",y="Park clusters", size="AUROC")+
   theme_cowplot()+
   theme(legend.position="bottom",
         legend.key.width = unit(1, 'cm'),
@@ -585,10 +622,8 @@ hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
 
 library(patchwork)
 (bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/pymtn_bubbleplot1.pdf", width=14, height=14)
-
-
-
+# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/pymtn_bubbleplot1.pdf", width=14, height=14)
+ggsave("~/Projects/phd/data/figures/chapter_02/figs_unfinished/section2/ch2_fig17_pymtn_bubbleplot.pdf", width=14, height=14)
 
 ```
 

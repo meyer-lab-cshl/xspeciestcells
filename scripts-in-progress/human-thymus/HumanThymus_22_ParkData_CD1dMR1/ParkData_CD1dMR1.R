@@ -29,6 +29,40 @@ seur.human@meta.data <- cbind(seur.human@meta.data, seur_metadata)
 
 
 
+
+# **************
+# FUNCTIONS ####
+# **************
+
+plot_DotPlot <- function(seurobj, group, features, scaling=T){
+  # get plot data
+  p <- Seurat::DotPlot(
+    seurobj,
+    group.by=group,
+    features=features,
+    scale=scaling
+  )
+  # plot in personalized way
+  p <- ggplot(p$data, aes(x=id, y=features.plot, fill=avg.exp.scaled, size=pct.exp))+
+    geom_point(color="black", shape=21)+
+    # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
+    scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
+    theme_bw()+
+    theme(
+      axis.text.y=element_text(face="italic"),
+      axis.text.x=element_text(angle=45, hjust=1)
+    )+
+    labs(y="", x="")
+  # different color scale if scaled or not
+  if(scaling==T){
+    p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\naverage\nnormalized\nexpression")
+  } else{
+    p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="average\nnormalized\nexpression")
+  }
+  return(p)
+}
+
+
 # ******************
 # 2. PLOT UMAPs ####
 # ******************
@@ -176,9 +210,9 @@ ggrastr::rasterise(
           axis.text.x=element_text(size=15),
           axis.title.y=element_text(size=15)),
   layers="Point", dpi=300)
-ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_vlnplt_cd1d.pdf",
-       device = cairo_pdf,
-       width=8, height=6)
+# ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_vlnplt_cd1d.pdf",
+#        device = cairo_pdf,
+#        width=8, height=6)
 
 # Plot CD1d expression per cluster in bubble plot
 DotPlot(seur.human.abundant,
@@ -192,9 +226,14 @@ DotPlot(seur.human.abundant,
   theme_cowplot()+
   theme(axis.text.x=element_text(angle=45, hjust=1))+
   labs(x="", y="")
-ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_dotplot_cd1d.pdf",
-       device = cairo_pdf,
-       width=8, height=4.5)
+# ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/hu_dotplot_cd1d.pdf",
+#        device = cairo_pdf,
+#        width=8, height=4.5)
+
+# Plot for ANDCS poster
+plot_DotPlot(seur.human.abundant, features = rev(c("CD1D", "SLAMF1", "SLAMF6")), group = "Anno_curated", scaling = F)
+# ggsave("~/Desktop/Meyer-lab/Conferences/2024-07_ANDCS_Paris/fig4_cd1d_expression_human.pdf", width=10, height=5, units="cm")
+
 
 # Plot all SFR expression
 # Plot CD1d expression per cluster in bubble plot
@@ -294,9 +333,9 @@ p4 <- ggrastr::rasterise(
   layers="Point", dpi=300)
 
 p3 | p4
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_umapcombined.pdf",
-       device = cairo_pdf,
-       width=20, height=8)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_umapcombined.pdf",
+#        device = cairo_pdf,
+#        width=20, height=8)
 
 
 # plot Cd1d1 expression in all clusters
@@ -310,9 +349,9 @@ ggrastr::rasterise(
           axis.text.x=element_text(size=15),
           axis.title.y=element_text(size=15)),
   layers="Point", dpi=300)
-ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_vlnplt_cd1d1.pdf",
-       device=cairo_pdf,
-       width=8, height=6)
+# ggsave("./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_vlnplt_cd1d1.pdf",
+#        device=cairo_pdf,
+#        width=8, height=6)
 
 
 # Plot CD1d expression per cluster in bubble plot
@@ -327,9 +366,13 @@ DotPlot(seur.mouse.abundant,
   theme_cowplot()+
   theme(axis.text.x=element_text(angle=45, hjust=1))+
   labs(x="", y="")
-ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_dotplot_cd1d1.pdf",
-       device = cairo_pdf,
-       width=8, height=4.5)
+# ggsave(filename="./scripts-in-progress/human-thymus/HumanThymus_22_ParkData_CD1dMR1/plots_final/ms_dotplot_cd1d1.pdf",
+#        device = cairo_pdf,
+#        width=8, height=4.5)
+
+# Plot for ANDCS poster
+plot_DotPlot(seur.mouse.abundant, features = rev(c("Cd1d1", "Slamf1", "Slamf6")), group = "Anno_curated", scaling = F)
+# ggsave("~/Desktop/Meyer-lab/Conferences/2024-07_ANDCS_Paris/fig4_cd1d_expression_mouse.pdf", width=10, height=5, units="cm")
 
 
 

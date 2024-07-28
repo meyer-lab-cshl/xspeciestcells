@@ -67,7 +67,7 @@ colnames(seur.ms@meta.data)[30] <- "cell_annot"
 
 # First, check whether genes can all be found in the ortholog table (many can't be found because I removed genes with orthology confidence=0)
 table(unique(rownames(seur.ms)) %in% unique(ortholog.df$ms_symbol_bmt)) # 9,314 not
-table(unique(rownames(seur.nkt)) %in% ortholog.df$hu_symbol) # 4,757 not
+table(unique(rownames(seur.nkt)) %in% ortholog.df$hu_symbol) # 4,747 not
 
 # Subset the ortholog table to only genes that we can "translate"
 dictionary <- ortholog.df %>%
@@ -108,7 +108,7 @@ length(hu.hvg) # 2599 genes
 # table(ms.hvg1 %in% dictionary$ms_symbol_bmt)
 DefaultAssay(seur.ms) <- "RNA"
 ms.hvg2 <- VariableFeatures(FindVariableFeatures(seur.ms, nfeatures=length(hu.hvg)))
-length(ms.hvg2) # 2578 genes
+length(ms.hvg2) # 2599 genes
 # length(intersect(ms.hvg1, ms.hvg2))/ length(union(ms.hvg1,ms.hvg2)) # very similar (JI=0.83)
 
 # Translate the mouse HVGs into "human gene" language
@@ -185,16 +185,32 @@ hu.metadata <- rbind(seur.nkt@meta.data[,c("cell.ident", "new_clusters", "cell_a
 hu.metadata$new_clusters <- as.character(hu.metadata$new_clusters)
 colnames(hu.metadata) <- c("lineage", "clusters_integrated", "clusters_by_lineage")
 hu.metadata$clusters_to_compare <- hu.metadata$clusters_by_lineage
-# table(hu.metadata$cell.ident, useNA="ifany")
+# table(hu.metadata$lineage, useNA="ifany")
 
 # get mouse metadata
 ms.metadata <- seur.ms@meta.data[,c("cell.ident", "cell_annot")]
+# ms.metadata <- seur.ms@meta.data[,c("Cell.type", "New_clusters")]
 colnames(ms.metadata) <- c("lineage", "clusters_integrated")
 ms.metadata$clusters_by_lineage <- paste(ms.metadata$lineage, ms.metadata$clusters_integrated, sep="_")
+# ms.metadata$clusters_to_compare <- case_when(
+#   ms.metadata$clusters_integrated == "0" ~ "0",
+#   ms.metadata$clusters_integrated == "1" ~ "1_Gzma",
+#   ms.metadata$clusters_integrated == "2" ~ "2_Gzma",
+#   ms.metadata$clusters_integrated == "3" ~ "signaling",
+#   ms.metadata$clusters_integrated == "4" ~ "signaling",
+#   ms.metadata$clusters_integrated == "5" ~ "cycling",
+#   ms.metadata$clusters_integrated == "6" ~ "transition",
+#   ms.metadata$clusters_integrated == "7" ~ "typeII",
+#   ms.metadata$clusters_integrated == "8" ~ "typeI",
+#   ms.metadata$clusters_integrated == "9" ~ "typeI",
+#   ms.metadata$clusters_integrated == "10" ~ "typeIII",
+#   ms.metadata$clusters_integrated == "11" ~ "typeIII",
+#   ms.metadata$clusters_integrated == "12" ~ "12"
+# )
 ms.metadata$clusters_to_compare <- case_when(
-  ms.metadata$clusters_integrated == "0" ~ "0",
-  ms.metadata$clusters_integrated == "1" ~ "1_Gzma",
-  ms.metadata$clusters_integrated == "2" ~ "2_Gzma",
+  ms.metadata$clusters_integrated == "0" ~ "post-selection",
+  ms.metadata$clusters_integrated == "1" ~ "immature CD24+ GD",
+  ms.metadata$clusters_integrated == "2" ~ "immature CD24+ GD",
   ms.metadata$clusters_integrated == "3" ~ "signaling",
   ms.metadata$clusters_integrated == "4" ~ "signaling",
   ms.metadata$clusters_integrated == "5" ~ "cycling",
@@ -239,18 +255,31 @@ dim(counts_merged)
 dim(metadata_merged)
 
 seur.total <- CreateSeuratObject(counts=counts_merged, meta.data=metadata_merged)
+VariableFeatures(seur.total) <- total.hvg
 
 # convert to .h5ad
-SeuratDisk::SaveH5Seurat(seur.total,
-                         filename = "data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_231117.h5Seurat")
-SeuratDisk::Convert("data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_231117.h5Seurat", dest = "h5ad")
+# need to convert to seurat v3
+seur.total[["RNA3"]] <- as(object = seur.total[["RNA"]], Class = "Assay")
+DefaultAssay(seur.total) <- "RNA3"
+seur.total[["RNA"]] <- NULL
+seur.total <- RenameAssays(object = seur.total, RNA3 = 'RNA')
+
+SeuratDisk::SaveH5Seurat(
+  seur.total,
+  filename = "data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_240619.h5Seurat",
+  overwrite=TRUE
+  )
+SeuratDisk::Convert(
+  "data/cross-species/08_innateT_cross_species/cluster/input/innateT_ms_hu_full_seu_240619.h5Seurat",
+  dest = "h5ad"
+)
 
 # export HVG list into .csv file
 hvg.df <- data.frame("features"=rownames(seur.total),
                      "highly_variable"=ifelse(rownames(seur.total)%in%total.hvg, T, F))
 table(hvg.df$highly_variable, useNA="ifany")
 table(hvg.df[hvg.df$highly_variable==T, "features"]%in%total.hvg, useNA="ifany") # sanity check
-write.csv(hvg.df, "data/cross-species/08_innateT_cross_species/cluster/input/list_hvg_231117.csv")
+write.csv(hvg.df, "data/cross-species/08_innateT_cross_species/cluster/input/list_hvg_240619.csv")
 
 ## /end ####
 
@@ -266,8 +295,17 @@ library(patchwork)
 
 # import matrix
 # mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_2023-11-17.csv", row.names=1)
-mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2023-11-22.csv", row.names=1)
+# mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2023-11-22.csv", row.names=1)
+mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2024-06-19.csv", row.names=1)
+
+# this one was run on 10,000 iterations of downsampling
+mtn <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2024-06-20_means.csv", row.names=1)
+mtn_std <- read.csv("./data/cross-species/08_innateT_cross_species/cluster/output/pymtn_crosspecies_innateT_fastversion_mslineage_2024-06-20_std.csv", row.names=1)
+
 mtn <- as.matrix(mtn)
+
+# quick check distribution of SD
+hist(as.vector(unlist(as.vector(mtn_std))),xlim=c(0,1))
 
 # heatmap
 jpeg("./data/cross-species/08_innateT_cross_species/fullheatmap_231122_human_mouselineage_innateT.jpeg", width=1500, height=1500, res=150)
@@ -342,14 +380,17 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
   print("bubble plot")
   hm.clean <- ggplot(df, aes(x=factor(var_x, levels=order_x),
                              y=factor(var_y, levels=order_y))) +
-    geom_point(aes(size = auroc, color= auroc))+
+    # geom_point(aes(size = auroc, color= auroc))+
+    geom_point(aes(size = abs(auroc-0.5), color= auroc))+
     geom_text(data=df %>% filter(auroc>auroc_min) %>% mutate(across("auroc", \(x) round(x,2))), aes(label=auroc), color="white")+
-    scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
+    # scale_size_continuous(limits=c(0,1), breaks=seq(0,1, by=0.2), range = c(1, 15))+
+    scale_size_continuous(limits=c(0,0.5), breaks=seq(0,0.5, by=0.1), range = c(1, 15))+
     scale_color_gradient2(low="#2166ac", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
     labs(x=label_x,y=label_y, size="AUROC")+
     theme_cowplot()+
     theme(legend.position="bottom", legend.key.width = unit(0.8, 'cm'),
           axis.text = element_text(size=15), axis.text.x = element_text(angle=45, hjust=1), axis.title=element_text(size=20))
+  
   
   # COMBINE
   print("combine")
@@ -362,7 +403,7 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
 ## 3.6.1. Human x Mouse bubble plot ####
 # Identify clusters that represent more than 5% of number of cells in each lineage
 hu_clusters_to_keep <- hu.metadata %>%
-  summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
+  summarise(ncells=n(), .by=c(lineage, clusters_to_compare)) %>%
   # group_by(lineage) %>%
   mutate(totalcells=sum(ncells),
          percentcells=ncells*100/totalcells) %>%
@@ -371,10 +412,10 @@ hu_clusters_to_keep <- hu.metadata %>%
   filter(percentcells>1)
 ms_clusters_to_keep <- ms.metadata %>%
   # if doing ms by lineage:
-  mutate(clusters_by_lineage=paste(lineage, clusters_to_compare, sep="_")) %>%
-  summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
+  # mutate(clusters_by_lineage=paste(lineage, clusters_to_compare, sep="_")) %>%
+  # summarise(ncells=n(), .by=c(lineage, clusters_by_lineage)) %>%
   # if doing ms by clusters only:
-  # summarise(ncells=n(), .by=clusters_to_compare) %>%
+  summarise(ncells=n(), .by=clusters_to_compare) %>%
   # group_by(lineage) %>%
   mutate(totalcells=sum(ncells),
          percentcells=ncells*100/totalcells) %>%
@@ -387,34 +428,53 @@ mtn.df_mshu <- mtn.df %>%
   mutate(Var1 = gsub("Human\\|", "", Var1)) %>%
   filter(str_detect(Var2, "Mouse")) %>%
   mutate(Var2 = gsub("Mouse\\.", "", Var2)) %>%
+  # clean up the mouse cluster name column
+  mutate(Var2=case_when(
+    Var2=="immature.CD24..GD" ~ "immature CD24+ GD",
+    Var2=="post.selection" ~ "post-selection",
+    .default=Var2
+    )) %>%
+  # add nb of cells to dataframe
   left_join(as.data.frame(table(hu.metadata$clusters_to_compare)), by="Var1") %>%
   rename(var_x=Var1, Var1=Var2, auroc=value, ncells_x=Freq) %>%
   # left_join(as.data.frame(table(ms.metadata$clusters_to_compare)), by="Var1") %>%
-  left_join(ms_clusters_to_keep %>% select(clusters_by_lineage, ncells) %>% rename(Freq=ncells), by=c("Var1"="clusters_by_lineage")) %>%
+  left_join(ms_clusters_to_keep %>% select(clusters_to_compare, ncells) %>% rename(Freq=ncells), by=c("Var1"="clusters_to_compare")) %>%
   rename(var_y=Var1, ncells_y=Freq) %>%
   # keep min groups of cells that represent at least 1% of total number of cells in species
-  filter(var_x %in% hu_clusters_to_keep$clusters_by_lineage & var_y %in% ms_clusters_to_keep$clusters_by_lineage)
+  filter(var_x %in% hu_clusters_to_keep$clusters_to_compare & var_y %in% ms_clusters_to_keep$clusters_to_compare) %>%
+  # RENAME NKT TO iNKT
+  mutate(var_x=str_replace(var_x, "NKT", "iNKT"))
 
 
 # order_mouse <- rev(c("0", "1_Gzma", "2_Gzma", "signaling", "cycling", "transition", "typeI", "typeII", "typeIII", "12"))
+order_mouse <- rev(c("signaling", "post-selection", "immature CD24+ GD", "cycling", "transition", "typeI", "typeII", "typeIII", "12"))
 # order_mouse_2 <- rev(paste0(c("GD_", "MAIT_", "NKT_"),
 #                             c(rep("immature_GzmA_Gd", 3), rep("immature_DP", 3), rep("stage_0_signaling", 3), rep("cycling_I", 3), rep("cycling_II", 3), rep("type_I", 3), rep("type_II", 3), rep("type_III", 3))))
 # order_mouse <- rev(paste0(
 #   c("GD_", "MAIT_", "NKT_"),
 #   sort(rep(0:12,3))
 # ))
-order_mouse <- rev(paste0(
-  c("GD_", "MAIT_", "NKT_"),
-  c(rep("0", 3), rep("1_Gzma", 3), rep("2_Gzma", 3), rep("signaling", 3), rep("cycling", 3), rep("transition", 3), rep("typeI", 3), rep("typeII", 3), rep("typeIII", 3), rep("12", 3))
-  ))
+# order_mouse <- rev(paste0(
+#   c("GD_", "MAIT_", "NKT_"),
+#   c(rep("0", 3), rep("1_Gzma", 3), rep("2_Gzma", 3), rep("signaling", 3), rep("cycling", 3), rep("transition", 3), rep("typeI", 3), rep("typeII", 3), rep("typeIII", 3), rep("12", 3))
+#   ))
+order_human <- c(
+  paste0("iNKT_c", 0:6),
+  paste0("MAIT_c", 0:6),
+  paste0("GDT_c", 0:7)
+)
+
 bubble_plot(df=mtn.df_mshu,
-            order_x = unique(mtn.df_mshu$var_x),
+            order_x = order_human[order_human %in% unique(mtn.df_mshu$var_x)],
             # order_y = order_mouse[order_mouse!="12"],
-            order_y = order_mouse,
+            order_y = order_mouse[order_mouse %in% unique(mtn.df_mshu$var_y)],
             label_x = "Human clusters",
             label_y = "Mouse clusters",
             auroc_min= 0.65)
-ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_23-11-26_hvg4263_mshu_mslineage_fastversion_remove_small_clusters_less1percent_auroc065.pdf", width=17, height=15)
+# ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/innateT_23-11-26_hvg4263_mshu_mslineage_fastversion_remove_small_clusters_less1percent_auroc065.pdf", width=17, height=15)
+# ggsave("~/Desktop/Meyer-lab/Conferences/2024-07_ANDCS_Paris/fig3_crosspecies_innateT_24-07-19_hvg4263_mshu_mslineage_fastversion_remove_small_clusters_less1percent_auroc065_ordered_old_way.pdf", width=17, height=10)
+ggsave("~/Projects/HumanThymusProject/data/manuscript/cellreports/fig6_crosspecies_innateT_24-07-22_hvg4263_mshu_mslineage_fastversion_remove_small_clusters_less1percent_auroc065.pdf", width=17, height=10)
+
 
 ## 3.6.2. Human x Human bubble plot ####
 mtn.df_huhu <- mtn.df %>%

@@ -1,0 +1,108 @@
+---
+title: "Supplementary Fig 8 - GEP usage per thymic lineage"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# Import data
+seur.nkt  <- readRDS("./data_github/seurat_objects_thymus/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS")
+seur.mait <- readRDS("./data_github/seurat_objects_thymus/seurat_filtered_harmony_02_15_23_thymus.mait.RDS")
+seur.gdt  <- readRDS("./data_github/seurat_objects_thymus/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+seur.cd4  <- readRDS("./data_github/seurat_objects_thymus/seurat_filtered_harmony_02_15_23_thymus.cd4.RDS")
+seur.cd8  <- readRDS("./data_github/seurat_objects_thymus/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS")
+
+DimPlot(seur.nkt,  group.by="cell_annot", label=T)
+DimPlot(seur.mait, group.by="cell_annot", label=T)
+DimPlot(seur.gdt,  group.by="cell_annot", label=T)
+DimPlot(seur.cd4,  group.by="cell_annot", label=T)
+DimPlot(seur.cd8,  group.by="cell_annot", label=T)
+```
+
+
+
+
+# FUNCTIONS
+```{r define-functions}
+
+```
+
+
+
+
+# ANALYSIS
+
+## Analysis 1
+```{r analysis-1}
+
+```
+
+
+## Analysis 2
+```{r analysis-2}
+
+```
+
+## Analysis 1
+```{r analysis-1}
+
+```
+
+
+## Analysis 2
+```{r analysis-2}
+
+```
+
+## Analysis 3
+```{r analysis-3}
+
+```
+
+
+## Analysis 4
+```{r analysis-4}
+
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

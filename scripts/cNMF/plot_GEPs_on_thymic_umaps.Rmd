@@ -36,7 +36,7 @@ source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 ```
 
 ## Import data
-```{r import-data, fig.height=3, fig.width=6}
+```{r import-data, fig.height=4, fig.width=6}
 # import seurat objects
 seur.nkt  <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_inkt.rds")
 seur.mait <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_mait.rds")
@@ -87,11 +87,11 @@ seur_vector <- list("iNKT"=seur.nkt, "MAIT"=seur.mait, "GDT"=seur.gdt, "CD4"=seu
 
 plist_massive <- list()
 for(gep in gep_colnames){
-  print(gep)
+  # print(gep)
   # get row of plots (for one GEP)
   plist <- list()
   for(i_seur in names(seur_vector)){
-    print(i_seur)
+    # print(i_seur)
     seur <- seur_vector[[i_seur]]
     # get legend once
     if(gep=="GEP1_usage" & i_seur=="iNKT"){

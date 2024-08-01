@@ -40,7 +40,7 @@ source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 ## Import data
 ```{r import-data}
 # seurat object
-seur <- readRDS("./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
+seur <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
 DimPlot(seur, group.by = "clusters_integrated_data", label=T, repel=T, reduction="umap_integrated")+
   scale_color_manual(values=cols_integrated)
 ```

@@ -1,0 +1,750 @@
+---
+title: "Figure 2B,C - DE analysis btw thymocytes"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+# IMPORT
+
+## Import librairies
+
+```{r import-librairies}
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+library(DESeq2)
+library(pheatmap)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+
+```{r import-data}
+seur_integrated <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+DimPlot(seur_integrated, reduction="umap_integrated", group.by="clusters_integrated_data", cols=cols_integrated)
+```
+
+# FUNCTIONS
+
+-   `aggregate.Matrix` and `dMcast` functions taken from `Matrix.utils`
+    package (<https://rdrr.io/cran/Matrix.utils/src/R/Matrix.utils.R>)
+-   `prep_data_for_deseq`, `runDeseq` and `runContrast` functions
+    written in-house, inspired from tutorial :
+    <https://hbctraining.github.io/scRNA-seq/lessons/pseudobulk_DESeq2_scrnaseq.html>
+
+```{r define-functions}
+aggregate.Matrix <- function(x,groupings=NULL,form=NULL,fun='sum'){
+  if(!is(x,'Matrix')){
+    x<-Matrix(as.matrix(x),sparse=TRUE)
+  }
+  if(fun=='count'){
+    x<-x!=0
+  }
+  groupings2<-groupings
+  if(!is(groupings2,'data.frame')){
+    groupings2<-as(groupings2,'data.frame')
+  }
+  groupings2<-data.frame(lapply(groupings2,as.factor))
+  groupings2<-data.frame(interaction(groupings2,sep = '_'))
+  colnames(groupings2)<-'A'
+  if(is.null(form)){
+    form<-as.formula('~0+.')
+  }
+  form<-as.formula(form)
+  mapping<-dMcast(groupings2,form)
+  colnames(mapping)<-substring(colnames(mapping),2)
+  result<-t(mapping) %*% x
+  if(fun=='mean'){
+    result@x<-result@x/(aggregate.Matrix(x,groupings2,fun='count'))@x
+  }
+  attr(result,'crosswalk')<-grr::extract(groupings,match(rownames(result),groupings2$A))
+  return(result)
+}
+
+
+dMcast <- function(data,formula,fun.aggregate='sum',value.var=NULL,as.factors=FALSE,factor.nas=TRUE,drop.unused.levels=TRUE){
+  values<-1
+  if(!is.null(value.var)){
+    values<-data[,value.var]
+    }
+  alltms<-terms(formula,data=data)
+  response<-rownames(attr(alltms,'factors'))[attr(alltms,'response')]
+  tm<-attr(alltms,"term.labels")
+  interactionsIndex<-grep(':',tm)
+  interactions<-tm[interactionsIndex]
+  simple<-setdiff(tm,interactions)
+  i2<-strsplit(interactions,':')
+  newterms<-unlist(lapply(i2,function (x) paste("paste(",paste(x,collapse=','),",","sep='_'",")")))
+  newterms<-c(simple,newterms)
+  newformula<-as.formula(paste('~0+',paste(newterms,collapse='+')))
+  allvars<-all.vars(alltms)
+  data<-data[,c(allvars),drop=FALSE]
+  if(as.factors){
+    data<-data.frame(lapply(data,as.factor))
+    }
+  characters<-unlist(lapply(data,is.character))
+  data[,characters]<-lapply(data[,characters,drop=FALSE],as.factor)
+  factors<-unlist(lapply(data,is.factor))
+  #Prevents errors with 1 or fewer distinct levels
+  data[,factors]<-lapply(data[,factors,drop=FALSE],function (x) 
+  {
+    if(factor.nas)
+      if(any(is.na(x)))
+      {
+        levels(x)<-c(levels(x),'NA')
+        x[is.na(x)]<-'NA'
+      }
+    if(drop.unused.levels)
+        if(nlevels(x)!=length(na.omit(unique(x))))
+          x<-factor(as.character(x))
+    y<-contrasts(x,contrasts=FALSE,sparse=TRUE)
+    attr(x,'contrasts')<-y
+    return(x)
+  })
+  #Allows NAs to pass
+  attr(data,'na.action')<-na.pass
+  result<-Matrix::sparse.model.matrix(newformula,data,drop.unused.levels = FALSE,row.names=FALSE)
+  brokenNames<-grep('paste(',colnames(result),fixed = TRUE)
+  colnames(result)[brokenNames]<-lapply(colnames(result)[brokenNames],function (x) {
+    x<-gsub('paste(',replacement='',x=x,fixed = TRUE) 
+    x<-gsub(pattern=', ',replacement='_',x=x,fixed=TRUE) 
+    x<-gsub(pattern='_sep = \"_\")',replacement='',x=x,fixed=TRUE)
+    return(x)
+  })
+
+  result<-result*values
+  if(isTRUE(response>0))
+  {
+    responses=all.vars(terms(as.formula(paste(response,'~0'))))
+    result<-aggregate.Matrix(result,data[,responses,drop=FALSE],fun=fun.aggregate)
+  }
+  return(result)
+}
+
+
+prep_data_for_deseq <- function(
+    counts_matrix,
+    groups_df
+  ){
+  ## ****************
+  ## AGGREGATE COUNTS
+  cat("\n--Aggregating counts--\n")
+  count.agg <- t(counts_matrix[, which(colnames(counts_matrix) %in% rownames(groups_df))])
+  nrow(groups_df) == nrow(count.agg) # verify nb of cells in "groups" (rows) is same nb of cells in "count.agg" (rows)
+  
+  # Aggregate counts based on columns in "groups"
+  count.agg <- aggregate.Matrix(count.agg, groupings = groups_df, fun = "sum")
+  
+  # Sanity checks
+  cat("\nDimensions aggregated matrix:", dim(count.agg))
+  cat("\nPreview aggregated matrix:")
+  print(count.agg[, 1:6])
+  # table(colSums(count.agg) == 0) # check if any gene has total count of 0
+  
+  # Final counts for DESeq (groups as columns, genes as rows)
+  counts.deseq <- data.frame(t(count.agg))
+  counts.deseq <- counts.deseq[rowSums(counts.deseq)!=0,] # remove genes that have total count of 0
+  
+  
+  ## ****************
+  ## PREPARE METADATA DF FOR DESEQ
+  cat("\n--Preparing metadata--\n")
+  # Have metadata df where rownames are the colnames of "counts.deseq" (the groups)
+  metadf.deseq <- groups_df %>%
+    distinct() %>%
+    unite(sample_id, remove=FALSE)
+  rownames(metadf.deseq) <- metadf.deseq$sample_id
+  
+  # Check that the row names of metadf.deseq are the same as the column names of counts.deseq in order to use as input to DESeq2
+  metadf.deseq <- metadf.deseq[match(colnames(counts.deseq), rownames(metadf.deseq)),] # reorder rows in metadf.deseq to match order of columns in counts.deseq
+  all(rownames(metadf.deseq) == colnames(counts.deseq))
+  cat("\nPreview metadf for Deseq2:")
+  print(metadf.deseq)
+  
+  return(list(
+    "counts_deseq"=counts.deseq,
+    "metadf_deseq"=metadf.deseq
+  ))
+}
+
+
+runDeseq <- function(data_deseq) {
+  
+  ## ****************
+  # BATCH CORRECT COUNTS
+  cat("\n--Create DESeq2 object with design [donor_id + lineage_id]--\n")
+  counts.deseq <- data_deseq$counts_deseq
+  metadf.deseq <- data_deseq$metadf_deseq
+  dds <- DESeqDataSetFromMatrix(counts.deseq,
+                                colData = metadf.deseq,
+                                design = ~ donor_id + lineage_id)
+
+  # # Transform counts for data visualization
+  # cat("\n--Batch correct counts--\n")
+  # rld <- rlog(dds, blind=TRUE)
+  # # Sanity check
+  # head(assay(rld))
+  # 
+  # # Plot PCA
+  # # DESeq2::plotPCA(rld, intgroup = "sample_id")
+  # # DESeq2::plotPCA(rld, intgroup = "donor_id")
+  # # DESeq2::plotPCA(rld, intgroup = "lineage_id")
+  # 
+  # # Correct for batch effect, and then run PCA
+  # counts_corrected <- limma::removeBatchEffect(x=assay(rld),
+  #                                              batch=metadf.deseq$donor_id,
+  #                                              design=model.matrix(~ lineage_id, metadf.deseq))
+  # rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
+  # select_rv <- order(rv, decreasing = TRUE)[seq_len(500)] # get the positions of the top 500 most variable genes?...
+  # pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
+  # percentVar <- pca$sdev^2/sum(pca$sdev^2)
+  # counts_pca <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2],
+  #                          donor = metadf.deseq$donor_id,
+  #                          condition = metadf.deseq$lineage_id) # MODIFY "condition" BASED ON WHAT YOU ARE COMPARING
+  # # Plot
+  # ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=donor)) +
+  #   geom_point(size = 4) +
+  #   xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  #   ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  #   coord_fixed(expand=TRUE) +
+  #   scale_y_continuous(expand = c(0.1,0.1))+
+  #   ggtitle("limma without design formula")
+  # 
+  # 
+  # # Compute pairwise correlation values on the batch-effect-corrected matrix
+  # rld_cor <- cor(counts_corrected[select_rv,])
+  # # Plot heatmap
+  # pheatmap(rld_cor, annotation = metadf.deseq[, c("lineage_id"), drop=F])
+  
+  
+  ## ****************
+  # RUN DESEQ2
+  cat("\n--Run DESeq2--\n")
+
+  dds <- DESeq(dds)
+  # plotDispEsts(dds)
+  return(dds)
+  }
+
+
+
+runContrast <- function(
+    deseq_object=dds,
+    contrast_vector,
+    genes_sanitycheck = c("RUNX3", "ZBTB7B", "ZBTB16"),
+    padj_thresh = 0.01,
+    remove_ribo_degenes = T){
+  # Output results of Wald test for contrast
+  res <- results(deseq_object,
+                 contrast = contrast_vector,
+                 alpha = 0.05)
+  res <- lfcShrink(deseq_object,
+                   type="ashr",
+                   contrast = contrast_vector,
+                   res=res)
+  print(res[genes_sanitycheck,])
+
+  # Get df with only significant genes
+  result.df <- res %>%
+    data.frame() %>%
+    rownames_to_column(var="gene") %>%
+    as_tibble() %>%
+    filter(padj < padj_thresh) %>%
+    arrange(padj)
+  
+  if(remove_ribo_degenes==T){result.df <- result.df %>% filter(!gene %in% grep("RPL|RPS", gene, value=T))}
+  
+  # return
+  return(list(
+   "degenes"=result.df,
+   "allgenes"=res
+  ))
+}
+
+
+plot_DotPlot <- function(seurobj, group, features, scaling=T, orientation="vertical"){
+  # get plot data
+  p <- Seurat::DotPlot(
+    seurobj,
+    group.by=group,
+    features=features,
+    scale=scaling
+  )
+  # plot in personalized way
+  p <- ggplot(p$data, aes(x=id, y=features.plot, fill=avg.exp.scaled, size=pct.exp))+
+    geom_point(color="black", shape=21)+
+    # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
+    scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
+    theme_bw()+
+    labs(y="", x="")
+  
+  # vertical/horizontal orientation
+  if(orientation=="vertical"){
+    p <- p +
+      theme(
+        axis.text.y=element_text(face="italic"),
+        axis.text.x=element_text(angle=45, hjust=1)
+      )
+  } else if(orientation=="horizontal"){
+    p <- p +
+      coord_flip()+
+      theme(axis.text.x=element_text(face="italic", angle=45, hjust=1))
+  }
+  
+  # different color scale if scaled or not
+  if(scaling==T){
+    p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\naverage\nnorm expression")
+  } else if(scaling==F){
+    p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="average\nnorm expression")
+  }
+  return(p)
+}
+```
+
+# CD4/iNKT vs CD8/MAIT (Fig 2B)
+
+## Run DESeq
+
+Here we will keep only alpha beta lineages that are in clusters
+3,9,10,11 (the "naive-like" *CCR9*- and *CCR7*-expressing clusters, not
+the agonists).
+
+```{r run-deseq2}
+groups_df <- seur_integrated@meta.data[,c("tissue", "tcell_lineage", "donor_id", "clusters_integrated_data")] %>%
+  filter(tissue == "Thymus" & tcell_lineage %in% c("CD4", "iNKT", "CD8", "MAIT") & donor_id %in% 2:4) %>%
+  # keep only naive-like clusters
+  filter(clusters_integrated_data %in% c(3,11,9,10)) %>%
+  # cleanup
+  mutate(donor_id=paste0("donor", donor_id)) %>%
+  mutate(lineage_id=tcell_lineage)
+groups_df_for_deseq <- groups_df %>%
+  select(lineage_id, donor_id)
+
+# Prep data for DESeq
+deseq_data <- prep_data_for_deseq(
+  counts_matrix = seur_integrated@assays$RNA@counts,
+  groups_df = groups_df_for_deseq
+)
+
+# RUN DESEq2
+dds <- DESeqDataSetFromMatrix(
+  deseq_data$counts_deseq,
+  colData = deseq_data$metadf_deseq,
+  design = ~ donor_id + lineage_id
+)
+dds <- DESeq(dds)
+plotDispEsts(dds)
+```
+
+
+## Get the DE genes for each contrast
+
+We will run DE analysis between CD4vsCD8, CD4vsMAIT, etc. (all contrasts). Then depending on the analysis of interest (CD4/iNKT vs CD8/MAIT in Fig 2B; CD4/CD8 vs iNKT/MAIT in Fig 2C) we will take out the significantly DE genes from the corresponding contrasts.
+
+```{r contrast-1by1}
+# Get all the contrasts to run
+combinations_contrast <- combn(c("CD4", "CD8", "iNKT", "MAIT"), 2)
+
+listDE_final <- list()
+for(i in 1:ncol(combinations_contrast)){
+  lineage1 <- combinations_contrast[1,i]
+  lineage2 <- combinations_contrast[2,i]
+  contrast_name <- paste0(lineage1, "vs", lineage2)
+  cat("\n", contrast_name, "\n")
+  
+  # get DE genes from contrast
+  deseq_output_temp <- NULL
+  deseq_output_temp <- runContrast(contrast_vector = c("lineage_id", lineage1, lineage2), padj_thresh = 0.01)
+  listDE_final[[contrast_name]] <- deseq_output_temp$degenes
+}
+
+
+names(listDE_final)
+
+# some sanity checks
+listDE_final$CD4vsCD8 %>%
+  filter(gene %in% c("RUNX3", "LINC02446", "ZBTB7B", "CD40LG"))
+```
+
+
+## DE genes between CD4/iNKT vs CD8/MAIT
+```{r degenes-fig4b}
+# Get the CD4/iNKT vs CD8/MAIT DE genes
+cd4_inkt_up <- intersect(
+  intersect( # up in CD4/iNKT versus CD8
+    listDE_final$CD4vsCD8 %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$CD8vsiNKT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ),
+  intersect( # up in CD4/iNKT versus MAIT
+    listDE_final$CD4vsMAIT %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$iNKTvsMAIT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ))
+
+cd8_mait_up <- intersect(
+  intersect( # up in CD8 vs CD4/iNKT
+    listDE_final$CD4vsCD8 %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$CD8vsiNKT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ),
+  intersect( # up in MAIT vs CD4/iNKT
+    listDE_final$CD4vsMAIT %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$iNKTvsMAIT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ))
+
+DEgenes_to_plot <- c(cd4_inkt_up, cd8_mait_up)
+
+
+# now get the genes for negative control, in CD4/MAIT vs CD8/iNKT
+cd4_mait_up <- intersect(
+  intersect( # up in CD4/MAIT vs CD8
+    listDE_final$CD4vsCD8 %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$CD8vsMAIT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ),
+  intersect( # up in CD4/MAIT vs iNKT
+    listDE_final$CD4vsiNKT %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$iNKTvsMAIT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ))
+
+cd8_inkt_up <- intersect(
+  intersect( # up in CD8 vs CD4/MAIT
+    listDE_final$CD4vsCD8 %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$CD8vsMAIT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ),
+  intersect( # up in iNKT vs CD4/MAIT
+    listDE_final$CD4vsiNKT %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$iNKTvsMAIT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ))
+
+DEgenes_to_plot_negcontrol <- c(cd4_mait_up, cd8_inkt_up)
+```
+
+
+## BONFERRONI????
+Test with Bonferroni correction
+```{r}
+# we made 4 comparisons, so we need to multiply the pvals by 6
+listDE_final_bonf <- lapply(listDE_final, function(x){
+  x$padj_bonferroni <- x$padj*6
+  return(x)
+  }
+  )
+# listDE_final_bonf$CD4vsCD8
+
+# Get the CD4/iNKT vs CD8/MAIT DE genes
+cd4_inkt_up_bonf <- intersect(
+  intersect( # up in CD4/iNKT versus CD8
+    listDE_final_bonf$CD4vsCD8 %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$CD8vsiNKT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # up in CD4/iNKT versus MAIT
+    listDE_final_bonf$CD4vsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$iNKTvsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+cd8_mait_up_bonf <- intersect(
+  intersect( # up in CD8 vs CD4/iNKT
+    listDE_final_bonf$CD4vsCD8 %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$CD8vsiNKT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # up in MAIT vs CD4/iNKT
+    listDE_final_bonf$CD4vsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$iNKTvsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+DEgenes_to_plot_bonf <- c(cd4_inkt_up_bonf, cd8_mait_up_bonf)
+
+
+# now get the genes for negative control, in CD4/MAIT vs CD8/iNKT
+cd4_mait_up_bonf <- intersect(
+  intersect( # up in CD4/MAIT vs CD8
+    listDE_final_bonf$CD4vsCD8 %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$CD8vsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # up in CD4/MAIT vs iNKT
+    listDE_final_bonf$CD4vsiNKT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$iNKTvsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+cd8_inkt_up_bonf <- intersect(
+  intersect( # up in CD8 vs CD4/MAIT
+    listDE_final_bonf$CD4vsCD8 %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$CD8vsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # up in iNKT vs CD4/MAIT
+    listDE_final_bonf$CD4vsiNKT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_bonf$iNKTvsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+DEgenes_to_plot_negcontrol_bonf <- c(cd4_mait_up_bonf, cd8_inkt_up_bonf)
+```
+
+
+
+## Batch correct counts
+```{r batch-correct-counts-per-lineage}
+# Transform counts for data visualization
+rld_for_batchcorrect <- rlog(dds, blind=TRUE)
+# sanity check
+head(assay(rld_for_batchcorrect))
+
+# Correct for batch effect, and then run PCA
+counts_corrected <- limma::removeBatchEffect(
+  x = assay(rld_for_batchcorrect),
+  batch = deseq_data$metadf_deseq$donor_id,
+  design = model.matrix( ~ lineage_id, deseq_data$metadf_deseq)
+)
+rv <- matrixStats::rowVars(counts_corrected) # variance of each gene
+select_rv <- order(rv, decreasing = TRUE)[seq_len(500)]
+pca <- prcomp(t(counts_corrected[select_rv,])) # run pca on top 500 HVG
+percentVar <- pca$sdev^2/sum(pca$sdev^2)
+counts_pca <- data.frame(
+  PC1 = pca$x[, 1],
+  PC2 = pca$x[, 2],
+  donor = deseq_data$metadf_deseq$donor_id,
+  condition = deseq_data$metadf_deseq$lineage_id
+)
+# Plot
+ggplot(counts_pca, aes(x = PC1, y = PC2, color = condition, shape=donor)) +
+  geom_point(size = 4) +
+  xlab(paste0("PC1: ", round(percentVar[1] * 100), "% variance")) +
+  ylab(paste0("PC2: ", round(percentVar[2] * 100), "% variance")) +
+  coord_fixed(expand=TRUE) +
+  scale_y_continuous(expand = c(0.1,0.1))
+
+
+# Compute pairwise correlation values on the batch-effect-corrected matrix
+rld_cor <- cor(counts_corrected[select_rv,])
+# Plot heatmap
+pheatmap(rld_cor, annotation = deseq_data$metadf_deseq[, c("lineage_id"), drop=F])
+```
+
+
+## Plot heatmap
+```{r plot-htmp-fig2b, fig.width=10, fig.height=5}
+# PLOT (per lineage)
+counts_corrected_to_plot <- counts_corrected[c(DEgenes_to_plot, DEgenes_to_plot_negcontrol),]
+# counts_corrected_to_plot <- counts_corrected_to_plot[,c(paste0("CD4_donor", 2:4), paste0("iNKT_donor", 2:4), paste0("CD8_donor", 2:4), paste0("MAIT_donor", 2:4))] # if we want to re-order
+
+# colors for donor
+cols_donorid <- c("lightgrey", "darkgrey", "#737373")
+names(cols_donorid) <- unique(deseq_data$metadf_deseq$donor_id)
+
+# get plot
+pheatmap(
+  t(counts_corrected_to_plot),
+  color = rev(colorRampPalette(brewer.pal(10, "RdBu"))(100)),
+  scale = "column", # z-score
+  cluster_rows = T,
+  cluster_cols = T,
+  border_color = NA,
+  cutree_cols = 4,
+  annotation_row = deseq_data$metadf_deseq %>% dplyr::select(c(lineage_id, donor_id)),
+  annotation_colors = list(
+    lineage_id = cols_lineages,
+    donor_id=cols_donorid
+  ),
+  # Change rows text format
+  show_rownames = T,
+  fontsize_row = 4,
+  # Change columns
+  angle_col=90,
+  fontsize_col = 4,
+  # title
+  main="Figure 2B"
+)
+
+# # get gene & tree order
+# htmp_gene_order <- rownames(counts_corrected_to_plot[p_out$tree_col[["order"]],])
+# htmp_tree_numbers <- sort(cutree(p_out$tree_col, k=4))
+# unique(unname(htmp_tree_numbers[htmp_gene_order])) # order of tree
+# as.dendrogram(p_out$tree_col)
+# 
+# # change order to put EPHB6 in-between LRRN3 and ZFAS1
+# # htmp_gene_order <- append(htmp_gene_order, values=htmp_gene_order[1], after=which(htmp_gene_order %in% c("LRRN3")))[-1]
+# p_out$tree_col$order <- append(p_out$tree_col$order, values=p_out$tree_col$order[1], after=which(htmp_gene_order %in% c("LRRN3")))[-1]
+
+# callback = function(hc, mat){
+#   sv = svd(t(mat))$v[,c(1)]
+#   dend = reorder(as.dendrogram(hc), wts = sv)
+#   as.hclust(dend)
+# }
+```
+
+
+## Plot heatmap Fig 2B as dotplot
+Plot DE genes as dotplot to make sure the heatmap is not misleading.
+```{r dotplot1}
+# Subset to cells of interest
+seur_thym_naive <- subset(seur_integrated, subset=tissue=="Thymus")
+seur_thym_naive <- subset(seur_thym_naive, subset=tcell_lineage!="GD")
+seur_thym_naive <- subset(seur_thym_naive, subset=donor_id!=1)
+seur_thym_naive <- subset(seur_thym_naive, subset=clusters_integrated_data %in% c("3", "9", "10", "11"))
+DimPlot(seur_thym_naive, reduction="umap_integrated", group.by="clusters_integrated_data", cols=cols_integrated)
+```
+
+```{r plt-dotplot-fig2b, fig.width=10, fig.height=5}
+# Create a new metadata column that combines lineage and donor
+seur_thym_naive@meta.data$lineage_donor <- paste(
+  seur_thym_naive@meta.data$tcell_lineage, paste0("donor", seur_thym_naive@meta.data$donor_id), sep="_"
+  )
+order_donors <- c("donor2", "donor3", "donor4")
+seur_thym_naive@meta.data$lineage_donor <- factor(
+  seur_thym_naive@meta.data$lineage_donor,
+  levels=c(
+    paste("CD4", order_donors, sep="_"),
+    paste("iNKT", order_donors, sep="_"),
+    paste("CD8", order_donors, sep="_"),
+    paste("MAIT", order_donors, sep="_")
+  )
+)
+table(seur_thym_naive@meta.data$lineage_donor, useNA="ifany")
+
+# dotplot
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot, scaling=T, orientation="horizontal")
+```
+
+
+
+
+# CD4/CD8 vs iNKT/MAIT (Fig 2C)
+
+## DE genes between CD4/CD8 vs iNKT/MAIT
+```{r contrast-iNKTMAIT-vs-CD4CD8}
+# now get the genes for Tinn vs Tconv, in CD4/CD8 vs iNKT/MAIT
+cd4_cd8_up <- intersect(
+  intersect( # CD4/CD8 vs iNKT
+    listDE_final$CD4vsiNKT %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$CD8vsiNKT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ),
+  intersect( # CD4/CD8 vs MAIT
+    listDE_final$CD4vsMAIT %>% filter(log2FoldChange>0) %>% pull(gene),
+    listDE_final$CD8vsMAIT %>% filter(log2FoldChange>0) %>% pull(gene)
+  ))
+
+inkt_mait_up <- intersect(
+  intersect( # iNKT/MAIT vs CD4
+    listDE_final$CD4vsiNKT %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$CD4vsMAIT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ),
+  intersect( # iNKT/MAIT vs CD8
+    listDE_final$CD8vsiNKT %>% filter(log2FoldChange<0) %>% pull(gene),
+    listDE_final$CD8vsMAIT %>% filter(log2FoldChange<0) %>% pull(gene)
+  ))
+
+DEgenes_to_plot_tinn_tconv <- c(cd4_cd8_up, inkt_mait_up)
+```
+
+
+## BONFERRONI????
+```{r}
+listDE_final_fig2c <- listDE_final[!names(listDE_final) %in% c("CD4vsCD8", "iNKTvsMAIT")]
+listDE_final_fig2c <- lapply(listDE_final, function(x){
+  x$padj_bonferroni <- x$padj*4
+  return(x)
+  }
+  )
+
+cd4_cd8_up_bonf <- intersect(
+  intersect( # CD4/CD8 vs iNKT
+    listDE_final_fig2c$CD4vsiNKT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_fig2c$CD8vsiNKT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # CD4/CD8 vs MAIT
+    listDE_final_fig2c$CD4vsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_fig2c$CD8vsMAIT %>% filter(log2FoldChange>0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+inkt_mait_up_bonf <- intersect(
+  intersect( # iNKT/MAIT vs CD4
+    listDE_final_fig2c$CD4vsiNKT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_fig2c$CD4vsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ),
+  intersect( # iNKT/MAIT vs CD8
+    listDE_final_fig2c$CD8vsiNKT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene),
+    listDE_final_fig2c$CD8vsMAIT %>% filter(log2FoldChange<0 & padj_bonferroni < 0.01) %>% pull(gene)
+  ))
+
+DEgenes_to_plot_tinn_tconv_bonf <- c(cd4_cd8_up_bonf, inkt_mait_up_bonf)
+```
+
+
+## Plot heatmap
+```{r plt-htmp-fig2c}
+# PLOT (per lineage)
+counts_corrected_to_plot_tconv_tinn <- counts_corrected[DEgenes_to_plot_tinn_tconv,]
+
+# plot
+pheatmap(
+  counts_corrected_to_plot_tconv_tinn,
+  color = rev(colorRampPalette(brewer.pal(10, "RdBu"))(100)),
+  scale = "row", # z-score
+  cluster_rows = T,
+  cluster_cols = T,
+  border_color = NA,
+  # Create gaps to separate CD4/NKT
+  # gaps_row=c(2,6, 11, 14),
+  cutree_rows = 2,
+  annotation_col = deseq_data$metadf_deseq %>% dplyr::select(c(lineage_id, donor_id)),
+  annotation_colors = list(
+    lineage_id = cols_lineages,
+    donor_id=cols_donorid
+  ),
+  # Change rows text format
+  show_rownames = T,
+  fontsize_row = 4,
+  # Change columns
+  angle_col=45,
+  fontsize_col = 4,
+  # title
+  main="Figure 2C"
+)
+```
+
+
+## Plot heatmap Fig 2C as dotplot
+```{r plt-dotplot-fig2c}
+# check out dotplot
+seur_thym_naive@meta.data$lineage_donor <- factor(
+  seur_thym_naive@meta.data$lineage_donor,
+  levels=c(
+    paste("CD4", order_donors, sep="_"),
+    paste("CD8", order_donors, sep="_"),
+     paste("MAIT", order_donors, sep="_"),
+    paste("iNKT", order_donors, sep="_")
+  )
+)
+plot_DotPlot(seur_thym_naive, group="lineage_donor", features=DEgenes_to_plot_tinn_tconv, scaling=T, orientation="vertical")
+```
+
+
+
+
+# SESSION INFO
+
+```{r}
+sessionInfo()
+```

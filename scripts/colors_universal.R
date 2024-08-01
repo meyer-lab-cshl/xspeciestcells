@@ -33,7 +33,7 @@ cols_lineages <- c("CD4"  = "#74c476",
                    "CD8"  = "#df65b0",
                    "GD"   = "#08519c",
                    "MAIT" = "#9ecae1",
-                   "NKT"  = "#9e9ac8")
+                   "iNKT"  = "#9e9ac8")
 
 # Cell states
 cols_cellstate <- c("Tnaive"= "#b3e2cd",

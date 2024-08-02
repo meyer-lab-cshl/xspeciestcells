@@ -7,7 +7,6 @@ output:
     toc: true
     toc_float: true
     number_sections: true
-
 ---
 
 ```{r, setup, include=FALSE}
@@ -16,6 +15,7 @@ knitr::opts_chunk$set(
   fig.height = 5,
   warning = FALSE,
   message = FALSE,
+  attr.output='style="max-height: 300px;"',
   root.dir = "~/Projects/HumanThymusProject/"
 )
 ```
@@ -30,6 +30,7 @@ knitr::opts_chunk$set(
 library(Seurat)
 library(cowplot)
 library(ggplot2)
+library(ggh4x) # used for ordering facets in ggplot
 library(tidyverse)
 library(tidytext)
 library(pheatmap)
@@ -64,15 +65,7 @@ DimPlot(seur.pbmc, reduction="umap_integrated", group.by="clusters_integrated_da
 
 
 
-# FUNCTIONS
-```{r define-functions}
-
-```
-
-
-
-
-# 1. PREPARE GENE LISTS
+# PREPARE GENE LISTS
 
 We will store all gene lists dataframes (genes for each GEP, genes for each literature-derived gene signature) in a list, which we will eventually combine into a single long-format dataframe.
 ```{r set-genesig-list}
@@ -80,7 +73,7 @@ genesig_longdf_list <- list()
 ```
 
 
-## 1.1. GEPs
+## GEPs
 ```{r prep-geps}
 head(genes.gep)
 geps_df <- gather(genes.gep, key=geneprogram, value=gene, colnames(genes.gep)) %>%
@@ -99,7 +92,7 @@ genesig_longdf_list[["GEPs"]] <- geps_df
 ```
 
 
-## 1.2. Cano-Gamez _et al._ gene signatures
+## Cano-Gamez _et al._ gene signatures
 ```{r prep-canogamez}
 head(genes.cano)
 
@@ -134,7 +127,7 @@ genesig_longdf_list[["canogamez"]] <- cano_df
 ```
 
 
-## 1.3. Rose _et al._ gene signatures
+## Rose _et al._ gene signatures
 Let's first do a little sanity check that we are able to reproduce the heatmaps in [Figures 2e and 2h](https://www.nature.com/articles/s42003-023-04747-9/figures/2) of the Rose _et al._ paper.
 ```{r rose-reproduce-htmps, fig.height=6, fig.width=4}
 htmp <- function(rosedf, lineage){
@@ -213,7 +206,7 @@ genesig_longdf_list[["rose"]] <- rose_df
 ```
 
 
-## 1.4. Poon _et al._ gene signatures
+## Poon _et al._ gene signatures
 ```{r prep-poon}
 head(genes.poon)
 colnames(genes.poon) <- gsub(" ", "", colnames(genes.poon))
@@ -225,8 +218,6 @@ for (i in seq(1,ncol(genes.poon), 3)){
   geneprogram <- sub("_.*", "",colnames(subdf)[1])
   colnames(subdf) <- c("gene", "padj", "logFC")
   subdf <- subdf %>%
-    # OPTION 1: full list of Poon genes
-    # filter(padj<0.01 & logFC>0.25)
     filter(padj<0.001 & logFC>0.25)
   cat(geneprogram, "\n")
   cat("# genes:", nrow(subdf), "\n")
@@ -257,7 +248,7 @@ genesig_longdf_list[["poon"]] <- poon_df
 # table(is.na(genesig_longdf_list$poon$gene)) # sanity check
 ```
 
-## 1.5. Terekhova _et al._ gene signatures
+## Terekhova _et al._ gene signatures
 In this dataset, the annotation "Tnaive/cm/em/emra" was evaluated based on the heatmaps provided in the paper (looking at CCR7, CD62L, CD45RA, CD45RO).
 ```{r prep-terekhova}
 head(genes.terekhova_general)
@@ -317,11 +308,11 @@ genesig_longdf_list[["terekhova"]] <- terekhova_df
 ```
 
 
-## 1.6. Combine gene lists
+## Combine gene lists
 ```{r prep-gene-lists-into-one-df}
 longdf <- bind_rows(genesig_longdf_list, .id="dataset")
 table(longdf$dataset, useNA="ifany")
-# canogamez     gapin      poon      rose   terekhova
+# canogamez      GEPs      poon      rose   terekhova
 #   387         4,068    26,463     1,672       3,400
 
 # remove any genes that we don't have in seur.pbmc (i.e. we didn't detect in our dataset)
@@ -329,7 +320,7 @@ longdf <- longdf %>%
   filter(gene %in% rownames(seur.pbmc)) %>%
   filter(geneprogram != "GEP12") # remove batch-driven GEP
 table(longdf$dataset, useNA="ifany")
-# canogamez     gapin      poon      rose  terekhova
+# canogamez      GEPs      poon      rose  terekhova
 #   341         3,787    19,959     1,542      3,145
 
 # check out the number of genes per signature/program
@@ -364,9 +355,9 @@ names(cols_geneprogcat) <- unique(cols_df$geneprogram_cat)
 
 
 
-# 2. COMPUTE OVERLAP BETWEEN GENE LISTS (Sup Fig 10A)
+# COMPUTE OVERLAP BETWEEN GENE LISTS (Sup Fig 10A)
 
-## 2.1. Define Jaccard function
+## Define Jaccard function
 ```{r function-jaccard}
 overlapcoef <- function(a, b, coef="jaccardweight") {
   # Jaccard Index
@@ -382,19 +373,576 @@ overlapcoef <- function(a, b, coef="jaccardweight") {
     maxj = min(length(a),length(b))/max(length(a), length(b))
     return (intersection/(union*maxj))
   }
-  # else if(coef=="overlapcoef"){
-  #   # cat("\n- Computing overlap coefficient -\n")
-  #   intersection = length(intersect(a, b))
-  #   denominator = min(length(a),length(b))
-  #   return (intersection/denominator)
-  # }
 }
+```
+
+
+## Define null hypothesis function
+```{r function-null-hypothesis}
+NullOverlap_double <- function(
+    seuratobj=seur.pbmc,
+    df_geneprograms=longdf,
+    geneprograms_to_test=unique(longdf$geneprogram),
+    coefficient_to_compute="jaccardweight",
+    nbins=25,
+    nrandom=1000
+){
+  
+  # ___________________________________________________________
+  # -- 1. Get DF with all genes & binned by expression level --
+  cat("\n-- 1. GET ALL GENES & BIN THEM BY EXPRESSION LEVEL --\n")
+  allgenes_binned_DF <- data.frame("gene"=rownames(seuratobj),
+                                   "totalexpression"=rowSums(seuratobj@assays$RNA@data))
+  # nrow(allgenes_binned_DF) == nrow(seuratobj) # sanity check
+  # table(rownames(allgenes_binned_DF)==allgenes_binned_DF$gene) # sanity check
+  # hist(allgenes_binned_DF$totalexpression, breaks=100) # visualize distribution
+  
+  # Get the bins by percentiles
+  allgenes_binned_DF <- allgenes_binned_DF[order(allgenes_binned_DF$totalexpression),]
+  allgenes_binned_DF$bin <- ggplot2::cut_number(x = allgenes_binned_DF$totalexpression, n = nbins, labels = FALSE, right = FALSE)
+  cat("Number of genes in each bin, from bin 1 to bin", nbins, ":\n")
+  print(table(allgenes_binned_DF$bin))
+  # ggplot(allgenes_binned_DF)+
+  #   geom_density(aes(x=totalexpression, group=bin, color=factor(bin, levels=1:10))) # sanity check
+  
+  # _____________________________________________________
+  # -- 2. Draw random ctrl genes for each gene program --
+  cat("\n-- 2. DRAW RANDOM CTRL GENES FOR EACH GENE SET --\n")
+  randomgenesets_list <- list()
+  
+  for(refgeneprog in geneprograms_to_test){
+    cat("\n++ Drawing random ctrl genes for", refgeneprog, "\n")
+    # Find in which expression bins are our genes from the gene set
+    refgeneset <- df_geneprograms[df_geneprograms$geneprogram==refgeneprog, "gene"]
+    refgeneset_binned_DF <- allgenes_binned_DF[allgenes_binned_DF$gene %in% refgeneset,]
+    # table(nrow(refgeneset_binned_DF)==length(refgeneset))
+    
+    # ++++++++++++++++++++++++++++++++++
+    # Do 1000 random draws of gene lists
+    ctrlgenematrix <- matrix(nrow=length(refgeneset), ncol=nrandom)
+    for(i in 1:nrandom){
+      if(i%%100==0){cat(paste0("\nrandom draw #", i))} # progress bar
+      # Loop by expression bin & sample equal number of genes from each bin
+      ctrlgeneset <- c()
+      for(bin in unique(refgeneset_binned_DF$bin)){
+        # print(bin)
+        ngenes_to_sample <- sum(refgeneset_binned_DF$bin==bin)
+        # print(ngenes_to_sample)
+        ctrlgenes_in_same_bin <- sample(x=allgenes_binned_DF[allgenes_binned_DF$bin==bin,"gene"], size=ngenes_to_sample, replace=FALSE)
+        # print(length(ctrlgenes_in_same_bin))
+        ctrlgeneset <- c(ctrlgeneset, ctrlgenes_in_same_bin)
+      }
+      # Sanity check
+      if(length(ctrlgeneset)!=length(refgeneset)){cat("\nPROBLEM: control gene set of size", length(ctrlgeneset), "while gene program length is", length(refgeneset))}
+      
+      # Add ctrlgeneset to matrix
+      ctrlgenematrix[,i] <- ctrlgeneset
+    }
+    # Sanity check
+    cat("\n\n++ Selection of random ctrl genes over! ++\n")
+    cat("Length of reference gene set is", length(unique(refgeneset)), "and length of the random gene sets:", nrow(ctrlgenematrix), "\n")
+    # ++++++++++++++++++++++++++++++++++
+    
+    # Add to the list
+    randomgenesets_list[[refgeneprog]] <- ctrlgenematrix
+  }
+  
+  # _____________________________________________________________________________
+  # -- 3. Compute random & observed overlap between each pairwise gene program --
+  cat("\n-- 3. COMPUTE RANDOM AND OBSERVED OVERLAP --\n")
+  
+  combinations <- t(combn(geneprograms_to_test,2))
+  colnames(combinations) <- c("geneprogram1", "geneprogram2")
+  
+  # add self combinations
+  combinations <- rbind(combinations,
+                        t(matrix(rep(geneprograms_to_test, 2), nrow=2, byrow=T)))
+  combinations <- as.data.frame(combinations)
+  ncombinations <- nrow(combinations)
+  
+  for(i in 1:nrow(combinations)){
+    # cat("\n", combinations[i,1], "vs", combinations[i,2])
+    if(i%%25==0){cat(paste0("\ncomparison ", i, "/", ncombinations))} # progress bar
+    
+    # Get observed overlap
+    genesetA <- df_geneprograms %>% filter(geneprogram==combinations[i,"geneprogram1"]) %>% pull(gene)
+    genesetB <- df_geneprograms %>% filter(geneprogram==combinations[i,"geneprogram2"]) %>% pull(gene)
+    observedpercent <- overlapcoef(genesetA, genesetB, coef=coefficient_to_compute)
+    
+    # Get vector of random overlaps
+    randomgenesetA <- randomgenesets_list[[combinations[i,"geneprogram1"]]]
+    randomgenesetB <- randomgenesets_list[[combinations[i,"geneprogram2"]]]
+    ctrlpercent <- sapply(1:nrandom, function(x) overlapcoef(randomgenesetA[,x], randomgenesetB[,x], coef=coefficient_to_compute))
+    if(length(ctrlpercent) != nrandom){cat("\nPROBLEM: vector of random overlaps of length", length(ctrlpercent), "when there should be", nrandom, "random sets")}
+    
+    # save info
+    combinations[i,"observedoverlap"] <- observedpercent
+    combinations[i,"randomoverlap_mean"] <- mean(ctrlpercent)
+    combinations[i,"randomoverlap_min"] <- min(ctrlpercent)
+    combinations[i,"randomoverlap_max"] <- max(ctrlpercent)
+    combinations[i,"pval"] <- sum(ctrlpercent>observedpercent)/nrandom
+  }
+  
+  return(combinations)
+}
+```
+
+
+## Compute wJI between gene signatures
+```{r compute-JI-btw-gene-signatures}
+genesets_overlap_wjaccard <- NullOverlap_double(
+  seuratobj=seur.pbmc,
+  df_geneprograms=longdf,
+  geneprograms_to_test=unique(longdf$geneprogram),
+  coefficient_to_compute="jaccardweight",
+  nbins=25, nrandom=1000
+  )
+head(genesets_overlap_wjaccard)
+```
+
+Let's have a first look at the top 10 literature-derived gene signatures with highest weighted JI for each GEP.
+```{r plot-wji-top10, fig.width=15, fig.height=8}
+genesets_overlap_wjaccard %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% c("GEP3", "GEP4", "GEP5", "GEP6")) %>%
+  filter(!geneprogram2 %in% grep("GEP", geneprogram2, value=T)) %>%
+  # keep only top 10 wJI and add padj
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2)) %>%
+  top_n(10, observedoverlap) %>%
+  ungroup() %>%
+  distinct() %>%
+  # last details (color, padj to plot)
+  left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  # PLOT
+  ggplot(aes(x=reorder_within(geneprogram2, -observedoverlap, geneprogram1), y=observedoverlap))+
+  geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+  facet_wrap(~factor(geneprogram1, levels=paste0("GEP", 1:11)), nrow=1, scales="free_x")+
+  geom_point(aes(y=randomoverlap_mean), shape="_", size=3)+
+  tidytext::scale_x_reordered() +
+  geom_text(aes(label=padj_toplot), size=4, angle=90, hjust=-0.2)+
+  ylim(c(0,1))+
+  scale_fill_manual(values=cols_geneprogcat, name="")+
+  theme_cowplot()+
+  theme(
+    axis.text.x=element_text(angle=45, hjust=1, size=12),
+    panel.grid.major.y=element_line(colour="lightgrey", linetype=2)#,
+    # plot.margin=margin(10,10,10,70)
+  )+
+  labs(x="", y="Weighted Jaccard index")
+```
+
+
+## Plot wJI (supp fig 10A)
+```{r plot-supp-fig10A, fig.height=20, fig.width=20}
+# define order of literature-derived gene signatures (i.e. order of facets)
+order_programs <- c(
+  cols_df %>% filter(geneprogram_cat=="Tnaive") %>% arrange(geneprogram) %>% pull(geneprogram),
+  cols_df %>% filter(geneprogram_cat=="Tcm") %>% arrange(geneprogram) %>% pull(geneprogram),
+  cols_df %>% filter(geneprogram_cat %in% c("MAIT")) %>% arrange(geneprogram) %>% pull(geneprogram),
+  cols_df %>% filter(geneprogram_cat %in% c("Tem")) %>% arrange(geneprogram) %>% pull(geneprogram),
+  cols_df %>% filter(geneprogram_cat=="Temra") %>% arrange(geneprogram) %>% pull(geneprogram)
+)
+
+
+genesets_overlap_wjaccard %>%
+  # keep geps of interest
+  filter(geneprogram1 %in% c("GEP3", "GEP4", "GEP5", "GEP6")) %>%
+  filter(!geneprogram2 %in% c(grep("GEP", geneprogram2, value=T))) %>%
+  # add padj
+  group_by(geneprogram1) %>%
+  mutate(padj=pval*n_distinct(geneprogram2)) %>%
+  ungroup() %>%
+  distinct() %>%
+  # last details (color, padj to plot)
+  left_join(cols_df, by=join_by("geneprogram2"=="geneprogram")) %>%
+  mutate(padj_toplot=ifelse(padj==0, "< 0.001",
+                            ifelse(padj<0.05, as.character(round(padj, 2)), ""))) %>%
+  # remove some geneprograms that we're not interested in (they don't show very high wJI with GEP3-6)
+  filter(!geneprogram_cat %in% c("Treg", "Trm", "Tprolif", "other")) %>%
+  filter(!geneprogram2 %in% c(
+    grep("Tnaive_IFN", geneprogram2, value=T),
+    "Terekhova | CD4_Exhausted-like_memory",
+    grep("Terekhova \\| GD_", geneprogram2, value=T)
+    )) %>%
+  # PLOT SUPP FIG 10A
+  ggplot(aes(x=factor(geneprogram1, levels=rev(paste0("GEP", 1:11))), y=observedoverlap))+
+    geom_bar(stat="identity", aes(fill=geneprogram_cat))+
+    geom_point(aes(y=randomoverlap_mean), shape="|", size=3)+
+    tidytext::scale_x_reordered() +
+    geom_text(aes(label=padj_toplot), size=4, angle=0, hjust=-0.2)+
+    facet_manual(~factor(geneprogram2, levels=order_programs),
+                 design=rbind(
+                   c(1:6), c(7:8,NA,NA,NA,NA), # naive
+                   c(9:14), c(15:17,NA,NA,NA), # Tcm
+                   c(18:19,NA,NA,NA,NA), # MAIT
+                   c(20:25), c(26:30, NA), # Tem
+                   c(31:36), c(37:38,NA,NA,NA,NA) # Temra
+                   ),
+                 scales="free_x")+
+    ylim(c(0,1))+
+    coord_flip()+
+    theme_cowplot()+
+    scale_fill_manual(values=cols_geneprogcat, name="")+
+    labs(y="Weighted Jaccard Index", x="", title="Supplementary Figure 10A")
 ```
 
 
 
 
-# 3. COEXPRESSION GENE LISTS (Sup Fig 10B)
+# COEXPRESSION GENE LISTS (Sup Fig 10B)
+
+## Compute gene signature scores
+We will first put all gene signatures into a list.
+```{r longdf-into-list}
+# a few sanity checks
+table(is.na(longdf$geneprogram)) # should all be FALSE
+table(is.na(longdf$gene)) # should all be FALSE
+
+# get gene lists into a list (lol)
+geneprograms.list <- list()
+for(gp in unique(longdf$geneprogram)){
+  genes_in_program <- longdf %>%
+    filter(geneprogram==gp & gene %in% rownames(seur_integrated)) %>%
+    pull(gene)
+  print(paste0(gp, ": ", length(genes_in_program), " genes"))
+  geneprograms.list[[gp]] <- genes_in_program
+}
+# print(lengths(geneprograms.list))
+
+# rename some gene signatures
+names(geneprograms.list) <- gsub(" \\| ", "_", names(geneprograms.list))
+names(geneprograms.list) <- gsub("\\/", "_", names(geneprograms.list))
+names(geneprograms.list) <- gsub("\\+", "", names(geneprograms.list))
+names(geneprograms.list) <- paste0("score_", names(geneprograms.list))
+
+# sanity check
+names(geneprograms.list)
+```
+
+Now let's compute the gene signature scores.
+```{r compute-genesig-scores, fig.height=20, fig.width=10}
+# compute score
+seur_integrated <- AddModuleScore(seur_integrated, name = names(geneprograms.list), features=geneprograms.list, seed=1)
+
+# Remove the annoying numbers that are being added
+colnames(seur_integrated@meta.data)[32:100] <- names(geneprograms.list)
+
+# Sanity check GEPs (should look similar to Fig 1K, even though it's not GEP usage)
+SCpubr::do_FeaturePlot(
+  seur_integrated,
+  features=colnames(seur_integrated@meta.data)[32:42],
+  reduction="umap_integrated",
+  viridis.palette = "B",
+  use_viridis = T,
+  order=T,
+  ncol=3
+  )
+```
+
+
+## Define functions to plot coexpression
+These functions were taken from Seurat [`visualization.R`](https://github.com/satijalab/seurat/blob/HEAD/R/visualization.R) script. These functions are used by `Seurat::FeaturePlot(..., blend=T)`. We used them and wrote our own in-house plotting function `PlotCoexpression()`.
+```{r functions-coexpression}
+# SET COLOR GRADIENT
+BlendMatrix <- function(
+    n = 10,
+    col.threshold = 0.5,
+    two.colors = c("#ff0000", "#00ff00"),
+    negative.color = "black"
+) {
+  if (0 > col.threshold || col.threshold > 1) {
+    stop("col.threshold must be between 0 and 1")
+  }
+  C0 <- as.vector(col2rgb(negative.color, alpha = TRUE))
+  C1 <- as.vector(col2rgb(two.colors[1], alpha = TRUE))
+  C2 <- as.vector(col2rgb(two.colors[2], alpha = TRUE))
+  blend_alpha <- (C1[4] + C2[4])/2
+  C0 <- C0[-4]
+  C1 <- C1[-4]
+  C2 <- C2[-4]
+  merge.weight <- min(255 / (C1 + C2 +  C0 + 0.01))
+  sigmoid <- function(x) {
+    return(1 / (1 + exp(-x)))
+  }
+  blend_color <- function(
+    i,
+    j,
+    col.threshold,
+    n,
+    C0,
+    C1,
+    C2,
+    alpha,
+    merge.weight
+  ) {
+    c.min <- sigmoid(5 * (1 / n - col.threshold))
+    c.max <- sigmoid(5 * (1 - col.threshold))
+    c1_weight <- sigmoid(5 * (i / n - col.threshold))
+    c2_weight <- sigmoid(5 * (j / n - col.threshold))
+    c0_weight <-  sigmoid(5 * ((i + j) / (2 * n) - col.threshold))
+    c1_weight <- (c1_weight - c.min) / (c.max - c.min)
+    c2_weight <- (c2_weight - c.min) / (c.max - c.min)
+    c0_weight <- (c0_weight - c.min) / (c.max - c.min)
+    C1_length <- sqrt(sum((C1 - C0) ** 2))
+    C2_length <- sqrt(sum((C2 - C0) ** 2))
+    C1_unit <- (C1 - C0) / C1_length
+    C2_unit <- (C2 - C0) / C2_length
+    C1_weight <- C1_unit * c1_weight
+    C2_weight <- C2_unit * c2_weight
+    C_blend <- C1_weight * (i - 1) * C1_length / (n - 1) + C2_weight * (j - 1) * C2_length / (n - 1) + (i - 1) * (j - 1) * c0_weight * C0 / (n - 1) ** 2 + C0
+    C_blend[C_blend > 255] <- 255
+    C_blend[C_blend < 0] <- 0
+    return(rgb(
+      red = C_blend[1],
+      green = C_blend[2],
+      blue = C_blend[3],
+      alpha = alpha,
+      maxColorValue = 255
+    ))
+  }
+  blend_matrix <- matrix(nrow = n, ncol = n)
+  for (i in 1:n) {
+    for (j in 1:n) {
+      blend_matrix[i, j] <- blend_color(
+        i = i,
+        j = j,
+        col.threshold = col.threshold,
+        n = n,
+        C0 = C0,
+        C1 = C1,
+        C2 = C2,
+        alpha = blend_alpha,
+        merge.weight = merge.weight
+      )
+    }
+  }
+  return(blend_matrix)
+}
+
+
+# SET COLOR MATRIX
+Melt <- function(x) {
+  if (!is.data.frame(x = x)) {
+    x <- as.data.frame(x = x)
+  }
+  return(data.frame(
+    rows = rep.int(x = rownames(x = x), times = ncol(x = x)),
+    cols = unlist(x = lapply(X = colnames(x = x), FUN = rep.int, times = nrow(x = x))),
+    vals = unlist(x = x, use.names = FALSE)
+  ))
+}
+
+
+# PLOT COLOR MATRIX
+BlendMap <- function(color.matrix, step=2, xtext='rows', ytext="cols") {
+  color.heat <- matrix(
+    data = 1:prod(dim(x = color.matrix)) - 1,
+    nrow = nrow(x = color.matrix),
+    ncol = ncol(x = color.matrix),
+    dimnames = list(
+      1:nrow(x = color.matrix),
+      1:ncol(x = color.matrix)
+    )
+  )
+  
+  # xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = step)
+  # ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = step)
+  color.heat <- Melt(x = color.heat)
+  color.heat$rows <- as.numeric(x = as.character(x = color.heat$rows))
+  color.heat$cols <- as.numeric(x = as.character(x = color.heat$cols))
+  color.heat$vals <- factor(x = color.heat$vals)
+  plot <- ggplot(
+    data = color.heat,
+    mapping = aes_string(x = "rows", y = "cols", fill = 'vals')
+  ) +
+    geom_raster(show.legend = FALSE) +
+    theme(plot.margin = unit(x = rep.int(x = 0, times = 4), units = 'cm')) +
+    # scale_x_continuous(breaks = xbreaks, expand = c(0, 0), labels = xbreaks) +
+    # scale_y_continuous(breaks = ybreaks, expand = c(0, 0), labels = ybreaks) +
+    scale_fill_manual(values = as.vector(x = color.matrix)) +
+    labs(x=xtext, y=ytext)+
+    theme_cowplot()
+  
+  if(step!=0){
+    xbreaks <- seq.int(from = 0, to = nrow(x = color.matrix), by = step)
+    ybreaks <- seq.int(from = 0, to = ncol(x = color.matrix), by = step)
+    plot <- plot +
+      scale_x_continuous(breaks = xbreaks, expand = c(0, 0), labels = xbreaks) +
+      scale_y_continuous(breaks = ybreaks, expand = c(0, 0), labels = ybreaks)
+  } else if(step==0){
+    plot <- plot+theme(axis.text=element_blank(), axis.ticks=element_blank())
+  }
+  
+  return(plot)
+}
+
+
+# Normalize expression level of 2 features
+BlendExpression <- function(data, nlevels=100) {
+  if (ncol(x = data) != 2) {
+    stop("'BlendExpression' only blends two features")
+  }
+  features <- colnames(x = data)
+  data <- as.data.frame(x = apply(
+    X = data,
+    MARGIN = 2,
+    FUN = function(x) {
+      return(round(x = (nlevels-1) * (x - min(x)) / (max(x) - min(x))))
+    }
+  ))
+  data[, 3] <- data[, 1] + data[, 2] * nlevels
+  # colnames(x = data) <- c(features, paste(features, collapse = '_'))
+  colnames(x = data) <- c(features, "blend")
+  for (i in 1:ncol(x = data)) {
+    data[, i] <- factor(x = data[, i])
+  }
+  return(data)
+}
+
+
+# PLOT UMAP WITH COEXPRESSION
+PlotCoexpression <- function(
+    seuratobj=seur_integrated,
+    features,
+    plotting="blend",
+    pwithmatrix=T,
+    rasterdpi=300,
+    nlevels=100,
+    cols.neg="#969696",
+    cols.pos=c("#74c476", "#fd8d3c"),
+    col.threshold=0.5,
+    colmatrix_stepsize=0,
+    order=T
+){
+  # GET COLOR MATRIX
+  # cat("\n-> Getting color matrix\n")
+  color.matrix <- BlendMatrix(
+    two.colors = cols.pos,
+    col.threshold = col.threshold,
+    negative.color = cols.neg,
+    n=nlevels
+  )
+  
+  # DEFINE COLOR LIST FOR PLOTTING
+  # cat("\n-> Defining colors for plotting\n")
+  colors <- list(
+    color.matrix[, 1], # red
+    color.matrix[1, ], # green
+    as.vector(x = color.matrix)
+  )
+  
+  # BLEND EXPRESSION
+  # cat("\n-> Blending features expression\n")
+  df <- seuratobj@meta.data[, features]
+  df <- BlendExpression(df, nlevels=nlevels) # 3 columns
+  # head(df)
+  # GET PLOTTING DATAFRAME
+  # cat("\n-> Defining plotting DF\n")
+  dims <- seuratobj@reductions$umap_integrated@cell.embeddings
+  # head(dims)
+  df_final <- cbind(df, dims)
+  # head(df_final)
+  
+  # PLOT
+  if(plotting=="feature1"){
+    # cat("\n-> Plotting feature 1\n")
+    if(order==T){df_final <- df_final[order(df_final[,1]),]}
+    df_final[,1] <- as.numeric(as.character(df_final[,1])) # transform factors to numbers for plotting
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[1]))+
+      geom_point(size=0.1)+
+      scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[nrow(color.matrix), 1])
+  }
+  else if(plotting=="feature2"){
+    # cat("\n-> Plotting feature 2\n")
+    if(order==T){df_final <- df_final[order(df_final[,2]),]}
+    df_final[,2] <- as.numeric(as.character(df_final[,2])) # transform factors to numbers for plotting
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[2]))+
+      geom_point(size=0.1)+
+      scale_color_gradient(low=color.matrix[1, 1], high=color.matrix[1, ncol(color.matrix)])
+  }
+  else if(plotting=="blend"){
+    # cat("\n-> Plotting blended features\n")
+    if(order==T){df_final <- df_final[order(df_final[,1], df_final[,2]),]} # order points by increasing value of score 1 and score 2
+    # Colors
+    cols.use <- as.vector(color.matrix)
+    names(cols.use) <- as.character(0:(length(cols.use)-1))
+    # Plot
+    p <- ggplot(df_final, aes_string(x=colnames(dims)[1], y=colnames(dims)[2], color=colnames(df_final)[3]))+
+      geom_point(size=0.3)+
+      scale_color_manual(values=cols.use)+
+      labs(x="UMAP1", y="UMAP2")+
+      theme_cowplot()+
+      theme(legend.position="none",
+            axis.text=element_blank(),
+            axis.title=element_blank(),
+            axis.ticks = element_blank(),
+            axis.line = element_blank(),
+            panel.border=element_rect(color="white", fill=NA, size=1))
+    # rasterise to avoid computer crashing
+    p <- ggrastr::rasterise(p, layers="Point", dpi=rasterdpi)
+    # add color matrix if specified
+    if(pwithmatrix==T){
+      # cat("\n-> Adding color matrix on plot\n")
+      p <- ggdraw(p)+
+        draw_plot(BlendMap(color.matrix, step=colmatrix_stepsize, xtext=features[1], ytext=features[2]),
+                  0.05,0.06,.25,.25)
+    }
+  }
+  
+  return(p)
+}
+```
+
+
+## Plot coexpression on integrated umap (Sup Fig 10B)
+First plot all UMAPs and save them in variables.
+```{r plot-coexpression}
+# GEP4
+p11 <- PlotCoexpression(features=c("score_GEP4", "score_CanoGamez_CD4_TCM")) +
+  draw_label("CD4 Tcm", hjust=0.5, y=0.98, size=30)
+p12 <- PlotCoexpression(features=c("score_GEP4", "score_Rose_CD8_modul2_Tcm_em")) +
+  draw_label("CD8 Tcm/em (module 2)", hjust=0.5, y=0.98, size=30)
+p13 <- PlotCoexpression(features=c("score_GEP4", "score_Terekhova_CD8_Tcm_CCR4pos")) +
+  draw_label("CD8 Tcm CCR4+", hjust=0.5, y=0.98, size=30)
+p14 <- PlotCoexpression(features=c("score_GEP4", "score_Poon_CD4TCM_TFH")) +
+  draw_label("CD4 Tcm/fh", hjust=0.5, y=0.98, size=30)
+
+
+# GEP5
+p21 <- PlotCoexpression(features=c("score_GEP5", "score_CanoGamez_CD4_TEM")) +
+  draw_label("CD4 Tem", hjust=0.5, y=0.98, size=30)
+p22 <- PlotCoexpression(features=c("score_GEP5", "score_Rose_CD4_modul4_Tem")) +
+  draw_label("CD4 Tem (module 4)", hjust=0.5, y=0.98, size=30)
+p23 <- PlotCoexpression(features=c("score_GEP5", "score_Terekhova_MAITcells")) +
+  draw_label("MAIT", hjust=0.5, y=0.98, size=30)
+p24 <- PlotCoexpression(features=c("score_GEP5", "score_Poon_CD8MAIT")) +
+  draw_label("CD8 MAIT", hjust=0.5, y=0.98, size=30)
+
+
+# GEP6
+p31 <- PlotCoexpression(features=c("score_GEP6", "score_CanoGamez_CD4_TEMRA")) +
+  draw_label("CD4 Temra", hjust=0.5, y=0.98, size=30)
+p32 <- PlotCoexpression(features=c("score_GEP6", "score_Rose_CD8_modul1_Temra")) +
+  draw_label("CD8 Temra (module 1)", hjust=0.5, y=0.98, size=30)
+p33 <- PlotCoexpression(features=c("score_GEP6", "score_Terekhova_CD8_Temra")) +
+  draw_label("CD8 Temra", hjust=0.5, y=0.98, size=30)
+p34 <- PlotCoexpression(features=c("score_GEP6", "score_Poon_CD8TEM_TEMRA")) +
+  draw_label("CD8 Tem/emra", hjust=0.5, y=0.98, size=30)
+```
+
+Now combine all the plots.
+```{r plot-coexpression-combine, fig.height=20, fig.width=25}
+plot_grid(
+  plot_grid(p11,p12,p13,p14, nrow = 1, scale=0.95),
+  plot_grid(p21,p22,p23,p24, nrow = 1, scale=0.95),
+  plot_grid(p31,p32,p33,p34, nrow = 1, scale=0.95),
+  nrow=3, scale=0.95
+)
+```
+
 
 
 
@@ -402,5 +950,3 @@ overlapcoef <- function(a, b, coef="jaccardweight") {
 ```{r}
 sessionInfo()
 ```
-
-

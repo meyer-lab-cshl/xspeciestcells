@@ -11,4 +11,5 @@ This branch is under construction :construction: , and will be later merged to t
 
 - [`scripts`](./scripts/) contains the final scripts that allow the (1) preprocessing of the data and (2) generation of figures in the manuscript;
 - [`figures`](./figures) will contain the final figures present in the manuscript as PDF files;
+- [`data_geo`](./data_geo) was created for the user to put the data files deposited on GEO (ADD LINK HERE);
 - [`data_github`](./data_github) contains small data files which were not uploaded on GEO (cNMF output files, gene signatures from the literature, etc.).

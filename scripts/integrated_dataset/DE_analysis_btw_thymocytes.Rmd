@@ -435,6 +435,7 @@ cols_donorid <- c("lightgrey", "darkgrey", "#737373")
 names(cols_donorid) <- unique(deseq_data$metadf_deseq$donor_id)
 
 # get plot
+# pdf("~/Projects/HumanThymusProject/data/manuscript/cellreports/fig2B_DEanalysis.pdf", width=15, height=5)
 pheatmap(
   t(counts_corrected_to_plot),
   color = rev(colorRampPalette(brewer.pal(10, "RdBu"))(100)),
@@ -451,13 +452,14 @@ pheatmap(
   ),
   # change rows text format
   show_rownames = T,
-  fontsize_row = 4,
+  fontsize_row = 10,
   # change columns
   angle_col=90,
-  fontsize_col = 4,
+  fontsize_col = 10,
   # title
   main="Figure 2B"
 )
+# dev.off()
 ```
 
 

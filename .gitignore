@@ -8,6 +8,8 @@
 .Rprofile
 *.Rproj
 data/*
+data_geo/*
+data_github/*
 shinyAppHumanGapinData/*
 shinyAppMulti/*
 *.nb.html

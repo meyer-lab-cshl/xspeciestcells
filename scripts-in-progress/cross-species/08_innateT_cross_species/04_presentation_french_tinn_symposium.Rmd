@@ -1,0 +1,173 @@
+---
+title: "Presentation Nov 2024"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 5, fig.height = 5,
+                      warning=FALSE, message=FALSE,
+                      root.dir = "~/Projects/HumanThymusProject/")
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts-final/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# ms integrated object
+seur.ms <- readRDS("./data/clean_data/seurat_mouse_integrated_object_23_12_02.rds")
+
+# update annotation
+seur.ms@meta.data$clusters_annotation <- case_when(
+  seur.ms@meta.data$clusters_integrated_data == "0" ~ "post-selection/naive",
+  seur.ms@meta.data$clusters_integrated_data == "1" ~ "immature CD24+ GD",
+  seur.ms@meta.data$clusters_integrated_data == "2" ~ "immature CD24+ GD",
+  seur.ms@meta.data$clusters_integrated_data == "3" ~ "signaling",
+  seur.ms@meta.data$clusters_integrated_data == "4" ~ "signaling",
+  seur.ms@meta.data$clusters_integrated_data == "5" ~ "cycling",
+  seur.ms@meta.data$clusters_integrated_data == "6" ~ "transition",
+  seur.ms@meta.data$clusters_integrated_data == "7" ~ "typeII",
+  seur.ms@meta.data$clusters_integrated_data == "8" ~ "typeI",
+  seur.ms@meta.data$clusters_integrated_data == "9" ~ "typeI",
+  seur.ms@meta.data$clusters_integrated_data == "10" ~ "typeIII",
+  seur.ms@meta.data$clusters_integrated_data == "11" ~ "typeIII",
+  seur.ms@meta.data$clusters_integrated_data == "12" ~ "12"
+)
+
+# plot
+SCpubr::do_DimPlot(
+  seur.ms,
+  group.by="clusters_annotation",
+  shuffle=TRUE,
+  legend.position="right"
+)
+
+# human integrated object
+seur.hu <- readRDS("./data/clean_data/seurat_human_integrated_object_23_12_01.rds")
+seur.hu <- subset(seur.hu, subset=tissue=="Thymus")
+seur.hu <- subset(seur.hu, subset=tcell_lineage %in% c("iNKT", "MAIT", "GD"))
+```
+
+
+
+
+# FUNCTIONS
+```{r define-functions}
+plot_DotPlot <- function(seurobj, group, features, scaling=T){
+  # get plot data
+  p <- Seurat::DotPlot(
+    seurobj,
+    group.by=group,
+    features=features,
+    scale=scaling
+  )
+  # plot in personalized way
+  p <- ggplot(p$data, aes(x=id, y=features.plot, fill=avg.exp.scaled, size=pct.exp))+
+    geom_point(color="black", shape=21)+
+    # scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\nnormalized\navg expression")+
+    scale_size_continuous(range=c(0,6), limits=c(0,100), name="%cells\nexpressing\ngene")+
+    theme_bw()+
+    theme(axis.text.y=element_text(face="italic"),
+          axis.text.x=element_text(angle=45, hjust=1))+
+    labs(y="", x="")
+  # different color scale if scaled or not
+  if(scaling==T){
+    p <- p + scale_fill_gradient2(low=scales::muted("blue"), high=scales::muted("red"), name="z-score\naverage\nnorm. expression")
+  } else{
+    p <- p + viridis::scale_fill_viridis(option="B", direction=-1, name="average\nnormalized\nexpression")
+  }
+  return(p)
+}
+```
+
+
+
+
+# ANALYSIS
+
+## Dotplot in mouse
+```{r dtplot-mouse}
+# choose order of clusters
+seur.ms <- subset(seur.ms, subset=clusters_annotation!="12")
+seur.ms@meta.data$clusters_annotation <- factor(
+  seur.ms@meta.data$clusters_annotation,
+  levels=c("signaling", "post-selection/naive", "immature CD24+ GD", "cycling", "transition", "typeI", "typeII", "typeIII")
+  )
+
+plot_DotPlot(
+  subset(seur.ms, subset=clusters_annotation %in% c("typeI", "typeIII")),
+  # seur.ms,
+  group="clusters_annotation",
+  features=rev(c(
+    # "Zbtb16",
+    "Tbx21", "Eomes", "Gzmk", "Gzmb", #"Prf1", "Klrb1c", "Klrd1", "Cxcr3", "Il2rb", "Ifng", "Slamf7",
+    "Rorc", "Rora", "Ccr6", "Il23r", #"Il17re",
+    "Cebpd"#, "Ccl5", "Gzma"
+  )),
+  scaling=F
+)
+# ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/dtplot_ms_effector.pdf", width=3, height=4)
+```
+
+
+## Dotplot in human
+```{r dtplot-human}
+# reorder clusters
+seur.hu@meta.data$clusters_per_lineage <- gsub("_thymus", "", seur.hu@meta.data$clusters_per_lineage)
+seur.hu@meta.data$clusters_per_lineage <- factor(
+  seur.hu@meta.data$clusters_per_lineage,
+  levels=c(
+    paste0("iNKT_c", 0:6),
+    paste0("MAIT_c", 0:6),
+    paste0("GDT_c", 0:7)
+  )
+)
+
+
+plot_DotPlot(
+  subset(seur.hu, subset=clusters_per_lineage %in% c("iNKT_c6", "MAIT_c6", "GDT_c7")),
+  # seur.hu,
+  group="clusters_per_lineage",
+  features=rev(c(
+    # "ZBTB16",
+    "TBX21", "EOMES", "GZMK", "GZMB", #"PRF1", "IFNG", #"KLRB1", "KLRD1", "CXCR3", "IL2RB", "SLAMF7",
+    "RORC", "RORA", "CCR6", "IL23R", #"IL17RE",
+    "CEBPD"#, "CCL5", "GZMA"
+  )),
+  scaling=F
+)
+ggsave("./scripts-in-progress/cross-species/08_innateT_cross_species/plots/dtplot_hu_effector.pdf", width=3.5, height=4)
+
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

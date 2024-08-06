@@ -15,4 +15,4 @@ Data analysis and visualization was done in R version 4.1.3 and python version 3
 ## Directory structure
 
 - [`scripts`](./scripts/) contains the final scripts that allow the (1) preprocessing of the data and (2) generation of figures in the manuscript;
-- [`figures`](./figures) will contain the final figures present in the manuscript as PDF files, upon peer-reviewed publication.
+- [`figures`](./figures) contains the final figures present in the manuscript as PDF files, upon peer-reviewed publication.

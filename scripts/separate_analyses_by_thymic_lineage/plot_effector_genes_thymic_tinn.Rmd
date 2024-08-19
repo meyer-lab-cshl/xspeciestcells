@@ -22,8 +22,9 @@ knitr::opts_chunk$set(
 ```
 
 
-# IMPORT
 
+
+# IMPORT
 ## Import librairies
 ```{r import-librairies}
 library(ggplot2)
@@ -39,7 +40,7 @@ source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 ```
 
 ## Import data
-```{r import-data}
+```{r import-data, fig.height=5, fig.width=7}
 # integrated dataset
 seur_integrated <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
 DimPlot(seur_integrated, reduction="umap_integrated", group.by="clusters_integrated_data", cols=cols_integrated)
@@ -314,8 +315,7 @@ PlotCoexpression <- function(seuratobj,
 ## Score gene signatures
 We will score the type 1 and type 17 signatures on our integrated dataset, as with more cells (from thymus & blood) it will provide a better "background" for the choice of control genes.
 The type 1 and 17 gene signatures are inspired from previous publications such as [Garner et al.](https://www.nature.com/articles/s41590-023-01575-1) and [Bugaut et al.](https://rupress.org/jem/article/221/2/e20231487/276468/A-conserved-transcriptional-program-for-MAIT-cells), in addition to various publications on murine thymic Tinn development which define iNKT1/MAIT1/GD1 or iNKT17/MAIT17/GD17 gene signatures.
-
-```{r analysis-1}
+```{r score-gene-signatures}
 gene_signatures <- list(
   "type1"=c("EOMES", "GZMK", "CCL5", "TBX21", "NKG7", "GZMA", "PRF1", "IFNG", "KLRD1", "KLRC1", "SLAMF7", "XCL1", "IL2RB"),
   "type17"=c("RORC", "RORA", "CCR6", "IL23R", "BLK", "SCART1", "IL1R1", "ITGAE", "SERPINB1", "IL7R", "IL17RE")
@@ -333,7 +333,7 @@ seur_thym$gdt@meta.data[,c("score_type1", "score_type17")] <- seur_integrated@me
 
 
 ## Plot coexpression of type 1/17 on scatter plot
-```{r coexpression-scatterplot, fig.width=15, fig.height=8}
+```{r coexpression-scatterplot, fig.width=15, fig.height=6}
 # make dataframe
 df <- rbind(
   as.data.frame(seur_thym$nkt@meta.data) %>%
@@ -412,28 +412,34 @@ PlotCoexpression(
 
 
 
+
 # EXPRESSION OF EFFECTOR GENES (Fig 2E)
 
-## Analysis 1
-```{r analysis-1}
-
+## Function for plotting density of expression
+```{r define-function-nebulosa}
+plot_genes_nebulosa <- function(seuratobj, genes_vector, pgrid_size=c(40,5)){
+  
+  pnebulosa <- list()
+  for(gene in genes_vector) {
+    p <- NULL
+    p <- SCpubr::do_NebulosaPlot(seuratobj, features = gene, pt.size=5, border.size=0.5)
+    # p <- ggrastr::rasterise(p, layers="Point", dpi=200)
+    pnebulosa[[gene]] <- p
+  }
+  pgrid <- plot_grid(plotlist=pnebulosa, nrow=2)
+  
+  return(pgrid)
+}
 ```
 
 
-## Analysis 2
-```{r analysis-2}
+## Plot genes of interest (Fig 2E)
+```{r plot-fig2E, fig.width=30, fig.height=20}
+genes_of_interest <- c("ZBTB16", "CCR9", "CCR7", "KLRB1", "EOMES", "GZMK", "CCR6", "RORA")
 
-```
-
-## Analysis 3
-```{r analysis-3}
-
-```
-
-
-## Analysis 4
-```{r analysis-4}
-
+plot_genes_nebulosa(seur_thym$nkt, genes_vector = genes_of_interest)
+plot_genes_nebulosa(seur_thym$mait, genes_vector = genes_of_interest)
+plot_genes_nebulosa(seur_thym$gdt, genes_vector = genes_of_interest)
 ```
 
 
@@ -443,5 +449,3 @@ PlotCoexpression(
 ```{r}
 sessionInfo()
 ```
-
-

@@ -1,0 +1,118 @@
+---
+title: "Download and prepare Park Thymic Atlas"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  attr.output='style="max-height: 300px;"',
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+
+
+# IMPORT LIBRAIRIES
+```{r import-librairies}
+library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+
+
+
+# HUMAN THYMUS ATLAS
+
+## Import data
+The Human Thymus Atlas was downloaded as a seurat object from [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910), the one containing 255,901 cells.
+```{r import-data-human, fig.height=10, fig.width=15}
+# import rds object downloaded
+seur_hu <- readRDS("./data_github/park_dataset/c6e08ab6-ab3b-41dc-8058-8e6442e081ec.rds")
+seur_hu2 <- readRDS("./data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seurat.rds")
+print(seur_hu)
+
+# check gene names
+print(rownames(seur_hu)[1:5]) # as they are ENSEMBL IDs, we'll need to translate them to gene symbols
+
+# check metadata columns
+SCpubr::do_DimPlot(
+  seur_hu, group.by="cell_type", reduction="umap", raster=T, legend.position="right")
+```
+
+The cell annotation doesn't correspond to Figure 1 of the [Park et al.](https://www.science.org/doi/10.1126/science.aay3224) paper. We are looking for different annotation levels such as the ones on the [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/8/scatterplot) website. We downloaded the AnnData object from cellatlas.io, and then exported the metadata as a `.csv` file using the [download_park_thymic_atlas_human_metadata.ipynb](./download_park_thymic_atlas_human_metadata.ipynb) script. Let's import this metadata file.
+```{r import-metadata-human}
+
+```
+
+
+
+
+
+
+
+
+# MURINE THYMUS ATLAS
+
+## Analysis 1
+```{r analysis-1}
+
+```
+
+
+## Analysis 2
+```{r analysis-2}
+
+```
+
+## Analysis 1
+```{r analysis-1}
+
+```
+
+
+## Analysis 2
+```{r analysis-2}
+
+```
+
+## Analysis 3
+```{r analysis-3}
+
+```
+
+
+## Analysis 4
+```{r analysis-4}
+
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

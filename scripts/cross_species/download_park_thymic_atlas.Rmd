@@ -27,13 +27,12 @@ knitr::opts_chunk$set(
 # IMPORT LIBRAIRIES
 ```{r import-librairies}
 library(ggplot2)
-library(RColorBrewer)
-library(cowplot)
 library(tidyverse)
 library(dplyr)
 library(Seurat)
+library(SingleCellExperiment)
+library(scater)
 library(SCpubr)
-library(patchwork)
 
 setwd("~/Projects/HumanThymusProject/")
 source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
@@ -45,66 +44,145 @@ source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 # HUMAN THYMUS ATLAS
 
 ## Import data
-The Human Thymus Atlas was downloaded as a seurat object from [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910), the one containing 255,901 cells.
+The Human Thymus Atlas was downloaded as a `h5ad` file from [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910), the one containing 255,901 cells.
 ```{r import-data-human, fig.height=10, fig.width=15}
-# import rds object downloaded
-seur_hu <- readRDS("./data_github/park_dataset/c6e08ab6-ab3b-41dc-8058-8e6442e081ec.rds")
-seur_hu2 <- readRDS("./data/human-thymus/HumanData_16_ParkIntegration/park_thymus_seurat.rds")
-print(seur_hu)
+# import h5ad object downloaded
+sce_human_cellgene <- zellkonverter::readH5AD("~/Projects/HumanThymusProject/data_github/park_dataset/c6e08ab6-ab3b-41dc-8058-8e6442e081ec.h5ad")
+print(sce_human_cellgene)
 
-# check gene names
-print(rownames(seur_hu)[1:5]) # as they are ENSEMBL IDs, we'll need to translate them to gene symbols
+# check out metadata
+colData(sce_human_cellgene)
 
-# check metadata columns
+# check umap and cell type annotation
+plotReducedDim(sce_human_cellgene, dimred="X_umap", colour_by="cell_type")
+
+# check out gene names
+rowData(sce_human_cellgene)
+table(duplicated(rowData(sce_human_cellgene)$feature_name), useNA="ifany") # none of the gene symbols are duplicated (ideal :)
+```
+
+
+The cell annotation doesn't correspond to Figure 1 of the [Park et al.](https://www.science.org/doi/10.1126/science.aay3224) paper. We are looking for different annotation levels such as the ones on the [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/8/scatterplot) website. We downloaded the `h5ad` file from cellatlas.io, let's import it.
+```{r import-data-human-2, fig.height=8, fig.width=10}
+# import h5ad file from cellatlas.io
+sce_human_cellatlas <- zellkonverter::readH5AD("~/Projects/HumanThymusProject/data_github/park_dataset/HTA08_v01_A05_Science_human_fig1.h5ad")
+print(sce_human_cellatlas)
+
+# check out metadata
+colData(sce_human_cellatlas) # much better!
+
+# check umap and cell type annotation
+plotReducedDim(sce_human_cellatlas, dimred="X_umap", colour_by="Anno_level_fig1")
+
+# check out gene names
+# rowData(sce_human_cellatlas) # rowData is empty
+table(duplicated(rownames(sce_human_cellatlas)), useNA="ifany") # some gene symbols are duplicated (not ideal...)
+```
+
+In summary:
+
+- `h5ad` file from [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910) contains more information on feature names (with unique gene symbols);
+- `h5ad` file from [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/8/scatterplot) contains more/better cell metadata information (with correct clustering annotation).
+
+We will combine all we need into a new `SingleCellExperiment` object, and then convert it into a `Seurat` object.
+
+
+## Create Seurat object
+First, let's create a new `SingleCellExperiment` object.
+```{r create-human-sce-object-clean}
+# check that the cell IDs are the same from both sources
+table(colnames(sce_human_cellgene) == colnames(sce_human_cellatlas), useNA="ifany")
+# table(rownames(colData(sce_human_cellgene)) == rownames(colData(sce_human_cellatlas)), useNA="ifany")
+
+# check that umap coordinates are the same from both sources
+table(reducedDim(sce_human_cellgene, "X_umap") == reducedDim(sce_human_cellatlas, "X_umap"), useNA="ifany")
+
+# create new SCE object
+sce_human_clean <- SingleCellExperiment(
+  list(counts=assay(sce_human_cellgene)),
+  colData=colData(sce_human_cellatlas),
+  rowData=rowData(sce_human_cellgene),
+  reducedDims=list(umap=reducedDim(sce_human_cellgene, "X_umap"))
+)
+print(sce_human_clean)
+
+# switch rownames to gene symbols
+# table(duplicated(rowData(sce_human_clean)$feature_name), useNA="ifany") # last sanity check: no duplicates :)
+rownames(sce_human_clean) <- rowData(sce_human_clean)$feature_name
+```
+
+Let's now convert into a seurat object.
+```{r create-human-seurat-object, fig.width=10, fig.height=8}
+# convert to seurat
+seur_human <- Seurat::as.Seurat(sce_human_clean, data=NULL)
+
+# remove genes which have 0 total count
+seur_human <- seur_human[rowSums(seur_human)!=0,]
+
 SCpubr::do_DimPlot(
-  seur_hu, group.by="cell_type", reduction="umap", raster=T, legend.position="right")
+  seur_human,
+  group.by="Anno_level_fig1",
+  legend.position="right"
+)
 ```
 
-The cell annotation doesn't correspond to Figure 1 of the [Park et al.](https://www.science.org/doi/10.1126/science.aay3224) paper. We are looking for different annotation levels such as the ones on the [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/8/scatterplot) website. We downloaded the AnnData object from cellatlas.io, and then exported the metadata as a `.csv` file using the [download_park_thymic_atlas_human_metadata.ipynb](./download_park_thymic_atlas_human_metadata.ipynb) script. Let's import this metadata file.
-```{r import-metadata-human}
 
+## Save Seurat object
+```{r seur-human-save, eval=FALSE, echo=TRUE}
+saveRDS(seur_human, "./data_github/park_dataset/park_seurat_human.rds")
 ```
-
-
-
-
 
 
 
 
 # MURINE THYMUS ATLAS
 
-## Analysis 1
-```{r analysis-1}
+## Import data
+The `h5ad` file was downloaded from the latest version of the [zenodo repository](https://zenodo.org/records/5500511) of the paper (v1.0.2). Let's import it as a `SingleCellExperiment` object once again, and convert it to a `Seurat` object.
+```{r import-data-mouse, fig.height=8, fig.width=10}
+sce_mouse <- zellkonverter::readH5AD("~/Projects/HumanThymusProject/data_github/park_dataset/HTA08_v02_A04_Science_mouse_total.h5ad")
+print(sce_mouse)
 
+# check out metadata
+colData(sce_mouse)
+
+# check umap and cell type annotation
+plotReducedDim(sce_mouse, dimred="X_umap", colour_by="cell.types")
+
+# check out gene names
+table(duplicated(rownames(sce_mouse)), useNA="ifany") # none of the gene symbols are duplicated (ideal :)
 ```
 
 
-## Analysis 2
-```{r analysis-2}
+## Create Seurat object
+```{r create-seurat-object-mouse, fig.width=10, fig.height=8}
+# create new SCE object
+sce_mouse_clean <- SingleCellExperiment(
+  list(counts=assay(sce_mouse)),
+  colData=colData(sce_mouse),
+  rowData=rowData(sce_mouse),
+  reducedDims=list(umap=reducedDim(sce_mouse, "X_umap"))
+)
+print(sce_mouse_clean)
 
+# convert to seurat
+seur_mouse <- Seurat::as.Seurat(sce_mouse_clean, data=NULL)
+
+# remove genes which have 0 total count
+seur_mouse <- seur_mouse[rowSums(seur_mouse)!=0,]
+
+# plot cell annotation
+SCpubr::do_DimPlot(
+  seur_mouse,
+  group.by="cell.types",
+  legend.position="right"
+)
 ```
 
-## Analysis 1
-```{r analysis-1}
 
-```
-
-
-## Analysis 2
-```{r analysis-2}
-
-```
-
-## Analysis 3
-```{r analysis-3}
-
-```
-
-
-## Analysis 4
-```{r analysis-4}
-
+## Save Seurat object
+```{r seur-mouse-save, eval=FALSE, echo=TRUE}
+saveRDS(seur_mouse, "./data_github/park_dataset/park_seurat_mouse.rds")
 ```
 
 
@@ -114,5 +192,3 @@ The cell annotation doesn't correspond to Figure 1 of the [Park et al.](https://
 ```{r}
 sessionInfo()
 ```
-
-

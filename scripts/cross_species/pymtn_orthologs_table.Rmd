@@ -1,188 +1,43 @@
 ---
-title: "03_Biomart"
-output: html_notebook
+title: "Generate an orthologs dataframe for cross-species comparisons"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
 ---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  attr.output='style="max-height: 300px;"',
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+
 
 # IMPORT
 
+## Import librairies
 ```{r import-librairies}
 library(ggplot2)
+library(RColorBrewer)
+library(cowplot)
 library(tidyverse)
-library(biomaRt)
-# library(corrplot)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(patchwork)
+library(scico)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 ```
-
-```{r import-biomarts} 
-# Define marts to map mouse to human and ensembl to entrez IDs
-# listDatasets(useMart('ensembl'))
-mart.hu <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
-                   dataset="hsapiens_gene_ensembl")
-mart.ms <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
-                       dataset="mmusculus_gene_ensembl")
-mart.pig <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
-                       dataset="sscrofa_gene_ensembl")
-```
-
-If I want to import all features (expressed or not in the datasets).
-
-```{r import-datasets-features}
-# Get ALL the features df from each species
-
-# Mouse
-ref.ms <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/mouse_data/B6_1/features.tsv.gz", col_names = FALSE, show_col_types=F) %>%
-  rename(ms_ensemblID=X1, ms_symbol_data=X2) %>%
-  select(-X3)
-
-# Pig
-ref.pig <- readr::read_tsv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/pig_data/GSE192520_RAW/iNKT/features.tsv.gz", col_names = FALSE, show_col_types=F) %>%
-  rename(pig_ensemblID=X1, pig_symbol_data=X2) %>%
-  select(-X3)
-
-# Human
-path.data <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/raw_data/human_data"
-human5 <- read.csv(file.path(path.data, "CUThy13_220225_SampleTag05_hs_NKT_RSEC_MolsPerCell.csv"), sep=",", header=T, skip=7) # 404 cells
-human8 <- read.csv(file.path(path.data, "CUTHY11BDRscRNA_seq_091621_SampleTag08_hs_NKT_RSEC_MolsPerCell.csv"), sep=",", header=T, skip=8) # 1913 cells
-human12 <- read.csv(file.path(path.data, "CUTHY12BDRscRNA_seq_211101_SampleTag12_hs_NKT_RSEC_MolsPerCell.csv"), sep=",", header=T, skip=8) # 344 cells
-
-ref.hu <- union( union(colnames(human5)[-1],colnames(human8)[-1]), colnames(human12)[-1] )
-length(ref.hu) #28,479 human genes
-ref.hu <- data.frame("hu_symbol_data" = ref.hu)
-```
-
-
-If I want to import only expressed features.
-
-```{r import-datasets-expressed-features}
-# Get all the EXPRESSED features df from each species
-path.data <- "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable"
-
-# Mouse
-ref.ms <- read.csv(file.path(path.data, "dataset_ms_genes.csv")) %>% dplyr::select(-X) # 16971 genes
-
-# Pig
-ref.pig <- read.csv(file.path(path.data, "dataset_pig_genes.csv")) %>% dplyr::select(-X) # 13922 genes
-
-# Human
-ref.hu <- read.csv(file.path(path.data, "dataset_hu_genes.csv")) %>% dplyr::select(-X) # 18520 genes
-```
-
-
-
-
-
-# GET ORTHOLOG TABLES
-
-Try different ways of getting the pig-mouse-human orthologs table.
-```{r biomart-tests, eval=FALSE, include=FALSE}
-# Check available attributes in the mouse mart
-listAttributes(mart.ms)[stringr::str_detect(listAttributes(mart.ms)$name, "hsapiens"),]
-listAttributes(mart.ms)[stringr::str_detect(listAttributes(mart.ms)$name, "sscrofa"),]
-
-
-# Get human and pig orthologs of mouse genes
-ms.ortholgs <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name',
-                                    'hsapiens_homolog_ensembl_gene', 'hsapiens_homolog_associated_gene_name', 'hsapiens_homolog_orthology_type', 'hsapiens_homolog_orthology_confidence',
-                                    'sscrofa_homolog_ensembl_gene', 'sscrofa_homolog_associated_gene_name', 'sscrofa_homolog_orthology_type', 'sscrofa_homolog_orthology_confidence'),
-                     filters = 'ensembl_gene_id',
-                     values = ref.ms$ms_ensemblID,
-                     mart = mart.ms)
-table(ref.ms$ms_ensemblID %in% ms.ortholgs$ensembl_gene_id) # 213 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% ms.ortholgs$hsapiens_homolog_associated_gene_name) # 6871 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% ms.ortholgs$sscrofa_homolog_ensembl_gene) # 3217 pig genes not in the biomart
-
-
-# Get mouse and human orthologs of pig genes
-pig.ortholgs <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name',
-                                    'hsapiens_homolog_ensembl_gene', 'hsapiens_homolog_associated_gene_name', 'hsapiens_homolog_orthology_type', 'hsapiens_homolog_orthology_confidence',
-                                    'mmusculus_homolog_ensembl_gene', 'mmusculus_homolog_associated_gene_name', 'mmusculus_homolog_orthology_type', 'mmusculus_homolog_orthology_confidence'),
-                     filters = 'ensembl_gene_id',
-                     values = ref.pig$pig_ensemblID,
-                     mart = mart.pig)
-table(ref.ms$ms_ensemblID %in% pig.ortholgs$mmusculus_homolog_ensembl_gene) # 6104 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% pig.ortholgs$hsapiens_homolog_associated_gene_name) # 7830 hu genes not in the biomart (out of ~28,000)
-table(ref.pig$pig_ensemblID %in% pig.ortholgs$ensembl_gene_id) # 1007 pig genes not in the biomart (out of ~21,000)
-
-
-# Get mouse and pig orthologs of human genes
-hu.ortholgs <- getBM(attributes = c('ensembl_gene_id', 'external_gene_name',
-                                    'sscrofa_homolog_ensembl_gene', 'sscrofa_homolog_associated_gene_name', 'sscrofa_homolog_orthology_type', 'sscrofa_homolog_orthology_confidence',
-                                    'mmusculus_homolog_ensembl_gene', 'mmusculus_homolog_associated_gene_name', 'mmusculus_homolog_orthology_type', 'mmusculus_homolog_orthology_confidence'),
-                     filters = 'external_gene_name',
-                     values = ref.hu$hu_symbol_data,
-                     mart = mart.hu)
-table(ref.ms$ms_ensemblID %in% hu.ortholgs$mmusculus_homolog_ensembl_gene) # 5213 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% hu.ortholgs$external_gene_name) # 3926 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% hu.ortholgs$sscrofa_homolog_ensembl_gene) # 3238 pig genes not in the biomart
-
-
-# Import biomart (mouse as reference)
-biomart.ms <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/biomart_export_ms.txt", header=T)
-colnames(biomart.ms) <- c("ms_ensemblID", "version_msgene", "ms_symbol", "hu_ensemblID", "hu_symbol", "hu_homology_type", "hu_orthology_confidence",
-                                "pig_ensemblID", "pig_symbol", "pig_homology_type", "pig_orthology_confidence")
-table(ref.ms$ms_ensemblID %in% biomart.ms$ms_ensemblID) # 213 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% biomart.ms$hu_symbol) # 5328 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% biomart.ms$pig_ensemblID) # 2128 pig genes not in the biomart (out of ~21,000)
-
-
-# Import biomart (human as reference)
-biomart.hu <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/biomart_export_hu.txt", header=T)
-colnames(biomart.hu) <- c("hu_ensemblID", "version_hugene", "hu_symbol", "ms_ensemblID", "ms_symbol", "ms_homology_type", "ms_orthology_confidence",
-                                "pig_ensemblID", "pig_symbol", "pig_homology_type", "pig_orthology_confidence")
-table(ref.ms$ms_ensemblID %in% biomart.hu$ms_ensemblID) # 3410 ms genes not in the biomart (out of ~30000)
-table(ref.hu$hu_symbol_data %in% biomart.hu$hu_symbol) # 3926 hu genes not in the biomart (out of ~28,000)
-table(ref.pig$pig_ensemblID %in% biomart.hu$pig_ensemblID) # 1971 pig genes not in the biomart (out of ~21,000)
-```
-
-
-It's better to use the imported table from the biomart table (mouse as reference).
-```{r biomart-table}
-# Import biomart (mouse as reference)
-biomart.ms <- read.csv("~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/biomart_export_ms.txt", header=T)
-colnames(biomart.ms) <- c("ms_ensemblID", "version_msgene", "ms_symbol", "hu_ensemblID", "hu_symbol", "hu_homology_type", "hu_orthology_confidence",
-                                "pig_ensemblID", "pig_symbol", "pig_homology_type", "pig_orthology_confidence")
-
-# Check if all our pig/mouse/human genes are in this biomart table
-table(ref.ms$ms_ensemblID %in% biomart.ms$ms_ensemblID) # 213 ms expressed genes not in the biomart / 396
-table(ref.hu$hu_symbol_data %in% biomart.ms$hu_symbol) # 5328 hu expressed genes not in the biomart / 12019
-table(ref.pig$pig_ensemblID %in% biomart.ms$pig_ensemblID) # 2128 pig expressed genes not in the biomart / 4791
-
-# Check the orthology confidence
-table(biomart.ms$hu_orthology_confidence, useNA="ifany") # 19663 genes with 1
-table(biomart.ms$pig_orthology_confidence, useNA="ifany") # 15602 with 1
-```
-
-
-Clean up this ortholog table
-```{r get-big-ass-ortholog-table}
-ortholog.df <- biomart.ms %>%
-  mutate_all(na_if,"") %>%
-  filter(hu_orthology_confidence==1 | pig_orthology_confidence==1) %>%
-  left_join(ref.ms, by="ms_ensemblID") %>%
-  relocate(ms_symbol_data, .after=ms_symbol) %>%
-  left_join(ref.pig, by="pig_ensemblID") %>%
-  relocate(pig_symbol_data, .after=pig_symbol) %>%
-  rename(ms_symbol_bmt = ms_symbol,
-         pig_symbol_bmt = pig_symbol) %>%
-  mutate(date=Sys.Date())
-
-# Check for Plzf, 
-ortholog.df %>%
-  filter(ms_symbol_data %in% c("Zbtb16", "Rorc", "Tbx21"))
-
-
-# Save
-write.csv(ortholog.df, "~/Projects/20220809_Thymic-iNKT-CrossSpecies/data/03_BiomartTable/big_ass_ortholog_table.csv", row.names = F)
-
-# checkup
-table(ref.ms$ms_ensemblID %in% ortholog.df$ms_ensemblID) # 5743 ms genes not in the biomart
-table(ref.hu$hu_symbol_data %in% ortholog.df$hu_symbol) # 7452 hu genes not in the biomart
-table(ref.pig$pig_ensemblID %in% ortholog.df$pig_ensemblID) # 3809 pig genes not in the biomart (out of ~21,000)
-```
-
-
-
-
-
-
-
-

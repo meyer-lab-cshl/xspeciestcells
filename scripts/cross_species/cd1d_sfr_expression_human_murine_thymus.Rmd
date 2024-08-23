@@ -132,11 +132,7 @@ as.data.frame(table(seur.human$Anno_curated)) %>%
          percentcells=Freq*100/totalcells) %>%
   arrange(percentcells)
 
-hu_clusters_abundant <- levels(seur.human@meta.data$Anno_curated)[!levels(seur.human@meta.data$Anno_curated) %in% c("Megakaryocyte",
-                                                                                                                    "Endothelial",
-                                                                                                                    "Mast",
-                                                                                                                    "HSC",
-                                                                                                                    "Erythrocyte")]
+hu_clusters_abundant <- levels(seur.human@meta.data$Anno_curated)[!levels(seur.human@meta.data$Anno_curated) %in% c("Megakaryocyte", "Endothelial", "Mast", "HSC", "Erythrocyte")]
 
 ```
 
@@ -209,7 +205,7 @@ fig7E_p2 <- do_FeaturePlot(
 ```
 
 Combine plots (Fig 7E).
-```{r hu-umap-fig7E-combined, fig.width=12, fig.height=5}
+```{r hu-umap-fig7E-combined, fig.width=20, fig.height=7}
 fig7E_p1 | fig7E_p2
 ```
 
@@ -343,7 +339,7 @@ fig7A_p2 <- do_FeaturePlot(
 ```
 
 Combine plots (Fig 7A).
-```{r ms-umap-fig7A-combined, fig.width=12, fig.height=5}
+```{r ms-umap-fig7A-combined, fig.width=20, fig.height=7}
 fig7A_p1 | fig7A_p2
 ```
 

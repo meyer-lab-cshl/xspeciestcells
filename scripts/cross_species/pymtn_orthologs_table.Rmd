@@ -29,15 +29,259 @@ knitr::opts_chunk$set(
 ## Import librairies
 ```{r import-librairies}
 library(ggplot2)
-library(RColorBrewer)
-library(cowplot)
 library(tidyverse)
-library(dplyr)
+library(biomaRt)
 library(Seurat)
-library(SCpubr)
-library(patchwork)
-library(scico)
 
 setwd("~/Projects/HumanThymusProject/")
 source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+
+## Import human & mouse biomarts
+```{r import-biomarts} 
+# Define marts to map mouse to human and ensembl to entrez IDs
+# listDatasets(useMart('ensembl'))
+mart.hu <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
+                   dataset="hsapiens_gene_ensembl")
+mart.ms <- useMart(biomart="ENSEMBL_MART_ENSEMBL",
+                   dataset="mmusculus_gene_ensembl")
+```
+
+
+## Import data
+This will be to check that we find a majority of genes of interest (aka genes from our data) in the orthologs table.
+```{r import-data}
+seur_human <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+seur_mouse <- readRDS("data_geo/seurat_objects/seurat_mouse_integrated_object_23_12_02.rds")
+
+# genes in list
+genes_data_list <- list(
+  "hu"=unique(rownames(seur_human)),
+  "ms"=unique(rownames(seur_mouse))
+)
+
+# check nb of genes
+lapply(genes_data_list, function(x) length(x))
+```
+
+
+
+
+# GET ORTHOLOG TABLES
+
+Try different ways of getting the mouse-human orthologs table (get human orthologs of mouse genes, or vice-versa).
+
+## Human orthologs of mouse genes
+```{r biomart-ms-reference}
+# Check available attributes in the mouse mart
+# listAttributes(mart.ms)[stringr::str_detect(listAttributes(mart.ms)$name, "hsapiens"),]
+
+# Get human orthologs of mouse genes
+ms.ortholgs <-
+  getBM(
+    attributes = c(
+      'ensembl_gene_id',
+      'external_gene_name',
+      'hsapiens_homolog_ensembl_gene',
+      'hsapiens_homolog_associated_gene_name',
+      'hsapiens_homolog_orthology_type',
+      'hsapiens_homolog_orthology_confidence'
+    ),
+    filters = 'external_gene_name',
+    values = genes_data_list$ms,
+    mart = mart.ms
+  ) #%>%
+  # dplyr::rename(
+  #   mmusculus_ensembl_gene_id=ensembl_gene_id,
+  #   mmusculus_gene_name=external_gene_name
+  # ) %>%
+  # filter(hsapiens_homolog_associated_gene_name!="")
+table(genes_data_list$ms %in% ms.ortholgs$external_gene_name, useNA="ifany") # 16,069 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% ms.ortholgs$hsapiens_homolog_associated_gene_name, useNA="ifany") # 4,993 hu gene symbols in our data not in the biomart
+```
+
+
+## Mouse orthologs of human genes
+```{r biomart-hu-reference}
+# Get mouse orthologs of human genes
+hu.ortholgs <-
+  getBM(
+    attributes = c(
+      'ensembl_gene_id',
+      'external_gene_name',
+      'mmusculus_homolog_ensembl_gene',
+      'mmusculus_homolog_associated_gene_name',
+      'mmusculus_homolog_orthology_type',
+      'mmusculus_homolog_orthology_confidence'
+    ),
+    filters = 'external_gene_name',
+    values = genes_data_list$hu,
+    mart = mart.hu
+  )
+table(genes_data_list$ms %in% hu.ortholgs$mmusculus_homolog_associated_gene_name, useNA="ifany") # 18,633 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% hu.ortholgs$external_gene_name, useNA="ifany") # 3,217 hu gene symbols in our data not in the biomart
+```
+
+
+## Imported tables from online biomart
+I imported these tables from [online biomart](https://useast.ensembl.org/biomart/martview/8ea546479bd07c2257297b0b8e0ddb3a) on Feb 21st 2024. I tried two methods:
+- in the Mouse genes dataset (GRCm39), I chose attributes "Gene stable ID", "Gene stable ID version", "Human gene stable ID", "Human gene name", "Human homology type" and "Human orthology confidence";
+- in the Human genes dataset (GRCh38.p14), I chose attributes "Gene stable ID", "Gene stable ID version", "Mouse gene stable ID", "Mouse gene name", "Mouse homology type" and "Mouse orthology confidence".
+
+Then I downloaded the results tables in .csv format:
+```{r biomart-online}
+# Import biomart (mouse as reference)
+biomart.ms <- read.csv("./data_github/cross_species/biomart_export_ms.txt", header=T)
+colnames(biomart.ms) <-
+  c(
+    "ms_ensemblID",
+    "ms_ensemblID_version",
+    "ms_symbol",
+    "hu_ensemblID",
+    "hu_symbol",
+    "hu_homology_type",
+    "hu_orthology_confidence"
+  )
+# remove genes with no human ortholog, keep only 1:1 orthologs
+biomart.ms <- biomart.ms %>%
+  filter(hu_homology_type=="ortholog_one2one") %>%
+  filter(hu_symbol!="")
+table(genes_data_list$ms %in% biomart.ms$ms_symbol, useNA="ifany") # 16,069 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% biomart.ms$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
+
+
+# Import biomart (human as reference)
+biomart.hu <- read.csv("./data/cross_species/biomart_export_hu.txt", header=T)
+colnames(biomart.hu) <-
+  c(
+    "hu_ensemblID",
+    "hu_ensemblID_version",
+    "hu_symbol",
+    "ms_ensemblID",
+    "ms_symbol",
+    "ms_homology_type",
+    "ms_orthology_confidence"
+  )
+biomart.hu <- biomart.hu %>%
+  filter(ms_homology_type=="ortholog_one2one") %>%
+  filter(ms_symbol!="")
+table(genes_data_list$ms %in% biomart.hu$ms_symbol, useNA="ifany") # 16,062 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% biomart.hu$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
+
+
+# Merge the 2 tables
+biomart.df <- biomart.ms %>%
+  left_join(biomart.hu, by=  c(
+    "hu_ensemblID",
+    "hu_symbol",
+    "ms_ensemblID",
+    "ms_symbol"
+  )) %>%
+  dplyr::select(-c(hu_homology_type, ms_homology_type)) %>%
+  distinct()
+table(genes_data_list$ms %in% biomart.df$ms_symbol, useNA="ifany") # 16,069 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% biomart.df$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
+```
+
+The best compromise is the biomart table imported from online (compared to using previously biomaRt package).
+
+
+
+
+# SAVE ORTHOLOG TABLE
+
+## Clean-up ortholog table (keep only 1:1 orthologs and orthology confidence of 1)
+```{r clean-up-df}
+ortholog.df <- biomart.df %>%
+  filter(hu_orthology_confidence==1 & ms_orthology_confidence==1) %>%
+  dplyr::select(-c(hu_orthology_confidence, ms_orthology_confidence)) %>%
+  mutate(date=Sys.Date())
+
+# checkup
+table(genes_data_list$ms %in% ortholog.df$ms_symbol) # 16,606 ms gene symbols from data not in the biomart (out of ~31,000)
+table(genes_data_list$hu %in% ortholog.df$hu_symbol) # 5,238 hu gene symbols in our data not in the biomart (out of ~17,000)
+```
+
+
+## Bigger ortholog table (with 1:many orthologs and orthology confidence of 0 or 1)
+I noticed some important genes were 1:many orthologs or had orthology confidence of 0 (e.g. _Cd8_, ....). So let's create and save a bigger orthologs table that we can use depending on the analysis.
+```{r}
+# Import biomart (mouse as reference)
+biomart.ms <- read.csv("./data_github/cross_species/biomart_export_ms.txt", header=T)
+colnames(biomart.ms) <-
+  c(
+    "ms_ensemblID",
+    "ms_ensemblID_version",
+    "ms_symbol",
+    "hu_ensemblID",
+    "hu_symbol",
+    "hu_homology_type",
+    "hu_orthology_confidence"
+  )
+# remove genes with no human ortholog
+biomart.ms <- biomart.ms %>%
+  filter(hu_symbol!="")
+# table(genes_data_list$ms %in% biomart.ms$ms_symbol, useNA="ifany") # 14,227 ms gene symbols from data not in the biomart
+# table(genes_data_list$hu %in% biomart.ms$hu_symbol, useNA="ifany") # 4,435 hu gene symbols in our data not in the biomart
+
+
+# Import biomart (human as reference)
+biomart.hu <- read.csv("./data_github/cross_species/biomart_export_hu.txt", header=T)
+colnames(biomart.hu) <-
+  c(
+    "hu_ensemblID",
+    "hu_ensemblID_version",
+    "hu_symbol",
+    "ms_ensemblID",
+    "ms_symbol",
+    "ms_homology_type",
+    "ms_orthology_confidence"
+  )
+biomart.hu <- biomart.hu %>%
+  filter(ms_symbol!="")
+# table(genes_data_list$ms %in% biomart.hu$ms_symbol, useNA="ifany") # 14,217 ms gene symbols from data not in the biomart
+# table(genes_data_list$hu %in% biomart.hu$hu_symbol, useNA="ifany") # 4,437 hu gene symbols in our data not in the biomart
+
+
+# Merge the 2 tables
+ortholog.df.full <- biomart.ms %>%
+  left_join(biomart.hu, by=  c(
+    "hu_ensemblID",
+    "hu_symbol",
+    "ms_ensemblID",
+    "ms_symbol"
+  )) %>%
+  # remove rows that don't have ms symbols
+  filter(ms_symbol!="") %>%
+  dplyr::select(-c(hu_orthology_confidence, hu_homology_type)) %>%
+  distinct() %>%
+  dplyr::rename(
+    orthology_confidence=ms_orthology_confidence,
+    homology_type=ms_homology_type
+    )
+# sanity checks
+table(biomart.df$homology_type, useNA="ifany")
+table(biomart.df$orthology_confidence, useNA="ifany")
+
+table(genes_data_list$ms %in% biomart.df$ms_symbol, useNA="ifany") # 14,227 ms gene symbols from data not in the biomart
+table(genes_data_list$hu %in% biomart.df$hu_symbol, useNA="ifany") # 4,437 hu gene symbols in our data not in the biomart
+```
+
+
+
+
+## Save
+```{r save-df, echo=T, eval=F}
+# Save
+write.csv(ortholog.df, "./data_github/cross_species/ortholog_table_ms_hu_one2one.csv", row.names = F)
+write.csv(ortholog.df.full, "./data_github/cross_species/ortholog_table_ms_hu_full.csv", row.names = F)
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
 ```

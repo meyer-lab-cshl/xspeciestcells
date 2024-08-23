@@ -91,7 +91,8 @@ ms.ortholgs <-
     filters = 'external_gene_name',
     values = genes_data_list$ms,
     mart = mart.ms
-  ) #%>%
+  ) %>%
+  filter(hsapiens_homolog_orthology_type=="ortholog_one2one") # %>%
   # dplyr::rename(
   #   mmusculus_ensembl_gene_id=ensembl_gene_id,
   #   mmusculus_gene_name=external_gene_name
@@ -118,7 +119,8 @@ hu.ortholgs <-
     filters = 'external_gene_name',
     values = genes_data_list$hu,
     mart = mart.hu
-  )
+  ) %>%
+  filter(mmusculus_homolog_orthology_type=="ortholog_one2one")
 table(genes_data_list$ms %in% hu.ortholgs$mmusculus_homolog_associated_gene_name, useNA="ifany") # 18,633 ms gene symbols from data not in the biomart
 table(genes_data_list$hu %in% hu.ortholgs$external_gene_name, useNA="ifany") # 3,217 hu gene symbols in our data not in the biomart
 ```
@@ -129,7 +131,7 @@ I imported these tables from [online biomart](https://useast.ensembl.org/biomart
 - in the Mouse genes dataset (GRCm39), I chose attributes "Gene stable ID", "Gene stable ID version", "Human gene stable ID", "Human gene name", "Human homology type" and "Human orthology confidence";
 - in the Human genes dataset (GRCh38.p14), I chose attributes "Gene stable ID", "Gene stable ID version", "Mouse gene stable ID", "Mouse gene name", "Mouse homology type" and "Mouse orthology confidence".
 
-Then I downloaded the results tables in .csv format:
+Then I downloaded the results tables in `.txt` format:
 ```{r biomart-online}
 # Import biomart (mouse as reference)
 biomart.ms <- read.csv("./data_github/cross_species/biomart_export_ms.txt", header=T)
@@ -147,12 +149,12 @@ colnames(biomart.ms) <-
 biomart.ms <- biomart.ms %>%
   filter(hu_homology_type=="ortholog_one2one") %>%
   filter(hu_symbol!="")
-table(genes_data_list$ms %in% biomart.ms$ms_symbol, useNA="ifany") # 16,069 ms gene symbols from data not in the biomart
+table(genes_data_list$ms %in% biomart.ms$ms_symbol, useNA="ifany") # 9,670 ms gene symbols from data not in the biomart
 table(genes_data_list$hu %in% biomart.ms$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
 
 
 # Import biomart (human as reference)
-biomart.hu <- read.csv("./data/cross_species/biomart_export_hu.txt", header=T)
+biomart.hu <- read.csv("./data_github/cross_species/biomart_export_hu.txt", header=T)
 colnames(biomart.hu) <-
   c(
     "hu_ensemblID",
@@ -166,7 +168,7 @@ colnames(biomart.hu) <-
 biomart.hu <- biomart.hu %>%
   filter(ms_homology_type=="ortholog_one2one") %>%
   filter(ms_symbol!="")
-table(genes_data_list$ms %in% biomart.hu$ms_symbol, useNA="ifany") # 16,062 ms gene symbols from data not in the biomart
+table(genes_data_list$ms %in% biomart.hu$ms_symbol, useNA="ifany") # 9,667 ms gene symbols from data not in the biomart
 table(genes_data_list$hu %in% biomart.hu$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
 
 
@@ -180,7 +182,7 @@ biomart.df <- biomart.ms %>%
   )) %>%
   dplyr::select(-c(hu_homology_type, ms_homology_type)) %>%
   distinct()
-table(genes_data_list$ms %in% biomart.df$ms_symbol, useNA="ifany") # 16,069 ms gene symbols from data not in the biomart
+table(genes_data_list$ms %in% biomart.df$ms_symbol, useNA="ifany") # 9,670 ms gene symbols from data not in the biomart
 table(genes_data_list$hu %in% biomart.df$hu_symbol, useNA="ifany") # 4,954 hu gene symbols in our data not in the biomart
 ```
 

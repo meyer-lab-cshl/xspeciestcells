@@ -122,6 +122,7 @@ table(genes_data_list$hu %in% hu.ortholgs$external_gene_name, useNA="ifany") # 4
 
 ## Imported tables from online biomart
 I imported these tables from [online biomart](https://useast.ensembl.org/biomart/martview/8ea546479bd07c2257297b0b8e0ddb3a) on Feb 21st 2024. I tried two methods:
+
 - in the Mouse genes dataset (GRCm39), I chose attributes "Gene stable ID", "Gene stable ID version", "Human gene stable ID", "Human gene name", "Human homology type" and "Human orthology confidence";
 - in the Human genes dataset (GRCh38.p14), I chose attributes "Gene stable ID", "Gene stable ID version", "Mouse gene stable ID", "Mouse gene name", "Mouse homology type" and "Mouse orthology confidence".
 
@@ -187,7 +188,7 @@ The best compromise is the biomart table imported from online (compared to using
 
 # SAVE ORTHOLOG TABLE
 
-## Clean-up ortholog table (keep only 1:1 orthologs and orthology confidence of 1)
+## Clean-up ortholog table
 ```{r clean-up-df}
 ortholog.df <- biomart.df %>%
   dplyr::select(-c(hu_orthology_confidence, ms_orthology_confidence)) %>%
@@ -204,7 +205,7 @@ table(genes_data_list$hu %in% ortholog.df$hu_symbol) # 4,954 hu gene symbols in 
 
 
 ## Save
-```{r save-df, echo=T, eval=F}
+```{r save-df, echo=TRUE, eval=FALSE}
 # Save
 write.csv(ortholog.df, "./data_github/cross_species/ortholog_table_ms_hu_one2one.csv", row.names = F)
 ```

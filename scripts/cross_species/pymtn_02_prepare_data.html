@@ -11,7 +11,7 @@
 
 <meta name="author" content="Salomé Carcy" />
 
-<meta name="date" content="2024-08-26" />
+<meta name="date" content="2024-08-27" />
 
 <title>Prepare data to run pyMetaNeighbor across species</title>
 
@@ -1482,7 +1482,7 @@ border-radius: 0px;
 <h1 class="title toc-ignore">Prepare data to run pyMetaNeighbor across
 species</h1>
 <h4 class="author">Salomé Carcy</h4>
-<h4 class="date">26 August 2024</h4>
+<h4 class="date">27 August 2024</h4>
 
 </div>
 
@@ -1548,7 +1548,7 @@ ms.metadata &lt;- seur.ms@meta.data %&gt;%
       clusters_integrated_data == &quot;11&quot; ~ &quot;typeIII&quot;,
       clusters_integrated_data == &quot;12&quot; ~ &quot;12&quot;
     ),
-    study = &quot;Mouse&quot;
+    study = &quot;mouse&quot;
   )
 # table(ms.metadata[,c(&quot;clusters_integrated_data&quot;, &quot;clusters_to_compare&quot;)], useNA=&quot;ifany&quot;) # sanity check
 
@@ -1572,12 +1572,12 @@ head(ms.metadata)</code></pre>
 ## B6NKT_AAACCTGGTACAGTGG-1          iNKT                        8
 ## B6NKT_AAACCTGGTCGGCTCA-1          iNKT                        9
 ##                          clusters_to_compare study
-## B6NKT_AAACCTGAGATACACA-1               typeI Mouse
-## B6NKT_AAACCTGAGCTGGAAC-1               typeI Mouse
-## B6NKT_AAACCTGAGGCTCTTA-1               typeI Mouse
-## B6NKT_AAACCTGAGTTCCACA-1               typeI Mouse
-## B6NKT_AAACCTGGTACAGTGG-1               typeI Mouse
-## B6NKT_AAACCTGGTCGGCTCA-1               typeI Mouse</code></pre>
+## B6NKT_AAACCTGAGATACACA-1               typeI mouse
+## B6NKT_AAACCTGAGCTGGAAC-1               typeI mouse
+## B6NKT_AAACCTGAGGCTCTTA-1               typeI mouse
+## B6NKT_AAACCTGAGTTCCACA-1               typeI mouse
+## B6NKT_AAACCTGGTACAGTGG-1               typeI mouse
+## B6NKT_AAACCTGGTCGGCTCA-1               typeI mouse</code></pre>
 <pre class="r"><code>head(hu.metadata)</code></pre>
 <pre style="max-height: 300px;"><code>##                     tcell_lineage clusters_per_lineage study
 ## NKT_1_Thymus_91109            NKT       iNKT_thymus_c2 human
@@ -1753,7 +1753,7 @@ hvg.df &lt;- data.frame(
 )
 table(hvg.df$highly_variable, useNA=&quot;ifany&quot;)
 table(hvg.df[hvg.df$highly_variable==T, &quot;features&quot;]%in%total.hvg, useNA=&quot;ifany&quot;) # sanity check
-write.csv(hvg.df, &quot;./data_github/cross_species/list_hvg_240826.csv&quot;)</code></pre>
+write.csv(hvg.df, &quot;./data_github/cross_species/innateT_ms_hu_list_hvg_240826.csv&quot;)</code></pre>
 </div>
 </div>
 <div id="session-info" class="section level1" number="4">

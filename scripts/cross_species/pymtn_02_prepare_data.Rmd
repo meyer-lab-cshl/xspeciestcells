@@ -84,7 +84,7 @@ ms.metadata <- seur.ms@meta.data %>%
       clusters_integrated_data == "11" ~ "typeIII",
       clusters_integrated_data == "12" ~ "12"
     ),
-    study = "Mouse"
+    study = "mouse"
   )
 # table(ms.metadata[,c("clusters_integrated_data", "clusters_to_compare")], useNA="ifany") # sanity check
 
@@ -253,7 +253,7 @@ hvg.df <- data.frame(
 )
 table(hvg.df$highly_variable, useNA="ifany")
 table(hvg.df[hvg.df$highly_variable==T, "features"]%in%total.hvg, useNA="ifany") # sanity check
-write.csv(hvg.df, "./data_github/cross_species/list_hvg_240826.csv")
+write.csv(hvg.df, "./data_github/cross_species/innateT_ms_hu_list_hvg_240826.csv")
 ```
 
 

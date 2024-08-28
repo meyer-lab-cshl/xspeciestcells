@@ -188,6 +188,110 @@ saveRDS(seur_mouse, "./data_github/park_dataset/park_seurat_mouse.rds")
 
 
 
+# HUMAN THYMUS ATLAS (THYMOCYTES ONLY)
+
+## Import data
+The Human Thymus Atlas with only thymocytes (corresponding to Figure 2C in [Park et al.](https://www.science.org/doi/10.1126/science.aay3224) paper) was downloaded from two sources as a `h5ad` file:
+
+- [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910), the one containing 76,994 cells;
+- [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/10/scatterplot).
+
+Once again, we will compare them and see which is more useful for our purposes. First, `cellxgene`:
+```{r import-data-human-thymocytes-cellgene, fig.height=10, fig.width=15}
+# import h5ad object downloaded
+sce_human_thymocytes_cellgene <- zellkonverter::readH5AD("~/Projects/HumanThymusProject/data_github/park_dataset/de8665a2-0476-4865-b4af-c7b8d3b1b87f.h5ad")
+print(sce_human_thymocytes_cellgene)
+
+# check out metadata
+colData(sce_human_thymocytes_cellgene)
+
+# check umap and cell type annotation
+plotReducedDim(sce_human_thymocytes_cellgene, dimred="X_umap", colour_by="cell_type")
+
+# check out gene names
+rowData(sce_human_thymocytes_cellgene)
+table(duplicated(rowData(sce_human_thymocytes_cellgene)$feature_name), useNA="ifany") # none of the gene symbols are duplicated (ideal :)
+```
+
+The cell annotation is not ideal, however the gene symbols are not duplicated, which is better. Second, data from `cellatlas.io`:
+```{r import-data-human-thymocytes-cellatlasio, fig.height=10, fig.width=15}
+# import h5ad object downloaded
+sce_human_thymocytes_cellatlas <- zellkonverter::readH5AD("~/Projects/HumanThymusProject/data_github/park_dataset/HTA08_v01_A06_Science_human_tcells.h5ad")
+print(sce_human_thymocytes_cellatlas)
+
+# check out metadata
+colData(sce_human_thymocytes_cellatlas)
+
+# check umap and cell type annotation
+plotReducedDim(sce_human_thymocytes_cellatlas, dimred="X_umap", colour_by="cell.types")
+
+# check out gene names
+rowData(sce_human_thymocytes_cellatlas)
+rownames(sce_human_thymocytes_cellatlas)[1:5]
+table(duplicated(rownames(sce_human_thymocytes_cellatlas)), useNA="ifany") # some of the gene symbols are duplicated (not great)
+```
+
+In summary, similarly to the entire Human Thymus Atlas (which we previously processed in this notebook):
+
+- `h5ad` file from [cellxgene](https://cellxgene.cziscience.com/collections/de13e3e2-23b6-40ed-a413-e9e12d7d3910) contains more information on feature names (with unique gene symbols);
+- `h5ad` file from [cellatlas.io](https://app.cellatlas.io/thymus-development/dataset/10/scatterplot) contains more/better cell metadata information (with correct clustering annotation).
+
+We will combine all we need into a new `SingleCellExperiment` object, and then convert it into a `Seurat` object.
+
+
+## Create Seurat object
+First, let's create a new `SingleCellExperiment` object.
+```{r create-human-thymocytes-sce-object-clean}
+# check that the cell IDs are the same from both sources
+table(colnames(sce_human_thymocytes_cellgene) == colnames(sce_human_thymocytes_cellatlas), useNA="ifany")
+# table(rownames(colData(sce_human_thymocytes_cellgene)) == rownames(colData(sce_human_thymocytes_cellatlas)), useNA="ifany")
+
+# check that umap coordinates are the same from both sources
+table(reducedDim(sce_human_thymocytes_cellgene, "X_umap") == reducedDim(sce_human_thymocytes_cellatlas, "X_umap"), useNA="ifany")
+
+# create new SCE object
+sce_human_thymocytes_clean <- SingleCellExperiment(
+  list(counts=assay(sce_human_thymocytes_cellgene)),
+  colData=colData(sce_human_thymocytes_cellatlas),
+  rowData=rowData(sce_human_thymocytes_cellgene),
+  reducedDims=list(umap=reducedDim(sce_human_thymocytes_cellgene, "X_umap"))
+)
+print(sce_human_thymocytes_clean)
+
+# switch rownames to gene symbols
+# table(duplicated(rowData(sce_human_thymocytes_clean)$feature_name), useNA="ifany") # last sanity check: no duplicates :)
+rownames(sce_human_thymocytes_clean) <- rowData(sce_human_thymocytes_clean)$feature_name
+
+# rename "cell.types" column to "cell_types"
+colnames(colData(sce_human_thymocytes_clean))[13] <- "cell_types"
+```
+
+Let's now convert into a seurat object.
+```{r create-human-thymocytes-seurat-object, fig.width=10, fig.height=8}
+# convert to seurat
+seur_human_thymocytes <- Seurat::as.Seurat(sce_human_thymocytes_clean, data=NULL)
+
+# remove genes which have 0 total count
+seur_human_thymocytes <- seur_human_thymocytes[rowSums(seur_human_thymocytes)!=0,]
+
+SCpubr::do_DimPlot(
+  seur_human_thymocytes,
+  group.by="cell_types",
+  legend.position="right",
+  colors.use = cols_park,
+  label=T
+)
+```
+
+
+## Save Seurat object
+```{r seur-human-thymocytes-save, eval=FALSE, echo=TRUE}
+saveRDS(seur_human_thymocytes, "./data_github/park_dataset/park_seurat_human_thymocytes.rds")
+```
+
+
+
+
 # SESSION INFO
 ```{r}
 sessionInfo()

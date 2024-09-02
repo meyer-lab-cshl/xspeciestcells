@@ -1,4 +1,4 @@
-This directory contains supplementary tables from peer-reviewer papers on peripheral blood T cells. These tables contain gene signatures characterizing different cell states of adult peripheral blood T cells, which we compared with the genes characterizing each of our gene expression programs (GEPs) in order to better understand the relevance of our cNMF-inferred GEPs (Supplementary Figure 10 in manuscript).
+This directory contains supplementary tables from peer-reviewed papers on peripheral blood T cells. These tables contain gene signatures characterizing different cell states of adult peripheral blood T cells, which we compared with the genes characterizing each of our gene expression programs (GEPs) in order to better understand the relevance of our cNMF-inferred GEPs (Supplementary Figure 10 in manuscript).
 
 These tables are used to run the script [compare_geps_with_literature_signatures.Rmd](../..//scripts/cNMF/compare_geps_with_literature_signatures.Rmd).
 

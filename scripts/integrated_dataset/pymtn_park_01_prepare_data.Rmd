@@ -39,285 +39,199 @@ source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
 
 
 ## Import data
-```{r import-data}
+```{r import-data, fig.width=7}
+# our integrated dataset
+seur_integrated <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+seur_thymus <- subset(seur_integrated, subset=tissue=="Thymus") # keep only thymocytes
+do_DimPlot(
+  seur_thymus,
+  group.by = "clusters_integrated_data",
+  reduction = "umap_integrated",
+  colors.use = cols_integrated,
+  legend.position="right"
+)
 
+# Park et al. thymocyte data (corresponding to Fig 2C)
+seur_park <- readRDS("./data_github/park_dataset/park_seurat_human_thymocytes.rds")
+do_DimPlot(
+  seur_park,
+  group.by="cell_types",
+  legend.position="right",
+  colors.use = cols_park,
+  label=T
+)
 ```
 
 
 
 
-# FUNCTIONS
-```{r define-functions}
+# PREPARE DATA FOR METANEIGHBOR
 
-```
+## Prepare HVGs
+```{r prep-hvg}
+# subset to common genes
+common_genes <- intersect(rownames(seur_thymus), rownames(seur_park))
+seur_thymus <- seur_thymus[common_genes,]
+seur_park <- seur_park[common_genes,]
 
+# get HVGs
+seur_thymus <- FindVariableFeatures(seur_thymus, nfeatures = 2000)
+seur_park <- FindVariableFeatures(seur_park, nfeatures = 2000)
 
-
-
-# ANALYSIS
-
-## Analysis 1
-```{r analysis-1}
-
-```
-
-
-## Analysis 2
-```{r analysis-2}
-
-```
-
-## Analysis 1
-```{r analysis-1}
-
-```
-
-
-## Analysis 2
-```{r analysis-2}
-
-```
-
-## Analysis 3
-```{r analysis-3}
-
-```
-
-
-## Analysis 4
-```{r analysis-4}
-
-```
-
-
-# COPY PASTE FROM SCRIPTS
-```{r park-metaneighbor}
-# Get union of HVGs from our data & park data
-length(VariableFeatures(seur.thymus))
-seur.park.thymocytes <- FindVariableFeatures(seur.park.thymocytes, nfeatures = 2000)
-length(VariableFeatures(seur.park.thymocytes))
-
-ggVennDiagram(
-  x=list(VariableFeatures(seur.thymus), VariableFeatures(seur.park.thymocytes)),
-  category.names = c("Gapin HVGs" , "Park HVGs"),
+ggVennDiagram::ggVennDiagram(
+  x=list(VariableFeatures(seur_thymus), VariableFeatures(seur_park)),
+  category.names = c("Current study HVGs" , "Park HVGs"),
   label_alpha=0,
   label="count"
 )+
-  ggplot2::scale_fill_gradient(low="white",high = "blue") # 573 common HVGs
+  ggplot2::scale_fill_gradient(low="white",high = "blue") # 896 common HVGs
 
-hvg.union2 <- unique(c(VariableFeatures(seur.thymus), VariableFeatures(seur.park.thymocytes)))
-length(hvg.union2) # 3,427 genes
-
-
-# Merge seurat objects
-seur.park.thymocytes$study <- "park_data"
-seur.merged2 <- merge(seur.thymus, y=seur.park.thymocytes)
-# sanity checks
-ncol(seur.thymus) + ncol(seur.park.thymocytes) # total nb of samples
-length(union(rownames(seur.thymus), rownames(seur.park.thymocytes))) # total nb of genes
-print(seur.merged2)
+hvg.total <- unique(c(VariableFeatures(seur_thymus), VariableFeatures(seur_park)))
+length(hvg.total) # 3,104 genes
 
 
-# Convert seurat count matrix to SummarizedExperiment object
-table(seur.merged2$cell_type, useNA="ifany")
-table(seur.merged2$study, useNA="ifany")
-count2 <- SummarizedExperiment(assays=seur.merged2@assays[["RNA"]]@counts,
-                               colData=seur.merged2@meta.data[,c("cell_type", "study")])
+# XXXXXX
+# obtain HVGs from Park et al. dataset
+seur_park <- FindVariableFeatures(seur_park, nfeatures = 2000)
 
-# sanity check
-# table(colnames(seur.merged2@assays[["RNA"]]@counts) == rownames(seur.merged2@meta.data))
-seur.merged2 <- readRDS("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_merged.rds")
-count2 <- readRDS("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/summarizedexpobj_merged.rds")
+ggVennDiagram::ggVennDiagram(
+  x=list(VariableFeatures(seur_thymus), VariableFeatures(seur_park)),
+  category.names = c("Current study HVGs" , "Park HVGs"),
+  label_alpha=0,
+  label="count"
+)+
+  ggplot2::scale_fill_gradient(low="white",high = "blue") # 549 common HVGs
 
-# export to run on Elzar with slow version
-# SeuratDisk::SaveH5Seurat(seur.merged2,
-#                          filename = "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_convert.h5Seurat")
-# SeuratDisk::Convert("../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/seuratobj_convert.h5Seurat", dest = "h5ad")
-# VariableFeatures(seur.merged2)
-# df <- data.frame("features"=rownames(seur.merged2), "highly_variable"=(rownames(seur.merged2) %in% VariableFeatures(seur.merged2)))
-# write.csv(df, "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/list_hvg.csv")
-# write.table(VariableFeatures(seur.merged2), "../../data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/list_hvg.txt",
-#             sep="\t", row.names=FALSE, col.names=FALSE, quote=FALSE)
-
-
-# Run metaneighbor
-mtn2 <- MetaNeighborUS(var_genes=hvg.union2,
-                       dat=count2,
-                       study_id=seur.merged2$study,
-                       cell_type=seur.merged2$cell_type,
-                       one_vs_best = FALSE,
-                       fast_version=TRUE)
-
-# checkpoint save
-# saveRDS(mtn2, "~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/mtn_park.rds")
-# mtn2 <- readRDS("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/mtn_park.rds")
-
-# slow version from Elzar
-mtn2 <- read_csv("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/output/pymtn_park_slowversion_2023-07-11.csv")
-mtn2 <- as.data.frame(mtn2)
-rownames(mtn2) <- mtn2[,1]
-mtn2 <- mtn2[,-1]
-mtn2 <- as.matrix(mtn2)
-
-
-# Heatmap ####
-jpeg("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/pymtn_slowversion_fulltree.jpeg",
-     width=1000, height=1000, res=150)
-heatmap.2(mtn2,
-          # trace
-          trace="none",
-          # Rowv=FALSE,
-          # Colv=FALSE,
-          # superimpose a density histogram on color key
-          density.info="none",
-          # color scale
-          col=rev(colorRampPalette(brewer.pal(11,"RdYlBu"))(100)),
-          breaks=seq(0,1,length=101),
-          #na.rm=F,
-          na.color="grey",
-          # text labels
-          main="Comparison with Park thymocytes",
-          cexRow=0.6,
-          cexCol=0.6,
-          # margins
-          margins=c(7,7))
-dev.off()
-
-
-# Reformat AUROC into df
-library(reshape2)
-library(ggrepel)
-mtn.df <- melt(mtn2)
-mtn.df <- mtn.df %>%
-  filter(str_detect(Var1,"gapin_data")) %>%
-  mutate(Var1 = gsub("gapin_data\\|", "", Var1)) %>%
-  filter(str_detect(Var2, "park_data")) %>%
-  mutate(Var2 = gsub("park_data\\|", "", Var2))
-
-interesting_clusters <- mtn.df %>%
-  group_by(Var1) %>%
-  top_n(1, value)
-
-ggplot(mtn.df, aes(x=factor(Var1, level=paste0("c", 0:17)),
-                   y=value,
-                   color=factor(Var2, level=names(cols_park))))+
-  geom_hline(yintercept=0.9, linetype="dashed", color="grey")+
-  geom_hline(yintercept=0.5, linetype="dashed", color="grey")+
-  geom_point()+
-  geom_text_repel(data = interesting_clusters,
-                  aes(label = Var2), nudge_y=0.1, show.legend=FALSE)+
-  scale_color_manual(values=cols_park, name="Park clusters")+
-  ylim(c(0,1.2))+
-  labs(x="Gapin clusters", y="AUROC")+
-  theme_cowplot()
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_thymocytesonly_ggplot.jpeg", width=8, height=5)
-
-# Get number of cells per gapin cluster and per park cluster
-mtn.df <- mtn.df %>%
-  left_join(as.data.frame(table(seur.thymus$cell_type)), by="Var1") %>%
-  dplyr::rename(ncells_gapin=Freq) %>%
-  left_join(as.data.frame(table(seur.park.thymocytes$cell_type)) %>% dplyr::rename(Var2=Var1), by="Var2") %>%
-  dplyr::rename(ncells_park=Freq)
-
-bp.x <-
-  ggplot(
-    data = mtn.df %>% select(Var1, ncells_gapin) %>% distinct(),
-    aes(x = factor(Var1, levels = paste0("c", 0:17)), y = ncells_gapin)
-  ) +
-  geom_bar(stat = "identity", fill = "#bdbdbd") + theme_cowplot() +
-  scale_x_discrete(position = "top") +
-  scale_y_continuous(limits = c(0, 6500), breaks = seq(0,6000, length.out=3)) +
-  labs(y = "#cells") +
-  theme(
-    #axis.title.y = element_blank(),
-    # axis.text.y = element_blank(),
-    # axis.ticks.y = element_blank(),
-    axis.text.x = element_text(size = 15),
-    axis.title.x = element_blank(),
-    axis.line.x = element_blank(),
-    legend.position = "none"
-  ) #+
-# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
-
-# Change order of Park clusters
-order_park <- c("DN(early)", "DN(P)", "DN(Q)", "DP(P)", "DP(Q)", "αβT(entry)", "T(agonist)", "CD8αα(I)", "CD8αα(II)",
-                "γδT", "Treg(diff)", "Treg", "CD4+T", "CD8+T", "Th17", "NKT")
-bp.y <- ggplot(
-  data=mtn.df %>% select(Var2, ncells_park) %>% distinct(), 
-  aes(x=factor(Var2, levels=rev(order_park)), y=ncells_park)
-  )+
-  geom_bar(stat="identity", fill="#bdbdbd") +
-  scale_x_discrete(position="top") + labs(y="#cells")+ coord_flip() + theme_cowplot()+
-  scale_y_continuous(limits = c(0, 12500), breaks = seq(0,10000, length.out=3)) +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_text(size=15), #axis.ticks.x = element_blank(),
-        # axis.text.x = element_blank(),
-        #axis.title.x = element_blank(),
-        axis.line.y=element_blank(),
-        legend.position = "none")# +
-# scale_fill_distiller(name = "Value", palette = "Greys", direction = 1)
-
-# Bubble plot
-library(scales)
-# hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
-#                                y=factor(Var2, levels=rev(order_park)))) +
-#   geom_point(aes(size=value, color=value))+
-#   geom_text(data=mtn.df %>% filter(value>0.90) %>% mutate(across("value", \(x) round(x,2))), aes(label=value), color="white")+
-#   # scales
-#   scale_size_continuous(limits=c(0,1), breaks=seq(0.2,0.8, by=0.2), range = c(1, 15))+
-#   scale_colour_gradient2(low="#d9d9d9", mid="white", high="#a50f15", midpoint=0.5, limits=c(0,1), name="AUROC", breaks=seq(0,1, by=0.2))+
-#   # themes
-#   labs(x="",y="Park clusters", size="AUROC")+
-#   theme_cowplot()+
-#   theme(legend.position="bottom",
-#         legend.key.width = unit(1, 'cm'),
-#         axis.title = element_text(size=20),
-#         axis.text = element_text(size=15))
-
-hm.clean <- ggplot(mtn.df, aes(x=factor(Var1, levels=paste0("c", 0:17)),
-                               y=factor(Var2, levels=rev(order_park)))) +
-  geom_point(aes(size = abs(value-0.5), fill = value), color="black", shape=21) +
-  geom_text(data=mtn.df %>% filter(value>0.90) %>% mutate(across("value", \(x) round(x,2))), aes(label=value), color="white")+
-  # scales
-  scale_size_continuous(limits=c(0,0.5), breaks=seq(0, 0.5, by = 0.1), range = c(1, 15))+
-      scale_fill_gradient2(
-        low = "#2166ac",
-        mid = "white",
-        high = "#a50f15",
-        midpoint = 0.5,
-        limits = c(0, 1),
-        name = "AUROC",
-        breaks = seq(0, 1, by = 0.2)
-      )+
-  # themes
-  labs(x="Current thesis clusters",y="Park clusters", size="AUROC")+
-  theme_cowplot()+
-  theme(legend.position="bottom",
-        legend.key.width = unit(1, 'cm'),
-        axis.title = element_text(size=20),
-        axis.text = element_text(size=15))
+hvg.total <- unique(c(VariableFeatures(seur_thymus), VariableFeatures(seur_park)))
+length(hvg.total) # 3,451 genes
+# XXXXXXX
 ```
 
-```{r, fig.height=8, fig.width=8}
-# plot_grid(bp.x+theme(plot.margin = margin(b=-5,unit="cm")),
-#           NULL,
-#           hm.clean+theme(plot.margin = margin(t=-5, r=-5, unit="cm")),
-#           bp.y,
-#           align="hv", axis="tblr",
-#           ncol=2, nrow=2,
-#           rel_widths=c(2.5,1), rel_heights=c(1,3))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_bubbleplot3.jpeg", width=12, height=12)
-# 
-# ggdraw()+
-#   draw_plot(bp.x, x=0.07, y=0.7, width=0.63, height=0.2)+
-#   draw_plot(bp.y, x=0.7, y=0.07, width=0.2, height=0.63)+
-#   draw_plot(hm.clean, x=0, y=0, width=0.7, height=0.7)
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_bubbleplot2.jpeg", width=12, height=12)
 
-library(patchwork)
-(bp.x+plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
-# ggsave("~/Projects/HumanThymusProject/data/human-thymus/HumanData_16_ParkIntegration/metaneighbor_elzar/pymtn_bubbleplot1.pdf", width=14, height=14)
-ggsave("~/Projects/phd/data/figures/chapter_02/figs_unfinished/section2/ch2_fig17_pymtn_bubbleplot.pdf", width=14, height=14)
+## Prepare metadata
+```{r prep-metadata}
+# our data: keep only columns of interest
+seur_thymus@meta.data <- seur_thymus@meta.data[,c(
+  "nCount_RNA",
+  "nFeature_RNA",
+  "clusters_integrated_data"
+)]
+colnames(seur_thymus@meta.data) <- c("nCount", "nFeature", "clusters_to_compare")
+seur_thymus@meta.data$clusters_to_compare <- as.character(seur_thymus@meta.data$clusters_to_compare)
+seur_thymus@meta.data$clusters_to_compare <- paste0("c", seur_thymus@meta.data$clusters_to_compare)
+seur_thymus@meta.data$study <- "gapin_data"
+head(seur_thymus@meta.data)
+
+# park data: keep only columns of interest
+seur_park@meta.data <- seur_park@meta.data[,c(
+  "nCount_originalexp",
+  "nFeature_originalexp",
+  "cell_types"
+)]
+colnames(seur_park@meta.data) <- c("nCount", "nFeature", "clusters_to_compare")
+seur_park@meta.data$clusters_to_compare <- as.character(seur_park@meta.data$clusters_to_compare)
+seur_park@meta.data$study <- "park_data"
+head(seur_park@meta.data)
+
+# merge metadata
+# table(colnames(seur_park) %in% colnames(seur_thymus), useNA="ifany") # it's all FALSE: different cell IDs
+metadata_merged <- rbind(seur_thymus@meta.data, seur_park@meta.data)
+table(metadata_merged$study)
+# nrow(metadata_merged)==ncol(seur_thymus)+ncol(seur_park)
+```
+
+
+XXXXXXXXX
+## Merge Seurat objects (to delete?)
+Now, merge the seurat objects.
+```{r merge-seurat-to-delete}
+# Merge seurat objects
+seur_merged <- merge(seur_thymus, y=seur_park)
+
+# sanity checks
+ncol(seur_merged) == ncol(seur_thymus) + ncol(seur_park) # total nb of samples
+length(union(rownames(seur_thymus), rownames(seur_park))) # total nb of genes
+print(seur_merged)
+3316+13888+13191+13888
+```
+XXXXXXXXX
+
+
+## Prepare count matrices
+Subset the counts to common genes.
+```{r prep-counts}
+# get counts matrices 
+thym.counts <- seur_thymus[["RNA"]]@counts
+park.counts <- seur_park[["originalexp"]]@counts
+
+# make sure they are counts and not log normalized data
+thym.counts[5:10,1:5]
+park.counts[1:5,1:5]
+
+# check out how many common genes
+ggVennDiagram::ggVennDiagram(
+  x=list(rownames(thym.counts), rownames(park.counts)),
+  category.names = c("Current study genes" , "Park genes"),
+  label_alpha=0,
+  label="count"
+)+
+  ggplot2::scale_fill_gradient(low="white",high = "blue") # 13,888 common genes
+
+# subset to common genes
+# common_genes <- intersect(rownames(thym.counts), rownames(park.counts))
+# thym.counts <- thym.counts[common_genes,]
+# park.counts <- park.counts[common_genes,]
+
+dim(thym.counts)
+dim(park.counts)
+
+# merge
+counts_merged <- cbind(thym.counts, park.counts)
+ncol(counts_merged)==ncol(thym.counts)+ncol(park.counts)
+dim(counts_merged)
+```
+
+
+
+
+# EXPORT FOR METANEIGHBOR
+
+## Merge everything into a seurat object
+```{r prep-seurat-combined}
+# sanity checks
+# table(rownames(metadata_merged)==colnames(counts_merged), useNA="ifany") # all TRUE
+
+seur.total <- CreateSeuratObject(counts=counts_merged, meta.data=metadata_merged)
+print(seur.total)
+```
+
+
+## Convert to h5ad file
+```{r convert-h5ad, echo=T, eval=F}
+# convert to .h5ad
+SeuratDisk::SaveH5Seurat(
+  seur.total,
+  filename = "./data_github/park_dataset/pymtn/human_thym_merged_with_park_240902.h5Seurat"
+  )
+SeuratDisk::Convert(
+  "./data_github/park_dataset/pymtn/human_thym_merged_with_park_240902.h5Seurat",
+  dest = "h5ad"
+  )
+```
+
+
+## Export HVGs
+```{r export-hvg, echo=T, eval=F}
+# export HVG list into .csv file
+hvg.df <- data.frame(
+  "features"=rownames(seur.total),
+  "highly_variable"=ifelse(rownames(seur.total)%in%hvg.total2, T, F)
+)
+table(hvg.df$highly_variable, useNA="ifany")
+table(hvg.df[hvg.df$highly_variable==T, "features"]%in%hvg.total2, useNA="ifany") # sanity check
+write.csv(hvg.df, "./data_github/park_dataset/pymtn/human_thym_merged_with_park_list_hvg_240902.csv")
+```
+
 
 
 

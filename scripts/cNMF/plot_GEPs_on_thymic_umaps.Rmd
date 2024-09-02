@@ -1,0 +1,132 @@
+---
+title: "Supplementary Fig 8 - GEP usage per thymic lineage"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data, fig.height=4, fig.width=6}
+# import seurat objects
+seur.nkt  <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_inkt.rds")
+seur.mait <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_mait.rds")
+seur.gdt  <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_gdt.rds")
+seur.cd4  <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_cd4.rds")
+seur.cd8  <- readRDS("./data_github/seurat_objects_thymus/seurat_thymus_cd8.rds")
+
+# sanity check seurat objects correspond to Fig 2
+DimPlot(seur.nkt,  group.by="clusters_per_lineage", label=T, cols=cols_thym_nkt)
+DimPlot(seur.mait, group.by="clusters_per_lineage", label=T, cols=cols_thym_mait)
+DimPlot(seur.gdt,  group.by="clusters_per_lineage", label=T, cols=cols_thym_gdt)
+
+# import GEP usage dataframe
+gep_usage <- read.table("./data_github/cNMF/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
+colnames(gep_usage) <- paste0("GEP", c(2,5,3,1,4,12,6,7,8,10,9,11), "_usage")
+gep_usage <- gep_usage[,paste0("GEP", 1:12, "_usage")]
+head(gep_usage)
+```
+
+
+
+
+# ANALYSIS
+
+## Add GEP1-GEP11 usage to seurat objects
+```{r add-gep12-to-seur-object}
+# check that rownames are in same order
+# table(rownames(gep_usage[rownames(gep_usage) %in% rownames(seur.cd4@meta.data),])==rownames(seur.cd4@meta.data), useNA="ifany")
+# table(rownames(gep_usage[rownames(gep_usage) %in% rownames(seur.cd8@meta.data),])==rownames(seur.cd8@meta.data), useNA="ifany")
+# table(rownames(gep_usage[rownames(gep_usage) %in% rownames(seur.nkt@meta.data),])==rownames(seur.nkt@meta.data), useNA="ifany")
+# table(rownames(gep_usage[rownames(gep_usage) %in% rownames(seur.mait@meta.data),])==rownames(seur.mait@meta.data), useNA="ifany")
+# table(rownames(gep_usage[rownames(gep_usage) %in% rownames(seur.gdt@meta.data),])==rownames(seur.gdt@meta.data), useNA="ifany") # all TRUE
+
+# add GEP usage to seurat objects
+gep_colnames <- paste0("GEP", 1:11, "_usage")
+seur.cd4@meta.data[,gep_colnames]  <- gep_usage[rownames(gep_usage) %in% rownames(seur.cd4@meta.data), gep_colnames]
+seur.cd8@meta.data[,gep_colnames]  <- gep_usage[rownames(gep_usage) %in% rownames(seur.cd8@meta.data), gep_colnames]
+seur.nkt@meta.data[,gep_colnames]  <- gep_usage[rownames(gep_usage) %in% rownames(seur.nkt@meta.data), gep_colnames]
+seur.mait@meta.data[,gep_colnames] <- gep_usage[rownames(gep_usage) %in% rownames(seur.mait@meta.data), gep_colnames]
+seur.gdt@meta.data[,gep_colnames]  <- gep_usage[rownames(gep_usage) %in% rownames(seur.gdt@meta.data), gep_colnames]
+```
+
+
+## Plot GEP usage per thymic lineage
+```{r plot-supp-fig8, fig.height=25, fig.width=15}
+# Plot
+seur_vector <- list("iNKT"=seur.nkt, "MAIT"=seur.mait, "GDT"=seur.gdt, "CD4"=seur.cd4, "CD8"=seur.cd8)
+
+plist_massive <- list()
+for(gep in gep_colnames){
+  # print(gep)
+  # get row of plots (for one GEP)
+  plist <- list()
+  for(i_seur in names(seur_vector)){
+    # print(i_seur)
+    seur <- seur_vector[[i_seur]]
+    # get legend once
+    if(gep=="GEP1_usage" & i_seur=="iNKT"){
+      plegend <- ggpubr::get_legend(
+        SCpubr::do_FeaturePlot(seur,  features=gep, ncol=1, legend.position="right", legend.title="GEP usage", border.size=1, pt.size=2, order=T)+
+          scale_color_viridis_c(limits=c(0,1.25), option="B")+
+          theme(plot.background = element_rect(color = "black"))
+      )
+    }
+    # make plot
+    legendpos <- "none"
+    plt_title <- ""
+    if(gep=="GEP1_usage"){plt_title=i_seur}
+    p <- SCpubr::do_FeaturePlot(seur,  features=gep, ncol=1, legend.position=legendpos, border.size=1, pt.size=2, order=T, plot.title=plt_title)+
+      scale_color_viridis_c(limits=c(0,1.25), option="B")+
+      theme(plot.background = element_rect(color = "black", linewidth = 2),
+            plot.margin=unit(c(0,5.5,0,5.5), "points"))
+    plist[[i_seur]] <- ggrastr::rasterise(p, layers="Point", dpi=300)
+  }
+  prow_gep <- plot_grid(plotlist=plist, nrow=1, scale=0.9)
+  plist_massive[[gep]] <- prow_gep 
+}
+
+plot_grid(
+  plot_grid(plotlist=plist_massive, ncol=1, align="h"),
+  ggpubr::as_ggplot(plegend), ncol=2, rel_widths = c(5, .5), scale=c(0.95, 5)
+)
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

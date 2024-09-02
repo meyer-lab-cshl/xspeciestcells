@@ -1,0 +1,1 @@
+This directory is dedicated to storing `.rds` files from GEO (ADD LINK HERE), i.e. the human integrated and murine integrated seurat objects.

@@ -1,0 +1,265 @@
+---
+title: "Prepare data to run pyMetaNeighbor across species"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  attr.output='style="max-height: 300px;"',
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+
+## Import data
+```{r import-data, fig.width=7}
+# human
+seur.hu <- list(
+  "nkt"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_inkt.rds"),
+  "mait"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_mait.rds"),
+  "gdt"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_gdt.rds")
+)
+DimPlot(seur.hu$nkt,  group.by="clusters_per_lineage", cols=cols_thym_nkt)
+DimPlot(seur.hu$mait, group.by="clusters_per_lineage", cols=cols_thym_mait)
+DimPlot(seur.hu$gdt,  group.by="clusters_per_lineage", cols=cols_thym_gdt)
+
+# mouse
+seur.ms <- readRDS("./data_geo/seurat_objects/seurat_mouse_integrated_object_23_12_02.rds")
+DimPlot(seur.ms,  group.by="clusters_annotation", label=T)
+```
+
+Import orthologs dataframe (generated with script `pymtn_01_orthologs_table.Rmd`).
+```{r import-orthologs-df}
+ortholog.df <- read.csv("./data_github/cross_species/ortholog_table_ms_hu_one2one.csv")
+```
+
+
+
+
+# PREPARE DATA FOR METANEIGHBOR
+
+## Prepare metadata
+```{r prep-metadata}
+# Mouse
+ms.metadata <- seur.ms@meta.data %>%
+  dplyr::select(c(tcell_lineage, clusters_integrated_data)) %>%
+  mutate(
+    clusters_to_compare = case_when(
+      clusters_integrated_data == "0" ~ "post_selection",
+      clusters_integrated_data == "1" ~ "immature_CD24_GD",
+      clusters_integrated_data == "2" ~ "immature_CD24_GD",
+      clusters_integrated_data == "3" ~ "signaling",
+      clusters_integrated_data == "4" ~ "signaling",
+      clusters_integrated_data == "5" ~ "cycling",
+      clusters_integrated_data == "6" ~ "transition",
+      clusters_integrated_data == "7" ~ "typeII",
+      clusters_integrated_data == "8" ~ "typeI",
+      clusters_integrated_data == "9" ~ "typeI",
+      clusters_integrated_data == "10" ~ "typeIII",
+      clusters_integrated_data == "11" ~ "typeIII",
+      clusters_integrated_data == "12" ~ "12"
+    ),
+    study = "mouse"
+  )
+# table(ms.metadata[,c("clusters_integrated_data", "clusters_to_compare")], useNA="ifany") # sanity check
+
+# Human
+hu.metadata <- rbind(
+  seur.hu$nkt@meta.data[,c("tcell_lineage", "clusters_per_lineage")],
+  seur.hu$mait@meta.data[,c("tcell_lineage", "clusters_per_lineage")],
+  seur.hu$gdt@meta.data[,c("tcell_lineage", "clusters_per_lineage")]
+) %>%
+  mutate(
+    study="human",
+    clusters_to_compare=clusters_per_lineage
+    )
+
+head(ms.metadata)
+head(hu.metadata)
+
+# keep only columns which will be necessary for metaneighbor
+ms.metadata <- ms.metadata %>% dplyr::select(study, clusters_to_compare)
+hu.metadata <- hu.metadata %>% dplyr::select(study, clusters_to_compare)
+```
+
+
+## Prepare orthologs table
+Let's subset the orthologs dataframe to only genes we find in our human/mouse count matrices.
+```{r prep-orthologs-df}
+# First, check whether genes can all be found in the ortholog table
+table(unique(rownames(seur.ms)) %in% unique(ortholog.df$ms_symbol)) # 9,670 not
+table(unique(rownames(seur.hu$nkt)) %in% ortholog.df$hu_symbol) # 4,954 not
+# numbers consistent with script pymtn_01_orthologs_table.Rmd
+
+# Second, subset the ortholog.df to only genes present in our datasets
+dictionary <- ortholog.df %>%
+  as_tibble() %>%
+  filter(ms_symbol %in% unique(rownames(seur.ms)) & hu_symbol %in% unique(rownames(seur.hu$nkt))) %>%
+  ## remove any symbols that are NAs
+  filter(!is.na(ms_symbol)) %>%
+  filter(!is.na(hu_symbol)) %>%
+  ## remove duplicate rows (just in case)
+  distinct()
+dim(dictionary) # 11,120 genes
+
+# Subset seurat objects to genes that we have in the dictionnary (can't do comparison on genes we can't translate between species)
+seur.hu <- lapply(seur.hu, function(x) x[unique(dictionary$hu_symbol),])
+seur.ms <- seur.ms[unique(dictionary$ms_symbol),]
+```
+
+
+## Prepare HVGs
+```{r prep-hvgs}
+# Human HVGs
+hu.hvg <- unique(c(
+  VariableFeatures(seur.hu$nkt),
+  VariableFeatures(seur.hu$mait),
+  VariableFeatures(seur.hu$gdt)
+))
+length(hu.hvg) # 2,614 genes
+
+
+# Mouse HVGs
+DefaultAssay(seur.ms) <- "RNA"
+ms.hvg <- VariableFeatures(FindVariableFeatures(seur.ms, nfeatures=length(hu.hvg)))
+length(ms.hvg) # 2,614 genes
+
+
+# Translate the murine HVGs into "human gene" language
+ms.hvg.translated <- unique(pull(
+  dictionary %>% filter(ms_symbol %in% ms.hvg),
+  hu_symbol
+  ))
+hu.hvg.translated <- unique(pull(
+  dictionary %>% filter(hu_symbol %in% hu.hvg),
+  hu_symbol
+  ))
+# length(ms.hvg.translated) # 2614
+# length(hu.hvg.translated) # 2614
+
+# length(intersect(ms.hvg.translated, hu.hvg.translated))/length(union(ms.hvg.translated, hu.hvg.translated)) # JI=0.22
+total.hvg <- unique(union(ms.hvg.translated, hu.hvg.translated))
+length(total.hvg) # 4,284 genes
+```
+
+
+## Prepare counts matrices
+```{r prep-counts-1}
+# Get counts matrices
+ms.counts <- seur.ms[["RNA"]]@counts
+hu.counts <- do.call(
+  cbind,
+  lapply(seur.hu, function(x) x[["RNA"]]@counts)
+)
+ncol(hu.counts) == ncol(seur.hu$nkt)+ncol(seur.hu$mait)+ncol(seur.hu$gdt)
+
+dim(ms.counts)
+dim(hu.counts)
+
+# check they have different cell barcodes
+# table(colnames(ms.counts) %in% colnames(hu.counts), useNA="ifany") # all FALSE, so good
+```
+
+Now we'll translate mouse genes in mouse count matrix into "human" genes.
+```{r mtn-prep-counts-2}
+# sanity check all genes in each count matrix is found in our "dictionary" (should be 11,120 based on previous code chunk)
+# table(unique(rownames(ms.counts)) %in% dictionary$ms_symbol) # 11,120
+# table(unique(rownames(hu.counts)) %in% dictionary$hu_symbol) # 11,120
+
+# Translate the mouse genes in count matrix into "human genes"
+ms.dict <- dictionary %>%
+  filter(ms_symbol %in% rownames(ms.counts)) %>%
+  select(ms_symbol, hu_symbol) %>%
+  distinct(ms_symbol, .keep_all=T)
+ms.dict <- ms.dict[match(rownames(ms.counts), ms.dict$ms_symbol),]
+table(ms.dict$ms_symbol == rownames(ms.counts), useNA="ifany") # should be all TRUE
+table(is.na(ms.dict$hu_symbol)) # should have no NAs
+table(duplicated(ms.dict$ms_symbol), useNA="ifany") # should all be FALSE
+
+# Translate
+rownames(ms.counts) <- ms.dict$hu_symbol
+
+# Verify mouse genes (in "human symbols") correspond to human genes
+table(rownames(ms.counts) == rownames(hu.counts), useNA="ifany")
+```
+
+
+
+
+# EXPORT FOR METANEIGHBOR
+
+## Merge everything into a seurat object
+```{r prep-seurat-combined}
+# sanity checks
+# table(rownames(hu.metadata)==colnames(hu.counts), useNA="ifany") # 10k cells
+# table(rownames(ms.metadata)==colnames(ms.counts), useNA="ifany") # 43k cells
+# table(rownames(ms.counts)==rownames(hu.counts), useNA="ifany")
+# table(colnames(ms.metadata)==colnames(hu.metadata), useNA="ifany")
+
+counts_merged <- cbind(ms.counts, hu.counts)
+metadata_merged <- rbind(ms.metadata, hu.metadata)
+dim(counts_merged)
+dim(metadata_merged)
+
+seur.total <- CreateSeuratObject(counts=counts_merged, meta.data=metadata_merged)
+```
+
+
+## Convert to h5ad file
+```{r convert-h5ad, echo=T, eval=F}
+# convert to .h5ad
+SeuratDisk::SaveH5Seurat(
+  seur.total,
+  filename = "./data_github/cross_species/innateT_ms_hu_full_seu_240826.h5Seurat"
+  )
+SeuratDisk::Convert(
+  "./data_github/cross_species/innateT_ms_hu_full_seu_240826.h5Seurat",
+  dest = "h5ad"
+  )
+```
+
+
+## Export HVGs
+```{r export-hvg, echo=T, eval=F}
+# export HVG list into .csv file
+hvg.df <- data.frame(
+  "features"=rownames(seur.total),
+  "highly_variable"=ifelse(rownames(seur.total)%in%total.hvg, T, F)
+)
+table(hvg.df$highly_variable, useNA="ifany")
+table(hvg.df[hvg.df$highly_variable==T, "features"]%in%total.hvg, useNA="ifany") # sanity check
+write.csv(hvg.df, "./data_github/cross_species/innateT_ms_hu_list_hvg_240826.csv")
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```

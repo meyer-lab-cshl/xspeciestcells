@@ -198,7 +198,7 @@ bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
 ## Prepare data for plotting
 
 ### Prepare metadata
-This is the same code chunk as in the script [pymtn_02_prepare_data.Rmd](./pymtn_02_prepare_data.Rmd).
+This is the same code chunk as in the script [pymtn_crosspecies_02_prepare_data.Rmd](./pymtn_crosspecies_02_prepare_data.Rmd).
 ```{r prep-metadata}
 # Mouse
 ms.metadata <- seur.ms@meta.data %>%

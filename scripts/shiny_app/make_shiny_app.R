@@ -1,6 +1,6 @@
-# Purpose:
+# Purpose: Generate ShinyApp to be made available upon publication, for readers to browse data
 # Author: Salomé Carcy
-# Date:
+# Date: December 2023
 
 
 

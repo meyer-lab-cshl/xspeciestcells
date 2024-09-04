@@ -1,0 +1,83 @@
+---
+title: "Supplementary Fig 6 - GEP12 usage per batch"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(Seurat)
+library(SCpubr)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# seurat object
+seur <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+DimPlot(seur, group.by = "clusters_integrated_data", label=T, repel=T, reduction="umap_integrated")+
+  scale_color_manual(values=cols_integrated)
+
+# GEP usage dataframe
+gep_usage <- read.table("./data_github/cNMF/non_imputed_cNMF_allcells.usages.k_12.dt_0_02.consensus.txt", header=T)
+colnames(gep_usage) <- paste0("GEP", c(2,5,3,1,4,12,6,7,8,10,9,11), "_usage")
+head(gep_usage)
+```
+
+
+
+
+# ANALYSIS
+
+## Add GEP12 usage to seurat object
+```{r add-gep12-to-seur-object}
+table(rownames(gep_usage)==rownames(seur@meta.data), useNA="ifany") # should be all TRUE
+seur@meta.data$GEP12_usage <- gep_usage$GEP12_usage
+```
+
+
+## Plot GEP12 per batch
+```{r plot-gep12, fig.height=10, fig.width=10}
+SCpubr::do_FeaturePlot(
+  seur,
+  features = "GEP12_usage",
+  split.by = "batch_id",
+  ncol = 3,
+  order = F,
+  use_viridis = T,
+  viridis.palette = "B",
+  legend.title = "GEP12 (cNMF usage)"
+)
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```

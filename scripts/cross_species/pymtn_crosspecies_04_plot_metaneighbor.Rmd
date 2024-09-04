@@ -1,0 +1,356 @@
+---
+title: "Plot pyMetaNeighbor across species (Figure 6B)"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  attr.output='style="max-height: 300px;"',
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(dplyr)
+library(Seurat)
+library(SCpubr)
+library(RColorBrewer)
+library(reshape2)
+library(ggrepel)
+library(patchwork)
+
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+
+## Import data
+```{r import-data, fig.width=7}
+# human
+seur.hu <- list(
+  "nkt"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_inkt.rds"),
+  "mait"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_mait.rds"),
+  "gdt"=readRDS("./data_github/seurat_objects_thymus/seurat_thymus_gdt.rds")
+)
+DimPlot(seur.hu$nkt,  group.by="clusters_per_lineage", cols=cols_thym_nkt)
+DimPlot(seur.hu$mait, group.by="clusters_per_lineage", cols=cols_thym_mait)
+DimPlot(seur.hu$gdt,  group.by="clusters_per_lineage", cols=cols_thym_gdt)
+
+# mouse
+seur.ms <- readRDS("./data_geo/seurat_objects/seurat_mouse_integrated_object_23_12_02.rds")
+DimPlot(seur.ms,  group.by="clusters_annotation", label=T)
+```
+
+Import output from metaneighbor
+```{r import-data-pymtn}
+mtn <- read.csv("./data_github/cross_species/innateT_ms_hu_pymtn_output_2024_08_27.csv", row.names=1)
+mtn <- as.matrix(mtn)
+mtn[1:5,1:5]
+```
+
+
+
+
+# PLOT METANEIGHBOR
+
+## Quick look at heatmap
+```{r mtn-heatmap, fig.height=10, fig.width=10}
+gplots::heatmap.2(
+  mtn,
+  trace = "none",
+  # superimpose a density histogram on color key
+  density.info = "none",
+  # color scale
+  col = rev(colorRampPalette(brewer.pal(11, "RdYlBu"))(100)),
+  key.xlab = "AUROC",
+  key.title = "",
+  # text labels
+  main = "Mouse vs Human innate T (4284 HVGs)",
+  cexRow = 0.6,
+  cexCol = 0.6,
+  # margins
+  margins = c(9, 9)
+)
+```
+
+
+## Define plotting function
+```{r define-function}
+bubble_plot <- function(df, order_x, order_y, label_x, label_y, auroc_min){
+  
+  # print(head(df))
+  bp.x <- NULL
+  bp.y <- NULL
+  hm.clean <- NULL
+  p <- NULL
+  
+  # x barplot
+  print("barplot x")
+  bp.x <- ggplot(
+    data = df %>% select(var_x, ncells_x) %>% distinct(),
+    aes(x = factor(var_x, levels = order_x), y = ncells_x)
+  ) +
+    geom_bar(
+      stat = "identity",
+      fill = "#bdbdbd"
+    ) +
+    theme_cowplot() +
+    scale_x_discrete(position = "top") +
+    labs(y = "#cells") +
+    theme(
+      axis.text = element_text(size = 15),
+      axis.text.x = element_text(angle = 45, hjust = 0),
+      # axis.ticks.y = element_blank(),
+      axis.title.y = element_text(size = 20),
+      axis.title.x = element_blank(),
+      axis.line.x = element_blank(),
+      legend.position = "none",
+      plot.margin = margin(10, 0, 0, 0)
+    )
+  
+  # PROPORTION OF MOUSE GDT CELLS IN EACH CLUSTER
+  print("barplot y")
+  bp.y <- ggplot(
+    data = df %>% select(var_y, ncells_y) %>% distinct(),
+    aes(x = factor(var_y, levels = order_y), y = ncells_y)
+  ) +
+    geom_bar(
+      stat = "identity",
+      fill = "#bdbdbd"
+    ) +
+    theme_cowplot() +
+    scale_x_discrete(position = "top") +
+    labs(y = "#cells") +
+    coord_flip() +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text = element_text(size = 15),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      # axis.ticks.x = element_blank(),
+      axis.title.x = element_text(size = 20),
+      axis.line.y = element_blank(),
+      legend.position = "none"
+    )
+  
+  # BUBBLE PLOT
+  print("bubble plot")
+  hm.clean <- ggplot(df, aes(
+    x = factor(var_x, levels = order_x),
+    y = factor(var_y, levels = order_y)
+  )) +
+    # geom_point(aes(size = auroc, color= auroc))+
+    geom_point(aes(size = abs(auroc - 0.5), color = auroc)) +
+    geom_text(
+      data = df %>% filter(auroc > auroc_min) %>% mutate(across("auroc", \(x) round(x, 2))),
+      aes(label = auroc),
+      color = "white"
+    ) +
+    scale_size_continuous(
+      limits = c(0, 0.5),
+      breaks = seq(0, 0.5, by = 0.1),
+      range = c(1, 15)
+    ) +
+    scale_color_gradient2(
+      low = "#2166ac",
+      mid = "white",
+      high = "#a50f15",
+      midpoint = 0.5,
+      limits = c(0, 1),
+      name = "AUROC",
+      breaks = seq(0, 1, by = 0.2)
+    ) +
+    labs(x = label_x, y = label_y, size = "AUROC") +
+    theme_cowplot() +
+    theme(
+      legend.position = "bottom",
+      legend.key.width = unit(0.8, 'cm'),
+      axis.text = element_text(size = 15),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.title = element_text(size = 20)
+    )
+  
+  
+  # COMBINE
+  print("combine")
+  p <- (bp.x + plot_spacer() + plot_layout(widths = c(5, 1))) / (hm.clean + bp.y + plot_layout(widths = c(5, 1))) + plot_layout(heights = c(1, 5))
+  return(p)
+}
+```
+
+
+## Prepare data for plotting
+
+### Prepare metadata
+This is the same code chunk as in the script [pymtn_crosspecies_02_prepare_data.Rmd](./pymtn_crosspecies_02_prepare_data.Rmd).
+```{r prep-metadata}
+# Mouse
+ms.metadata <- seur.ms@meta.data %>%
+  dplyr::select(c(tcell_lineage, clusters_integrated_data)) %>%
+  mutate(
+    clusters_to_compare = case_when(
+      clusters_integrated_data == "0" ~ "post_selection",
+      clusters_integrated_data == "1" ~ "immature_CD24_GD",
+      clusters_integrated_data == "2" ~ "immature_CD24_GD",
+      clusters_integrated_data == "3" ~ "signaling",
+      clusters_integrated_data == "4" ~ "signaling",
+      clusters_integrated_data == "5" ~ "cycling",
+      clusters_integrated_data == "6" ~ "transition",
+      clusters_integrated_data == "7" ~ "typeII",
+      clusters_integrated_data == "8" ~ "typeI",
+      clusters_integrated_data == "9" ~ "typeI",
+      clusters_integrated_data == "10" ~ "typeIII",
+      clusters_integrated_data == "11" ~ "typeIII",
+      clusters_integrated_data == "12" ~ "12"
+    ),
+    study = "mouse"
+  )
+# table(ms.metadata[,c("clusters_integrated_data", "clusters_to_compare")], useNA="ifany") # sanity check
+
+# Human
+hu.metadata <- rbind(
+  seur.hu$nkt@meta.data[,c("tcell_lineage", "clusters_per_lineage")],
+  seur.hu$mait@meta.data[,c("tcell_lineage", "clusters_per_lineage")],
+  seur.hu$gdt@meta.data[,c("tcell_lineage", "clusters_per_lineage")]
+) %>%
+  mutate(
+    study="human",
+    clusters_to_compare=clusters_per_lineage
+    )
+
+head(ms.metadata)
+head(hu.metadata)
+
+# keep only columns which will be necessary for metaneighbor
+# ms.metadata <- ms.metadata %>% dplyr::select(study, clusters_to_compare)
+# hu.metadata <- hu.metadata %>% dplyr::select(study, clusters_to_compare)
+```
+
+
+### Get number of cells per cluster
+First, we will identify clusters that represent more than 1% of number of cells in each species.
+```{r prep-nb-cells-per-cluster}
+# Human
+hu_clusters_to_keep <- hu.metadata %>%
+  summarise(ncells=n(), .by=clusters_to_compare) %>%
+  mutate(
+    totalcells=sum(ncells),
+    percentcells=ncells*100/totalcells
+  ) %>%
+  filter(percentcells>1)
+head(hu_clusters_to_keep)
+
+# Mouse
+ms_clusters_to_keep <- ms.metadata %>%
+  summarise(ncells=n(), .by=clusters_to_compare) %>%
+  mutate(
+    totalcells=sum(ncells),
+    percentcells=ncells*100/totalcells
+  ) %>%
+  filter(percentcells>1)
+head(ms_clusters_to_keep)
+```
+
+Then, we will generate a dataframe to feed into the `bubble_plot` function, which will generate Fig 6B.
+```{r prep-df-for-plotting}
+mtn.df_mshu <- melt(mtn) %>%
+  # keep human clusters in Var1 and murine clusters in Var2
+  filter(str_detect(Var1,"human")) %>%
+  mutate(Var1 = gsub("human\\|", "", Var1)) %>%
+  filter(str_detect(Var2, "mouse|Mouse")) %>%
+  mutate(Var2 = gsub("mouse|Mouse\\.", "", Var2)) %>%
+  # add nb of human cells to dataframe
+  left_join(
+    as.data.frame(table(hu.metadata$clusters_to_compare)),
+    by="Var1"
+    ) %>%
+  # rename a few columns
+  rename(
+    var_x = Var1,
+    Var1 = Var2,
+    auroc = value,
+    ncells_x = Freq
+  ) %>%
+  # add nb of mouse cells to dataframe
+  left_join(
+    ms_clusters_to_keep %>% select(clusters_to_compare, ncells) %>% rename(Freq=ncells),
+    by=c("Var1"="clusters_to_compare")
+    ) %>%
+  # rename a few columns again
+  rename(
+    var_y=Var1,
+    ncells_y=Freq
+    ) %>%
+  # keep min groups of cells that represent at least 1% of total number of cells in species
+  filter(
+    var_x %in% hu_clusters_to_keep$clusters_to_compare & var_y %in% ms_clusters_to_keep$clusters_to_compare
+    ) %>%
+  # rename a few clusters
+  mutate(
+    var_x=str_replace(var_x, "_thymus", ""),
+    var_y=case_when(
+      var_y=="immature_CD24_GD" ~ "immature CD24+ GD",
+      var_y=="post_selection" ~ "post-selection/naive",
+      .default=var_y
+    )
+  )
+
+# sanity check
+mtn.df_mshu
+```
+
+
+## Plot Figure 6B
+```{r plot-mtn, fig.width=15, fig.height=10}
+order_mouse <- rev(c(
+    "signaling",
+    "post-selection/naive",
+    "immature CD24+ GD",
+    "cycling",
+    "transition",
+    "typeI",
+    "typeII",
+    "typeIII",
+    "12"
+))
+order_human <- c(
+  paste0("iNKT_c", 0:6),
+  paste0("MAIT_c", 0:6),
+  paste0("GDT_c", 0:7)
+)
+
+bubble_plot(
+  df=mtn.df_mshu,
+  order_x = order_human[order_human %in% unique(mtn.df_mshu$var_x)],
+  order_y = order_mouse[order_mouse %in% unique(mtn.df_mshu$var_y)],
+  label_x = "Human clusters",
+  label_y = "Mouse clusters",
+  auroc_min= 0.65
+)
+```
+
+To note, some of the AUROC scores are slightly different from Fig6B in manuscript (e.g. `iNKT_c5 x typeIII` has an AUROC score of 0.68 here, instead of 0.69 in Fig6B) because when cleaning up our scripts for this analysis, we decided to download a more recent orthologs table from the biomart website (downloaded in Feb 2024, compared to Sept 2022 to generate Fig6B). However, as you can observe, the differences are very minor and don't impact the conclusions made in our manuscript.
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```

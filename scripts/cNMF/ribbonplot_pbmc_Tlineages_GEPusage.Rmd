@@ -1,0 +1,101 @@
+---
+title: "Figure 4D - GEP usage per T lineage"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(Seurat)
+library(GGally)
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(cowplot)
+library(RColorBrewer)
+library(ggalluvial)
+setwd("~/Projects/HumanThymusProject/")
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# seurat object
+seur <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+DimPlot(seur, group.by = "clusters_integrated_data", label=T, repel=T, reduction="umap_integrated")+
+  scale_color_manual(values=cols_integrated)
+```
+
+
+
+
+# ANALYSIS
+
+## Dataframe with cell frequencies
+```{r get-dataframe}
+# Format data
+df <- seur@meta.data %>%
+  as_tibble() %>%
+  filter(tissue=="PBMC") %>%
+  # get nb of cells per gep assignment
+  group_by(tcell_lineage, GEP_with_max_usage) %>%
+  summarise(ncells=n()) %>%
+  # get %cells in each gep assignment
+  ungroup() %>%
+  group_by(tcell_lineage) %>%
+  mutate(totalcells=sum(ncells),
+         freq = ncells*100/totalcells) %>%
+  ungroup() %>%
+  mutate(
+    GEP_with_max_usage=replace(GEP_with_max_usage, !GEP_with_max_usage%in%c("GEP3", "GEP4", "GEP5", "GEP6"), "other"),
+    GEP_with_max_usage = factor(GEP_with_max_usage, levels=c("GEP3", "GEP4", "GEP5", "GEP6", "other"))
+    )
+
+print(df)
+```
+
+
+## GGalluvial
+```{r plot, fig.width=7, fig.height=3}
+df %>%
+  filter(GEP_with_max_usage != "other") %>%
+ggplot(aes(axis2=tcell_lineage, axis1=GEP_with_max_usage, y=freq)) +
+  geom_alluvium(aes(fill=tcell_lineage))+
+  geom_stratum()+
+  geom_text(stat="stratum", aes(label=after_stat(stratum)), size=5)+
+  scale_fill_manual(values=c("#2ca25f", "#dd1c77", "#045a8d", "#8856a7", "#bdc9e1"))+
+  theme_void()+
+  scale_y_reverse()+
+  coord_flip()+
+  theme(legend.position="none")
+# ggsave("./data/cNMF/fig4D_ribbon_tcell_lineage.jpeg", width=10, height=4)
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

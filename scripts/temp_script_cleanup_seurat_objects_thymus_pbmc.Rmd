@@ -1,0 +1,195 @@
+---
+title: "TEMPORARY SCRIPT - clean up seurat objects thymic/pbmc lineages"
+author: "Salomé Carcy"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 5,
+  fig.height = 5,
+  warning = FALSE,
+  message = FALSE,
+  root.dir = "~/Projects/HumanThymusProject/"
+)
+```
+
+
+# IMPORT
+
+## Import librairies
+```{r import-librairies}
+library(ggplot2)
+library(Seurat)
+library(SCpubr)
+
+source("~/Projects/HumanThymusProject/scripts/colors_universal.R")
+```
+
+## Import data
+```{r import-data}
+# integrated object
+seur_integrated <- readRDS("./data_geo/seurat_objects/seurat_human_integrated_object_23_12_01.rds")
+
+# thymic objects
+seur_thym <- list(
+  "cd4"=readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.cd4.RDS"),
+  "cd8"=readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS"),
+  "nkt"=readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS"),
+  "mait"=readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.mait.RDS"),
+  "gdt"=readRDS("./data/human-thymus/HumanThymus_23_PlotThymicGEPs/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+)
+
+# pbmc objects
+# seur_pbmc <- list(
+#   "cd4"=readRDS("./data/seurat_objects/thymus_objects/seurat_filtered_harmony_02_15_23_thymus.cd4.RDS"),
+#   "cd8"=readRDS("./data/seurat_objects/thymus_objects/seurat_filtered_harmony_02_15_23_thymus.cd8.RDS"),
+#   "nkt"=readRDS("./data/seurat_objects/thymus_objects/seurat_filtered_harmony_02_15_23_thymus.nkt.RDS"),
+#   "mait"=readRDS("./data/seurat_objects/thymus_objects/seurat_filtered_harmony_02_15_23_thymus.mait.RDS"),
+#   "gdt"=readRDS("./data/seurat_objects/thymus_objects/seurat_filtered_harmony_02_15_23_thymus.gd.RDS")
+# )
+```
+
+
+
+
+# CLEAN UP THYMIC OBJECTS
+
+## Remove useless columns
+```{r thym-rm-cols}
+# check that column names are the same for all lineages
+table(colnames(seur_thym$cd4@meta.data)==colnames(seur_thym$cd8@meta.data), useNA="ifany")
+table(colnames(seur_thym$cd4@meta.data)==colnames(seur_thym$nkt@meta.data), useNA="ifany")
+table(colnames(seur_thym$cd4@meta.data)==colnames(seur_thym$mait@meta.data), useNA="ifany")
+table(colnames(seur_thym$cd4@meta.data)==colnames(seur_thym$gdt@meta.data), useNA="ifany")
+table(colnames(seur_thym$nkt@meta.data)==colnames(seur_thym$gdt@meta.data), useNA="ifany")
+
+# the only difference in column names is a clustering resolution (we don't need that column anyway)
+colnames(seur_thym$cd4@meta.data)[colnames(seur_thym$cd4@meta.data)!=colnames(seur_thym$nkt@meta.data)]
+
+# check out all metadata columns
+print(colnames(seur_thym$cd4@meta.data))
+
+# remove useless columns
+seur_thym <- lapply(
+  seur_thym,
+  function(x){
+    x@meta.data[,c(13:18, 33:77)] <- NULL
+    return(x)
+    }
+)
+```
+
+
+## Add clustering columns
+```{r thym-add-clust-cols}
+# sanity check that rownames (cell barcodes) are in same order in integrated object & individual thymic objects
+# table(
+#   rownames(seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(seur_thym$cd4@meta.data),]) == rownames(seur_thym$cd4@meta.data), useNA="ifany"
+# )
+# table(
+#   rownames(seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(seur_thym$cd8@meta.data),]) == rownames(seur_thym$cd8@meta.data), useNA="ifany"
+# )
+# table(
+#   rownames(seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(seur_thym$nkt@meta.data),]) == rownames(seur_thym$nkt@meta.data), useNA="ifany"
+# )
+# table(
+#   rownames(seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(seur_thym$mait@meta.data),]) == rownames(seur_thym$mait@meta.data), useNA="ifany"
+# )
+# table(
+#   rownames(seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(seur_thym$gdt@meta.data),]) == rownames(seur_thym$gdt@meta.data), useNA="ifany"
+# )
+
+# add column "clusters integrated data"
+seur_thym <- lapply(
+  seur_thym,
+  function(x){
+    x@meta.data$clusters_integrated_data <- seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(x@meta.data), "clusters_integrated_data"]
+    return(x)
+    }
+  )
+
+# add column "clusters per lineage"
+seur_thym <- lapply(
+  seur_thym,
+  function(x){
+    x@meta.data$clusters_per_lineage <- seur_integrated@meta.data[rownames(seur_integrated@meta.data)%in%rownames(x@meta.data), "clusters_per_lineage"]
+    return(x)
+    }
+  )
+```
+
+Check that the `clusters_per_lineage` column corresponds to Fig 2.
+```{r thym-dim-plots}
+lapply(
+  seur_thym,
+  function(x){
+    return(DimPlot(x, group.by = "clusters_per_lineage", label=T))
+  }
+)
+```
+
+
+## Rename metadata columns
+Rename with the same column names used in the clean integrated seurat object (deposited on GEO).
+```{r thym-rename-cols}
+seur_thym <- lapply(
+  seur_thym,
+  function(x){
+    colnames(x@meta.data)[4:12] <- c(
+      "percent_mitochondrial",
+      "tcell_lineage",
+      "donor_sex",
+      "donor_age_weeks",
+      "donor_id",
+      "batch_id",
+      "sequencing_method",
+      "tissue",
+      "tcell_lineage_tissue"
+    )
+    return(x)
+  }
+)
+```
+
+
+## Save seurat objects
+```{r thym-save}
+saveRDS(seur_thym$cd4, "./data_github/seurat_objects_thymus/seurat_thymus_cd4.rds")
+saveRDS(seur_thym$cd8, "./data_github/seurat_objects_thymus/seurat_thymus_cd8.rds")
+saveRDS(seur_thym$nkt, "./data_github/seurat_objects_thymus/seurat_thymus_inkt.rds")
+saveRDS(seur_thym$mait, "./data_github/seurat_objects_thymus/seurat_thymus_mait.rds")
+saveRDS(seur_thym$gdt, "./data_github/seurat_objects_thymus/seurat_thymus_gdt.rds")
+```
+
+
+
+
+# CLEAN UP PBMC OBJECTS
+
+## Analysis 3
+```{r analysis-3}
+
+```
+
+
+## Analysis 4
+```{r analysis-4}
+
+```
+
+
+
+
+# SESSION INFO
+```{r}
+sessionInfo()
+```
+
+

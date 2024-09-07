@@ -13,5 +13,6 @@ This directory is dedicated to the analysis of the transcriptomic profile of SP 
 
 ## Directory structure
 
-- [scripts-final](./scripts-final/) will contain the final scripts that allow the (1) preprocessing of the data; and (2) the making of the figures
-- [scripts-in-progress](./scripts-in-progress) contains scripts used for current ongoing work. This directory will be removed when submitting the manuscript.
+- [data](./data/) contains all the data used by Salomé for this work. It is gitignored and not found on the github.
+- [scripts-final](./scripts-final/) will contain the final scripts that allow the (1) preprocessing of the data; and (2) the making of the figures. This directory is useless, please refer instead to the `main` branch.
+- [scripts-in-progress](./scripts-in-progress) contains scripts used for current ongoing work.

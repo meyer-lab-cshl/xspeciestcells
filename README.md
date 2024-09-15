@@ -1,5 +1,5 @@
 :rotating_light: THIS DIRECTORY DOES NOT CONTAIN "CLEAN" SCRIPTS (it is a bit of a mess) :rotating_light:
-For clean, easy-to-follow, reproducible scripts, please see "main" branch or "branch_clean_salome".
+For clean, easy-to-follow, reproducible scripts, please see "main" branch.
 
 ## How T cells meet their fate in the human thymus
 This directory is dedicated to the analysis of the transcriptomic profile of SP CD4, CD8, iNKT, MAIT and &gamma;&delta;T cells in the human thymus and in peripheral blood. The goal of this study is to better understand the determinants of T cell lineage differentiation in humans.
